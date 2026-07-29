@@ -1,3 +1,6 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 """Command-line interface for building and running bounded coding prompts."""
 
 from __future__ import annotations
@@ -7,12 +10,12 @@ import os
 import sys
 from collections.abc import Callable, Sequence
 
-from helix_codegen import __version__
-from helix_codegen.context import DEFAULT_MAX_FILES, load_context_files
-from helix_codegen.errors import HelixError
-from helix_codegen.models import PromptRequest, ProviderConfig, Task
-from helix_codegen.prompt import build_messages, estimate_tokens, render_json, render_markdown
-from helix_codegen.provider import OpenAIChatClient
+from samsarix_codegen import __version__
+from samsarix_codegen.context import DEFAULT_MAX_FILES, load_context_files
+from samsarix_codegen.errors import SamsarixError
+from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
+from samsarix_codegen.prompt import build_messages, estimate_tokens, render_json, render_markdown
+from samsarix_codegen.provider import OpenAIChatClient
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1"
 DEFAULT_MAX_CONTEXT_BYTES = 200_000
@@ -20,10 +23,10 @@ DEFAULT_MAX_CONTEXT_BYTES = 200_000
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="helix-codegen",
+        prog="samsarix-codegen",
         description=(
             "Build inspectable coding prompts locally or send one bounded request to an "
-            "OpenAI-compatible endpoint. Helix Codegen never edits files or runs generated code."
+            "OpenAI-compatible endpoint. Samsarix Codegen never edits files or runs generated code."
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -43,25 +46,25 @@ def build_parser() -> argparse.ArgumentParser:
     _add_request_arguments(run_command)
     run_command.add_argument(
         "--endpoint",
-        default=os.environ.get("HELIX_API_BASE", DEFAULT_ENDPOINT),
-        help=(f"API base URL (default: HELIX_API_BASE or local Ollama at {DEFAULT_ENDPOINT})"),
+        default=os.environ.get("SAMSARIX_API_BASE", DEFAULT_ENDPOINT),
+        help=(f"API base URL (default: SAMSARIX_API_BASE or local Ollama at {DEFAULT_ENDPOINT})"),
     )
     run_command.add_argument(
         "--model",
-        default=os.environ.get("HELIX_MODEL"),
-        help="model name (default: HELIX_MODEL; required)",
+        default=os.environ.get("SAMSARIX_MODEL"),
+        help="model name (default: SAMSARIX_MODEL; required)",
     )
     run_command.add_argument(
         "--timeout",
         type=_bounded_int(1, 300, "timeout"),
-        default=os.environ.get("HELIX_TIMEOUT", "60"),
+        default=os.environ.get("SAMSARIX_TIMEOUT", "60"),
         metavar="SECONDS",
         help="network timeout from 1 to 300 seconds (default: 60)",
     )
     run_command.add_argument(
         "--max-output-tokens",
         type=_bounded_int(1, 32_768, "max output tokens"),
-        default=os.environ.get("HELIX_MAX_OUTPUT_TOKENS", "1024"),
+        default=os.environ.get("SAMSARIX_MAX_OUTPUT_TOKENS", "1024"),
         metavar="TOKENS",
         help="provider output cap from 1 to 32,768 tokens (default: 1024)",
     )
@@ -91,7 +94,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = ProviderConfig(
             endpoint=args.endpoint,
             model=args.model or "",
-            api_key=os.environ.get("HELIX_API_KEY"),
+            api_key=os.environ.get("SAMSARIX_API_KEY"),
             timeout_seconds=float(args.timeout),
             max_output_tokens=args.max_output_tokens,
         )
@@ -110,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("Cancelled.", file=sys.stderr)
         return 130
-    except HelixError as exc:
+    except SamsarixError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return exc.exit_code
 

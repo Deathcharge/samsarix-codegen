@@ -1,6 +1,6 @@
 # Productization Record
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 ## Current repository assessment
 
@@ -26,10 +26,10 @@ into model guidance. The implemented product keeps that intent and removes unsup
 
 ## Chosen product definition
 
-**Helix Codegen is a read-only Python CLI and library that builds bounded, inspectable prompts for
+**Samsarix Codegen is a read-only Python CLI and library that builds bounded, inspectable prompts for
 coding tasks and can optionally send one request to an OpenAI-compatible chat-completions endpoint.**
 
-It is not a coding agent, IDE extension, private Helix integration, or model provider. It does not
+It is not a coding agent, IDE extension, private portfolio integration, or model provider. It does not
 discover a repository, edit files, execute generated code, run tools, persist chats, or retry calls.
 
 ### Target user and primary use case
@@ -38,9 +38,9 @@ The target user is a developer who wants to give an AI model a small, explicit s
 without granting file-write or shell access. The primary journey is:
 
 1. Install the package from the repository.
-2. Run `helix-codegen build` with a task, instruction, and zero or more explicit files.
+2. Run `samsarix-codegen build` with a task, instruction, and zero or more explicit files.
 3. Inspect or pipe the generated Markdown/JSON prompt without a network call.
-4. Optionally run the same request with `helix-codegen run --model ...` against a local or hosted
+4. Optionally run the same request with `samsarix-codegen run --model ...` against a local or hosted
    OpenAI-compatible endpoint.
 5. Review the response on standard output and use the documented exit code or provider usage.
 
@@ -49,9 +49,9 @@ without granting file-write or shell access. The primary journey is:
 Current full coding tools provide repository maps, multi-turn modes, edits, and tool execution. For
 example, Aider documents repository mapping and code/ask/architect modes, while Claude Code exposes
 interactive, print, resume, and MCP workflows. Rebuilding those products from this prototype would
-be neither distinct nor supportable. Helix Codegen instead offers a small prompt boundary that is
+be neither distinct nor supportable. Samsarix Codegen instead offers a small prompt boundary that is
 easy to inspect, script, and embed. Ollama documents the same `/v1/chat/completions` compatibility
-surface, so a local-first path does not require a private Helix service.
+surface, so a local-first path does not require a private Samsarix service.
 
 Research references:
 
@@ -72,7 +72,7 @@ Research references:
 
 ## Key product and architecture decisions
 
-1. **One root package.** A standard `src/helix_codegen` distribution and `[project.scripts]` entry
+1. **One root package.** A standard `src/samsarix_codegen` distribution and `[project.scripts]` entry
    point replace two malformed Python wheels and one broken Node package.
 2. **Offline first.** `build` is the credential-free primary journey and shares the exact message
    builder used by `run`.
@@ -80,7 +80,7 @@ Research references:
    `--root`. UTF-8, file-count, per-file, total-byte, and NUL checks bound data handling.
 4. **One network contract.** The standard-library client implements non-streaming OpenAI-compatible
    `/chat/completions`, applies a timeout and response-size cap, and never retries automatically.
-5. **Credential hygiene.** API keys are accepted only from `HELIX_API_KEY`; endpoint URLs reject
+5. **Credential hygiene.** API keys are accepted only from `SAMSARIX_API_KEY`; endpoint URLs reject
    embedded credentials, queries, and fragments. Plain HTTP is loopback-only.
 6. **Read-only output.** Model text is printed to stdout. File writes and execution remain the
    caller's explicit responsibility.
@@ -88,15 +88,22 @@ Research references:
    Click, Rich, Requests, Pydantic, and prompt-toolkit dependencies.
 8. **Honest versioning.** `0.1.0` reflects a first release candidate; the unsupported `1.0.0` claim
    was not retained.
-9. **No inferred license.** Conflicting metadata was removed because neither referenced license file
-   existed. Public redistribution remains owner-blocked.
+9. **Explicit licensing.** After the owner supplied Samsarix LLC identity and requested a
+   credit-preserving license, Apache-2.0 was added with a company `NOTICE`, SPDX headers, citation
+   metadata, and contribution terms. It provides a patent grant and redistribution notice duties
+   without requiring downstream source disclosure.
+10. **Clean rebrand.** The unreleased package, import, command, environment variables, user agent,
+    and documentation use Samsarix naming without permanent legacy aliases.
 
 ## Assumptions
 
 - The initial commit is an unreleased prototype; no compatibility contract or published users are
   evidenced in the repository.
-- `Deathcharge` is the correct author identity based on the GitHub remote and supplied portfolio
-  context; no personal contact details are inferred.
+- Samsarix LLC is the copyright holder and package author; `contact@samsarix.com` is the business
+  contact and `support@samsarix.com` is the support and private security channel, as supplied by the
+  owner.
+- The initial Helix names were never published as a package, so a clean Samsarix namespace change is
+  preferred over indefinite compatibility aliases.
 - An OpenAI-compatible endpoint is a useful interoperability boundary, not a claim that all provider
   extensions behave identically.
 - Users invoking `run` are trusted operators choosing their own endpoint and files. File contents and
@@ -128,7 +135,7 @@ Final command evidence is recorded in the **Final verification** section after e
 ### P0 — release or primary journey blockers
 
 - [x] Replace canned model output with an honest offline builder and real optional endpoint call.
-- [x] Provide an installable import package and actual `helix-codegen` console entry point.
+- [x] Provide an installable import package and actual `samsarix-codegen` console entry point.
 - [x] Remove the non-building extension and its dead commands/UI rather than advertising them.
 - [x] Replace unsupported README claims with reproducible commands and explicit maturity.
 - [x] Add tests for the local primary journey and network contract.
@@ -143,7 +150,7 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add meaningful exit codes and provider response-contract validation.
 - [x] Remove unused dependencies and introduce lint, formatting, strict type checking, and CI.
 - [x] Document trust boundaries, privacy behavior, approximate cost controls, and limitations.
-- [ ] Owner must select a license and contribution terms before public redistribution.
+- [x] Add an owner-approved license, attribution, and contribution terms before redistribution.
 
 ### P2 — valuable later work
 
@@ -151,7 +158,7 @@ Final command evidence is recorded in the **Final verification** section after e
 - [ ] Add provider contract fixtures for additional confirmed compatible services.
 - [ ] Consider stdin context and ignore-file-based discovery only if explicit-file ergonomics prove
   insufficient; retain visible budgets and path boundaries.
-- [ ] Add signed release automation after a package name, license, and publishing account are chosen.
+- [ ] Add signed release automation after the package name is reserved and publishing is configured.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
@@ -167,7 +174,7 @@ Final command evidence is recorded in the **Final verification** section after e
 
 ## Release acceptance criteria
 
-- Installation from the built wheel exposes `helix-codegen` and the documented package imports.
+- Installation from the built wheel exposes `samsarix-codegen` and the documented package imports.
 - `build` works without network access or secrets and includes the selected source content.
 - `run` succeeds against a deterministic local HTTP fixture and fails clearly for missing model,
   unsafe endpoint, HTTP rejection, malformed response, and unavailable provider.
@@ -201,8 +208,7 @@ Final command evidence is recorded in the **Final verification** section after e
 
 | Blocker | Required owner action | Verification |
 | --- | --- | --- |
-| License | Select and add an explicit license and contribution terms | Repository contains approved license files; package metadata and README agree |
-| Package identity | Confirm `helix-codegen` is available and appropriate on PyPI | Owner-controlled PyPI project exists with matching metadata |
+| Package identity | Reserve `samsarix-codegen` on PyPI (the project URL returned 404 on 2026-07-29) | Owner-controlled PyPI project exists with matching metadata |
 | Publication | Configure trusted publishing or a scoped PyPI token | Tagged release publishes signed artifacts from CI |
 | Provider validation | Choose any hosted providers the project will officially support | Contract tests pass against owner-approved non-production test accounts |
 
@@ -217,7 +223,7 @@ required for local evaluation and none was performed.
   output are untrusted inputs.
 - The invoking developer is trusted to choose a project root, files, model, and endpoint.
 - The model receives only explicit context, but embedded prompt injection can still influence output.
-- Generated output is never executed or written by Helix Codegen.
+- Generated output is never executed or written by Samsarix Codegen.
 
 ### Controls
 
@@ -249,14 +255,15 @@ if adoption exists. A subscription is not justified without demand and cost evid
 
 ## Known risks
 
-- No explicit license currently permits public redistribution.
-- The final package name and external provider matrix have not been owner-validated.
+- The apparent availability of `samsarix-codegen` on PyPI is not a reservation; another party could
+  claim it before the owner publishes or reserves the project.
+- The external provider matrix has not been owner-validated.
 - Model quality and output safety vary and are outside this package's control.
 - CI configuration is locally reviewable but remains unproven on GitHub until pushed by the owner.
 
-## Final verification
+## Pre-rebrand verification
 
-Final verification used Python 3.11.9 on Windows. The source distribution was built into a new
+This prior verification used Python 3.11.9 on Windows. The source distribution was built into a new
 temporary directory, extracted, checked there, rebuilt into a wheel, and installed into a second
 fresh virtual environment with `PYTHONPATH` removed. Generated files in the repository were not used
 as the smoke-test import source.
@@ -272,23 +279,48 @@ as the smoke-test import source.
 | `python -m build --wheel --outdir <temp>/wheel .` (from extracted sdist) | Exit 0; built `helix_codegen-0.1.0-py3-none-any.whl` |
 | `python -m pip install --force-reinstall --no-deps <wheel>` (fresh venv) | Exit 0; console script created |
 | `python -m pip check` (fresh venv) | Exit 0; no broken requirements |
-| `helix-codegen --version` | Exit 0; `helix-codegen 0.1.0` |
-| `python -m helix_codegen --version` | Exit 0; `helix-codegen 0.1.0` |
-| `helix-codegen --help` | Exit 0; both `build` and `run` documented |
-| `helix-codegen build ... --file examples/sample.py --format json` | Exit 0; one context file and `def greet` present in output |
+| `helix-codegen --version` | Exit 0; legacy pre-rebrand command returned `helix-codegen 0.1.0` |
+| `python -m helix_codegen --version` | Exit 0; legacy pre-rebrand module returned `helix-codegen 0.1.0` |
+| `helix-codegen --help` | Exit 0; legacy pre-rebrand `build` and `run` documented |
+| `helix-codegen build ... --file examples/sample.py --format json` | Exit 0; legacy pre-rebrand journey included one context file and `def greet` |
 | `helix-codegen run "Explain this"` without a model | Expected exit 2 with actionable missing-model error |
 | `helix-codegen run ... --endpoint http://127.0.0.1:1/v1 --timeout 1` | Expected exit 4 with bounded unavailable-provider error |
 
+## Post-rebrand verification
+
+Current verification used Python 3.11.9 on Windows. It built a new source distribution outside the
+checkout, extracted and tested that source, built a wheel from the extracted source, and installed
+only that wheel into a fresh virtual environment. Installed-wheel smoke commands ran from the
+temporary directory so ignored artifacts in the checkout could not supply imports.
+
+| Command or check | Actual result |
+| --- | --- |
+| `python -m ruff check .` | Exit 0; all checks passed |
+| `python -m ruff format --check .` | Exit 0; 14 Python files already formatted |
+| `python -m mypy src` | Exit 0; no issues in 8 source files |
+| `python -m pytest -ra` | Exit 0; 40 tests passed in 5.95 seconds |
+| Official Apache-2.0 text comparison | Exact match after newline normalization and boundary trimming |
+| `python -m build --sdist --outdir <temp>/sdist .` | Exit 0; built `samsarix_codegen-0.1.0.tar.gz` |
+| Required-file inspection of extracted sdist | `LICENSE`, `NOTICE`, citation, security, support, typed package, example, and tests present |
+| Lint, format, mypy, and pytest from extracted sdist | Exit 0; 40 tests passed in 6.90 seconds |
+| `python -m build --wheel --outdir <temp>/wheel .` from extracted sdist | Exit 0; built `samsarix_codegen-0.1.0-py3-none-any.whl` |
+| Fresh-venv install plus `python -m pip check` | Exit 0; no broken requirements |
+| `samsarix-codegen --version` and `python -m samsarix_codegen --version` | Exit 0; both returned `samsarix-codegen 0.1.0` |
+| Fresh import isolation | `samsarix_codegen` imported at `0.1.0`; legacy `helix_codegen` was absent |
+| Installed `build` smoke with `examples/sample.py` | Exit 0; one context file and `def greet` present |
+| Installed `run` without a model | Expected exit 2 with `SAMSARIX_MODEL` guidance |
+| Installed `run` against unavailable loopback endpoint | Expected exit 4 without retrying |
+| Installed metadata and wheel inspection | Samsarix name/emails, Apache expression, `py.typed`, `LICENSE`, and `NOTICE` verified; no legacy package path |
+
 ### Validation not run
 
-- The GitHub Actions matrix was not executed because no push was authorized. The workflow is
-  configured for Python 3.10 and 3.14 on Ubuntu and Windows; its first owner-triggered run remains a
-  release gate.
+- The GitHub Actions matrix cannot run locally. It is configured for Python 3.10 and 3.14 on Ubuntu
+  and Windows; its first pushed run remains a release gate.
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
   required or authorized. Deterministic local HTTP integration tests cover request shape, auth
   header behavior, text/usage normalization, HTTP rejection, invalid JSON, timeouts, unavailable
   endpoints, response limits, and secret redaction.
-- Package publication, signing, and installation from PyPI were not attempted; they are
+- Package publication, signing, and installation from PyPI were not attempted; they remain
   owner-controlled actions.
 - The optional Codex Security workspace scan was skipped at the owner's request due its cost. The
   repository instead received a focused manual trust-boundary review plus adversarial tests and
@@ -299,6 +331,6 @@ as the smoke-test import source.
 
 **Release candidate with named external gates.** The local package and its primary journey meet the
 documented acceptance criteria, with no locally actionable P0 identified. Public release remains
-gated on (1) an owner-approved license and contribution terms, (2) the first green GitHub Actions
-matrix run, (3) package-name confirmation, and (4) owner-controlled publication/signing. Live hosted
-provider certification is optional unless the owner chooses to advertise specific providers.
+gated on (1) the first green GitHub Actions matrix run, (2) owner control of the PyPI project, and
+(3) owner-controlled publication/signing. Live hosted provider certification is optional unless the
+owner chooses to advertise specific providers.

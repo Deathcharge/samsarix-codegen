@@ -40,6 +40,7 @@ jobs:
         run: |
           wheel="$(find dist -name '*.whl' -print -quit)"
           python -m pip install --force-reinstall --no-deps "$wheel"
-          helix-codegen --version
-          helix-codegen build "Explain this function" --task explain --file examples/sample.py > prompt.md
+          python -m pip check
+          samsarix-codegen --version
+          samsarix-codegen build "Explain this function" --task explain --file examples/sample.py > prompt.md
           grep -q "def greet" prompt.md

@@ -1,25 +1,28 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 """User-facing error types and stable CLI exit codes."""
 
 
-class HelixError(Exception):
+class SamsarixError(Exception):
     """Base class for expected, user-actionable failures."""
 
     exit_code = 1
 
 
-class ConfigurationError(HelixError):
+class ConfigurationError(SamsarixError):
     """Invalid or missing user configuration."""
 
     exit_code = 2
 
 
-class ContextError(HelixError):
+class ContextError(SamsarixError):
     """Invalid, unreadable, or unsafe context input."""
 
     exit_code = 3
 
 
-class ProviderError(HelixError):
+class ProviderError(SamsarixError):
     """A configured model endpoint could not return a usable response."""
 
     exit_code = 4

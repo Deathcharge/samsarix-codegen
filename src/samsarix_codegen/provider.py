@@ -1,3 +1,6 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 """Minimal bounded client for OpenAI-compatible chat-completions endpoints."""
 
 from __future__ import annotations
@@ -9,9 +12,9 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from helix_codegen import __version__
-from helix_codegen.errors import ProviderError
-from helix_codegen.models import ChatResult, ProviderConfig
+from samsarix_codegen import __version__
+from samsarix_codegen.errors import ProviderError
+from samsarix_codegen.models import ChatResult, ProviderConfig
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_ERROR_BYTES = 8 * 1024
@@ -36,7 +39,7 @@ class OpenAIChatClient:
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": f"helix-codegen/{__version__}",
+            "User-Agent": f"samsarix-codegen/{__version__}",
         }
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"

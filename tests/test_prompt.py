@@ -1,7 +1,10 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 import json
 
-from helix_codegen.models import ContextFile, PromptRequest, Task
-from helix_codegen.prompt import build_messages, estimate_tokens, render_json, render_markdown
+from samsarix_codegen.models import ContextFile, PromptRequest, Task
+from samsarix_codegen.prompt import build_messages, estimate_tokens, render_json, render_markdown
 
 
 def test_prompt_marks_context_as_untrusted_and_preserves_content() -> None:
@@ -29,7 +32,7 @@ def test_markdown_and_json_render_the_same_messages() -> None:
     markdown = render_markdown(messages)
     payload = json.loads(render_json(messages, context_bytes=0, context_files=0))
 
-    assert markdown.startswith("# Helix Codegen Prompt\n")
+    assert markdown.startswith("# Samsarix Codegen Prompt\n")
     assert payload["messages"] == messages
     assert payload["estimate"]["input_tokens"] == estimate_tokens(messages)
     assert payload["estimate"]["method"] == "ceil(total UTF-8 message bytes / 4)"

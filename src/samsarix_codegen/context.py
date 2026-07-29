@@ -1,3 +1,6 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 """Safe, explicit loading of source context from one project root."""
 
 from __future__ import annotations
@@ -5,8 +8,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from helix_codegen.errors import ContextError
-from helix_codegen.models import ContextFile
+from samsarix_codegen.errors import ContextError
+from samsarix_codegen.models import ContextFile
 
 DEFAULT_MAX_FILES = 20
 DEFAULT_MAX_TOTAL_BYTES = 200_000

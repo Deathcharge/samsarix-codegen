@@ -1,3 +1,6 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 """Validated value objects used by the prompt builder and provider client."""
 
 from __future__ import annotations
@@ -7,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import SplitResult, urlsplit
 
-from helix_codegen.errors import ConfigurationError
+from samsarix_codegen.errors import ConfigurationError
 
 MAX_INSTRUCTION_CHARS = 20_000
 MAX_LANGUAGE_CHARS = 64
@@ -80,7 +83,7 @@ class ProviderConfig:
         if not endpoint:
             raise ConfigurationError("the model endpoint cannot be empty")
         if not model:
-            raise ConfigurationError("a model is required; use --model or HELIX_MODEL")
+            raise ConfigurationError("a model is required; use --model or SAMSARIX_MODEL")
         if len(model) > MAX_MODEL_CHARS:
             raise ConfigurationError(f"the model name exceeds {MAX_MODEL_CHARS} characters")
         if not 1 <= self.timeout_seconds <= 300:

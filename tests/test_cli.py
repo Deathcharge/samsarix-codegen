@@ -1,8 +1,11 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 import json
 from pathlib import Path
 
-from helix_codegen.cli import main
-from helix_codegen.models import ChatResult
+from samsarix_codegen.cli import main
+from samsarix_codegen.models import ChatResult
 
 
 def test_build_markdown_is_complete_local_journey(tmp_path: Path, capsys) -> None:
@@ -59,7 +62,7 @@ def test_context_failure_uses_stable_exit_code(tmp_path: Path, capsys) -> None:
 
 
 def test_run_requires_model_before_network(capsys, monkeypatch) -> None:
-    monkeypatch.delenv("HELIX_MODEL", raising=False)
+    monkeypatch.delenv("SAMSARIX_MODEL", raising=False)
 
     exit_code = main(["run", "Explain this"])
 
@@ -73,7 +76,7 @@ def test_run_prints_response_and_usage(capsys, monkeypatch) -> None:
         assert messages[1]["content"].startswith("Task: review")
         return ChatResult("Review result\n", total_tokens=42)
 
-    monkeypatch.setattr("helix_codegen.cli.OpenAIChatClient.complete", fake_complete)
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fake_complete)
 
     exit_code = main(["run", "Review this", "--task", "review", "--model", "local"])
 
@@ -82,6 +85,27 @@ def test_run_prints_response_and_usage(capsys, monkeypatch) -> None:
     assert captured.out == "Review result\n"
     assert "Request estimate:" in captured.err
     assert "Provider usage: 42 total tokens." in captured.err
+
+
+def test_run_uses_samsarix_environment_configuration(capsys, monkeypatch) -> None:
+    def fake_complete(self, messages):
+        assert self.config.model == "env-model"
+        assert self.config.api_key == "env-key"
+        assert self.config.timeout_seconds == 7
+        assert self.config.max_output_tokens == 88
+        return ChatResult("Environment configured\n")
+
+    monkeypatch.setenv("SAMSARIX_MODEL", "env-model")
+    monkeypatch.setenv("SAMSARIX_API_KEY", "env-key")
+    monkeypatch.setenv("SAMSARIX_TIMEOUT", "7")
+    monkeypatch.setenv("SAMSARIX_MAX_OUTPUT_TOKENS", "88")
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fake_complete)
+
+    exit_code = main(["run", "Explain this"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "Environment configured\n"
 
 
 def test_run_rejects_remote_plain_http(capsys) -> None:

@@ -1,6 +1,6 @@
 # Contributing
 
-Helix Codegen is a small, read-only prompt-building tool. Changes should preserve its core safety
+Samsarix Codegen is a small, read-only prompt-building tool. Changes should preserve its core safety
 properties: explicit context selection, project-root containment, bounded resource use, no implicit
 file edits or command execution, one visible network request per `run`, and no credential logging.
 
@@ -28,7 +28,11 @@ use `source .venv/bin/activate`.
   or background behavior without a separate product and threat-model decision.
 - Update the README and `docs/PRODUCTIZATION.md` when behavior, scope, or release gates change.
 
-## Legal status
+## License and contributions
 
-No license has been selected. Contribution acceptance and contributor-license terms are owner
-decisions; confirm them with the repository owner before accepting external contributions.
+The project is licensed under Apache-2.0. Unless you explicitly state otherwise, a contribution
+intentionally submitted for inclusion is provided under Apache-2.0 without additional terms, as
+described in section 5 of the license. You must have the right to submit your contribution.
+
+Copyright in an accepted contribution remains with its contributor unless separately assigned.
+Questions about contribution or commercial arrangements can be sent to `contact@samsarix.com`.

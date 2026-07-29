@@ -1,3 +1,6 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 import json
 import threading
 from collections.abc import Iterator
@@ -7,9 +10,9 @@ from urllib.error import URLError
 
 import pytest
 
-from helix_codegen.errors import ProviderError
-from helix_codegen.models import ProviderConfig
-from helix_codegen.provider import OpenAIChatClient
+from samsarix_codegen.errors import ProviderError
+from samsarix_codegen.models import ProviderConfig
+from samsarix_codegen.provider import OpenAIChatClient
 
 
 @contextmanager
@@ -24,6 +27,7 @@ def chat_server(
             length = int(self.headers.get("Content-Length", "0"))
             captured["path"] = self.path
             captured["authorization"] = self.headers.get("Authorization")
+            captured["user_agent"] = self.headers.get("User-Agent")
             captured["body"] = json.loads(self.rfile.read(length))
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
@@ -61,6 +65,7 @@ def test_client_sends_bounded_request_and_normalizes_usage() -> None:
     assert result.total_tokens == 15
     assert captured["path"] == "/v1/chat/completions"
     assert captured["authorization"] == "Bearer test-key"
+    assert captured["user_agent"] == "samsarix-codegen/0.1.0"
     body = captured["body"]
     assert isinstance(body, dict)
     assert body["model"] == "test-model"
@@ -103,7 +108,7 @@ class FakeResponse:
 
 def test_client_rejects_invalid_json(monkeypatch) -> None:
     monkeypatch.setattr(
-        "helix_codegen.provider.urlopen", lambda request, timeout: FakeResponse(b"not-json")
+        "samsarix_codegen.provider.urlopen", lambda request, timeout: FakeResponse(b"not-json")
     )
 
     with pytest.raises(ProviderError, match="invalid UTF-8 JSON"):
@@ -114,7 +119,7 @@ def test_client_reports_unavailable_endpoint(monkeypatch) -> None:
     def unavailable(request, timeout):
         raise URLError("connection refused")
 
-    monkeypatch.setattr("helix_codegen.provider.urlopen", unavailable)
+    monkeypatch.setattr("samsarix_codegen.provider.urlopen", unavailable)
 
     with pytest.raises(ProviderError, match="endpoint is unavailable"):
         OpenAIChatClient(ProviderConfig("http://localhost:11434/v1", "model")).complete([])
@@ -124,7 +129,7 @@ def test_client_reports_timeout(monkeypatch) -> None:
     def timeout(request, timeout):
         raise TimeoutError
 
-    monkeypatch.setattr("helix_codegen.provider.urlopen", timeout)
+    monkeypatch.setattr("samsarix_codegen.provider.urlopen", timeout)
 
     with pytest.raises(ProviderError, match="timed out after 2 seconds"):
         config = ProviderConfig("http://localhost:11434/v1", "model", timeout_seconds=2)
@@ -132,9 +137,9 @@ def test_client_reports_timeout(monkeypatch) -> None:
 
 
 def test_client_enforces_response_byte_cap(monkeypatch) -> None:
-    monkeypatch.setattr("helix_codegen.provider.MAX_RESPONSE_BYTES", 4)
+    monkeypatch.setattr("samsarix_codegen.provider.MAX_RESPONSE_BYTES", 4)
     monkeypatch.setattr(
-        "helix_codegen.provider.urlopen", lambda request, timeout: FakeResponse(b"12345")
+        "samsarix_codegen.provider.urlopen", lambda request, timeout: FakeResponse(b"12345")
     )
 
     with pytest.raises(ProviderError, match="response exceeds"):

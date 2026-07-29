@@ -1,3 +1,6 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 """Provider-neutral prompt construction and rendering."""
 
 from __future__ import annotations
@@ -6,7 +9,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from helix_codegen.models import PromptRequest, Task
+from samsarix_codegen.models import PromptRequest, Task
 
 SYSTEM_PROMPT = """You are a careful coding assistant.
 Answer the user's stated task using only the information available in the request.
@@ -85,7 +88,7 @@ def estimate_tokens(messages: Sequence[Mapping[str, str]]) -> int:
 def render_markdown(messages: Sequence[Mapping[str, str]]) -> str:
     """Render a portable prompt for inspection or copy/paste into another tool."""
 
-    rendered = ["# Helix Codegen Prompt"]
+    rendered = ["# Samsarix Codegen Prompt"]
     for message in messages:
         role = message.get("role", "message").capitalize()
         rendered.extend(["", f"## {role}", "", message.get("content", "")])

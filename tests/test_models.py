@@ -1,7 +1,10 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 
-from helix_codegen.errors import ConfigurationError
-from helix_codegen.models import PromptRequest, ProviderConfig, Task
+from samsarix_codegen.errors import ConfigurationError
+from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
 
 
 def test_prompt_request_normalizes_instruction_and_language() -> None:

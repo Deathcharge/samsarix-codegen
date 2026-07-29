@@ -1,9 +1,12 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
 from pathlib import Path
 
 import pytest
 
-from helix_codegen.context import load_context_files
-from helix_codegen.errors import ContextError
+from samsarix_codegen.context import load_context_files
+from samsarix_codegen.errors import ContextError
 
 
 def test_loads_utf8_context_relative_to_root(tmp_path: Path) -> None:
