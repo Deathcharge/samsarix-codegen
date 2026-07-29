@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=77,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "samsarix-codegen"
+version = "0.1.0"
+description = "Build and optionally run bounded, inspectable prompts for coding tasks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Samsarix LLC", email = "contact@samsarix.com" }]
+maintainers = [{ name = "Samsarix LLC", email = "support@samsarix.com" }]
+keywords = ["ai", "code-generation", "developer-tools", "prompt", "samsarix"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Code Generators",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/Deathcharge/samsarix-codegen"
+Documentation = "https://github.com/Deathcharge/samsarix-codegen#readme"
+Repository = "https://github.com/Deathcharge/samsarix-codegen.git"
+Issues = "https://github.com/Deathcharge/samsarix-codegen/issues"
+Changelog = "https://github.com/Deathcharge/samsarix-codegen/blob/master/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.3,<2",
+    "mypy>=1.17,<2",
+    "pytest>=8.4,<10",
+    "ruff>=0.12,<1",
+]
+
+[project.scripts]
+samsarix-codegen = "samsarix_codegen.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+samsarix_codegen = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "SIM", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-config --strict-markers"
+testpaths = ["tests"]
