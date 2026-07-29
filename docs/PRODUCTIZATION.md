@@ -211,6 +211,7 @@ Final command evidence is recorded in the **Final verification** section after e
 | Package identity | Reserve `samsarix-codegen` on PyPI (the project URL returned 404 on 2026-07-29) | Owner-controlled PyPI project exists with matching metadata |
 | Publication | Configure trusted publishing or a scoped PyPI token | Tagged release publishes signed artifacts from CI |
 | Provider validation | Choose any hosted providers the project will officially support | Contract tests pass against owner-approved non-production test accounts |
+| Default-branch adoption | Review and merge `codex/productize-samsarix-codegen` | `master` contains the standalone package and repository security view no longer indexes the deleted prototype manifest |
 
 No deployment, account creation, package publication, spending, or live infrastructure change is
 required for local evaluation and none was performed.
@@ -259,7 +260,8 @@ if adoption exists. A subscription is not justified without demand and cost evid
   claim it before the owner publishes or reserves the project.
 - The external provider matrix has not been owner-validated.
 - Model quality and output safety vary and are outside this package's control.
-- CI configuration is locally reviewable but remains unproven on GitHub until pushed by the owner.
+- Until this branch is merged, the default branch still contains the discarded VS Code prototype
+  and its open moderate `esbuild` development-dependency alert. This branch deletes that manifest.
 
 ## Pre-rebrand verification
 
@@ -311,11 +313,10 @@ temporary directory so ignored artifacts in the checkout could not supply import
 | Installed `run` without a model | Expected exit 2 with `SAMSARIX_MODEL` guidance |
 | Installed `run` against unavailable loopback endpoint | Expected exit 4 without retrying |
 | Installed metadata and wheel inspection | Samsarix name/emails, Apache expression, `py.typed`, `LICENSE`, and `NOTICE` verified; no legacy package path |
+| [GitHub Actions run 30422299343](https://github.com/Deathcharge/samsarix-codegen/actions/runs/30422299343) | Exit 0; Python 3.10 and 3.14 passed on Ubuntu and Windows, including wheel smoke checks |
 
 ### Validation not run
 
-- The GitHub Actions matrix cannot run locally. It is configured for Python 3.10 and 3.14 on Ubuntu
-  and Windows; its first pushed run remains a release gate.
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
   required or authorized. Deterministic local HTTP integration tests cover request shape, auth
   header behavior, text/usage normalization, HTTP rejection, invalid JSON, timeouts, unavailable
@@ -330,7 +331,7 @@ temporary directory so ignored artifacts in the checkout could not supply import
 ## Current release disposition
 
 **Release candidate with named external gates.** The local package and its primary journey meet the
-documented acceptance criteria, with no locally actionable P0 identified. Public release remains
-gated on (1) the first green GitHub Actions matrix run, (2) owner control of the PyPI project, and
-(3) owner-controlled publication/signing. Live hosted provider certification is optional unless the
-owner chooses to advertise specific providers.
+documented acceptance criteria, the four-job GitHub Actions matrix is green, and no locally
+actionable P0 is identified. Public release remains gated on (1) review and merge into the default
+branch, (2) owner control of the PyPI project, and (3) owner-controlled publication/signing. Live
+hosted provider certification is optional unless the owner chooses to advertise specific providers.
