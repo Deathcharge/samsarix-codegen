@@ -295,6 +295,11 @@ Python 3.10 and 3.14 across Ubuntu and Windows. See [CONTRIBUTING.md](CONTRIBUTI
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
 the remaining external usefulness gate and its privacy-preserving evidence record.
 
+The [release runbook](docs/RELEASING.md) documents a non-publishing workflow dry run, exact
+version/tag/changelog gates, SHA-256 manifests, provenance attestation, manually approved PyPI
+Trusted Publishing, immutable-ready GitHub releases, verification, and rollback. No package is
+published merely by running CI or manually dispatching that workflow.
+
 ## Architecture
 
 ```text

@@ -105,6 +105,10 @@ Research references:
     Completions request/response path with two fixed messages, no source context, one request, no
     retry, and a separate 256-token ceiling. Its report excludes endpoint, key, and response text.
     A pass is scoped evidence, not Samsarix certification of a provider family.
+14. **Release privilege separation.** Manual release-workflow dispatches build, audit, checksum,
+    and attest but cannot publish. Only an exact `vX.Y.Z` tag contained in `master`, with matching
+    source versions and a dated changelog, can reach the manually approved `pypi` environment.
+    GitHub release publication waits for PyPI and uses a draft-first asset sequence.
 
 ## Assumptions
 
@@ -171,7 +175,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add bounded, explicitly named stdin context for staged diffs and selected log excerpts.
 - [ ] Consider ignore-file-based discovery only if explicit-input ergonomics prove insufficient;
   retain visible budgets and path boundaries.
-- [ ] Add signed release automation after the package name is reserved and publishing is configured.
+- [x] Add dry-runnable release verification, provenance, and gated Trusted Publishing automation.
+- [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
@@ -215,6 +220,9 @@ Final command evidence is recorded in the **Final verification** section after e
   standalone CI and cross-repository consumers.
 - Added one-request provider conformance evidence and a bounded three-developer pilot protocol that
   collects usability signals without collecting prompts, source, logs, responses, or credentials.
+- Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
+  full-SHA-pinned Actions, provenance attestations, gated Trusted Publishing, immutable-ready GitHub
+  release assembly, and a recovery runbook.
 
 ## Deferred work and rationale
 
@@ -232,8 +240,8 @@ Final command evidence is recorded in the **Final verification** section after e
 
 | Blocker | Required owner action | Verification |
 | --- | --- | --- |
-| Package identity | Reserve `samsarix-codegen` on PyPI (the project URL returned 404 on 2026-07-29) | Owner-controlled PyPI project exists with matching metadata |
-| Publication | Configure trusted publishing or a scoped PyPI token | Tagged release publishes signed artifacts from CI |
+| Package identity | Reserve `samsarix-codegen` on PyPI (the project URL returned 404 again on 2026-08-01) | Owner-controlled PyPI project exists with matching metadata |
+| Publication | Register `release.yml` as a Trusted Publisher and require approval on the `pypi` GitHub environment | Tagged release publishes attested artifacts from CI |
 | Provider validation | Choose any local/hosted providers the project will officially support and run `provider-check` plus contract tests | Exact endpoint/model/version evidence passes in an owner-approved non-production environment |
 
 No deployment, account creation, package publication, spending, or live infrastructure change is
@@ -404,6 +412,17 @@ included both the new module and schema resource. Local two-server integration t
 that a credential-bearing request stops at an HTTP redirect and never contacts its target. Package
 builds emitted no warnings. Exact distribution digests are attached to the corresponding pull
 request because recording a digest inside the sdist would change that digest.
+
+### Release-readiness follow-up
+
+Python 3.14.6 source checks passed with 103 tests. The clean-room sdist included its release scripts,
+tests, pinned workflows, and roadmap; it passed lint, formatting, strict typing, and the same 103
+tests before rebuilding a Twine-valid wheel. The repository-built sdist and wheel passed Twine plus
+the fail-closed structural/metadata audit, which also produced a deterministic two-file
+`SHA256SUMS`. A dependency-free fresh environment installed the wheel, reported version `0.2.0`,
+loaded the provider-check schema, and exercised the typed public report API. The non-publishing
+GitHub workflow dry run remains to be recorded after the workflow reaches the default branch.
+Exact local digests are left in the build evidence rather than this sdist-contained document.
 
 ### Validation not run
 

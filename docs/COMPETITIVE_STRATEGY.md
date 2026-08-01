@@ -86,5 +86,6 @@ that provider behavior, tokenization, or outputs are equivalent.
    incident-triage workflow.
 2. Record operator-run conformance reports and deeper contract tests against any local/provider
    endpoints Samsarix chooses to support explicitly.
-3. Package reservation, trusted publishing, artifact signing, and documented rollback.
+3. Configure the implemented trusted-publishing/attestation pipeline, reserve the package, and
+   execute the documented release and rollback verification.
 4. Only after pilot evidence: consider opt-in streaming, ignore-aware manifests, or editor hooks.
