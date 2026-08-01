@@ -236,6 +236,114 @@ def test_build_accepts_explicit_bounded_stdin_context(capsys) -> None:
     assert "safe = True" in payload["messages"][1]["content"]
 
 
+def test_build_composes_direct_files_and_repeated_context_manifests(tmp_path: Path, capsys) -> None:
+    for name in ("direct.py", "shared.py", "tests.py"):
+        (tmp_path / name).write_text(f"# {name}\n", encoding="utf-8")
+    (tmp_path / "core.json").write_text(
+        json.dumps({"schema_version": 1, "files": ["direct.py", "shared.py"]}), encoding="utf-8"
+    )
+    (tmp_path / "tests.json").write_text(
+        json.dumps({"schema_version": 1, "files": ["tests.py"]}), encoding="utf-8"
+    )
+
+    exit_code = main(
+        [
+            "build",
+            "Review the selected project surface",
+            "--root",
+            str(tmp_path),
+            "--file",
+            "direct.py",
+            "--context-manifest",
+            "core.json",
+            "--context-manifest",
+            "tests.json",
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert captured.err == ""
+    assert [item["name"] for item in payload["context"]["items"]] == [
+        "direct.py",
+        "shared.py",
+        "tests.py",
+    ]
+
+
+def test_manifest_entries_share_the_total_context_item_limit(tmp_path: Path, capsys) -> None:
+    manifest = {
+        "schema_version": 1,
+        "files": [f"src/file-{index}.py" for index in range(20)],
+    }
+    (tmp_path / "context.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "build",
+            "Review",
+            "--root",
+            str(tmp_path),
+            "--context-manifest",
+            "context.json",
+            "--stdin-name",
+            "extra.diff",
+        ],
+        stdin=BytesIO(b"diff"),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 3
+    assert captured.out == ""
+    assert "at most 20 total context items" in captured.err
+
+
+def test_direct_context_limit_fails_before_reading_a_manifest(tmp_path: Path, capsys) -> None:
+    arguments = [
+        "build",
+        "Review",
+        "--root",
+        str(tmp_path),
+        "--context-manifest",
+        "missing-manifest.json",
+    ]
+    for index in range(21):
+        arguments.extend(["--file", f"missing-{index}.py"])
+
+    exit_code = main(arguments)
+
+    captured = capsys.readouterr()
+    assert exit_code == 3
+    assert captured.out == ""
+    assert "at most 20 total context items" in captured.err
+    assert "missing-manifest" not in captured.err
+
+
+def test_invalid_context_manifest_fails_with_context_exit_code(tmp_path: Path, capsys) -> None:
+    (tmp_path / "context.json").write_text(
+        json.dumps({"schema_version": 1, "files": ["../secret.py"]}), encoding="utf-8"
+    )
+
+    exit_code = main(
+        [
+            "build",
+            "Review",
+            "--root",
+            str(tmp_path),
+            "--context-manifest",
+            "context.json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 3
+    assert captured.out == ""
+    assert "parent segments" in captured.err
+
+
 def test_estimated_input_budget_fails_before_network(capsys, monkeypatch) -> None:
     def fail_if_called(self, messages):
         raise AssertionError("provider must not be called")

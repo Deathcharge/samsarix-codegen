@@ -16,8 +16,8 @@ executes generated code, scans a repository automatically, or retries a paid req
 
 The core workflow separates request construction from credential-bearing execution:
 
-1. Select the only context the model may receive with repeated `--file` options or
-   `--stdin-name`.
+1. Select the only context the model may receive with repeated `--file` options, an explicitly
+   invoked context manifest, or `--stdin-name`.
 2. Compile a schema-versioned artifact containing the exact messages, context provenance, content
    hashes, and an approximate input-token estimate.
 3. Validate and summarize it offline with `inspect`.
@@ -42,6 +42,34 @@ samsarix-codegen build "Explain the behavior and edge cases" `
 
 On macOS or Linux, activate with `source .venv/bin/activate` and use `\` for shell continuation.
 `build` defaults to a readable Markdown prompt and performs no network request.
+
+For a repeatable project review, check in a versioned context manifest:
+
+```json
+{
+  "schema_version": 1,
+  "files": [
+    "src/samsarix_codegen/context.py",
+    "src/samsarix_codegen/prompt.py",
+    "tests/test_context.py"
+  ]
+}
+```
+
+Then invoke it explicitly:
+
+```bash
+samsarix-codegen build "Review the context boundary" \
+  --task review \
+  --context-manifest examples/review-context-v1.json \
+  --format json > context-review.json
+```
+
+Repeat `--context-manifest` to compose checked-in context sets, and add task-specific files with
+`--file`. Samsarix never searches for manifests automatically. All manifests and selected files
+must resolve inside the same `--root`; direct files appear first, followed by manifest entries in
+argument and array order. The [context-manifest contract](docs/CONTEXT_MANIFEST.md) defines the
+portable path rules, limits, and trust boundary.
 
 ## Build, inspect, and execute one reviewed artifact
 
@@ -159,6 +187,7 @@ samsarix-codegen schema result > execution-result-v1.schema.json
 samsarix-codegen schema comparison > artifact-comparison-v1.schema.json
 samsarix-codegen schema result-comparison > execution-result-comparison-v1.schema.json
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
+samsarix-codegen schema context-manifest > context-manifest-v1.schema.json
 ```
 
 The same files ship inside the typed Python package and are available through
@@ -229,8 +258,11 @@ reducing accidental exposure in shell history and process listings.
 
 ## Input, reliability, and cost limits
 
-- Only repeated `--file` paths and an explicitly named stdin stream are read, up to 20 total
-  inputs.
+- Only repeated `--file` paths, entries from explicitly named context manifests, and an explicitly
+  named stdin stream are read, up to 20 total declared inputs.
+- A context manifest is a strict UTF-8 JSON document of at most 64 KiB and 20 portable,
+  forward-slash paths. Up to 20 manifests may be composed; manifests and their file entries stay
+  inside the same `--root`.
 - Files are resolved inside `--root`, deduplicated, and required to be regular UTF-8 text without
   NUL bytes.
 - Total context defaults to 200,000 bytes and has a hard 5,000,000-byte ceiling.
@@ -269,11 +301,14 @@ provider client:
 ```python
 from samsarix_codegen import (
     ContractSchema,
+    ContextManifest,
     PromptRequest,
     Task,
     build_messages,
     create_request_artifact,
     load_contract_schema,
+    parse_context_manifest,
+    render_context_manifest,
     render_request_artifact,
 )
 
@@ -281,6 +316,8 @@ request = PromptRequest(task=Task.DEBUG, instruction="Find the likely failure")
 artifact = create_request_artifact(build_messages(request), request.files)
 print(render_request_artifact(artifact))
 request_schema = load_contract_schema(ContractSchema.REQUEST)
+manifest = ContextManifest(files=("src/app.py", "tests/test_app.py"))
+assert parse_context_manifest(render_context_manifest(manifest)) == manifest
 ```
 
 `parse_execution_result()` and `compare_execution_results()` provide the same strict, content-
@@ -313,7 +350,7 @@ published merely by running CI or manually dispatching that workflow.
 ## Architecture
 
 ```text
-instruction + explicit files / named stdin
+instruction + explicit files / explicit manifests / named stdin
                     |
                     v
           validated provider-neutral messages
@@ -339,6 +376,8 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 ## Security and privacy
 
 - Instructions and selected context leave the machine only through `run` or `execute`.
+- Manifests contain file names rather than file contents, but can still reveal project structure;
+  treat them as repository metadata.
 - Artifacts contain the complete prompt and selected source/log content. Treat them with the same
   confidentiality and retention controls as their inputs.
 - Artifact and context hashes detect drift but do not authenticate an author or reviewer.
@@ -349,10 +388,10 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - Model output may be incorrect or unsafe. Samsarix Codegen never executes, applies, or persists it.
 - There is no telemetry, analytics, background process, automatic history, or retry loop.
 
-Tool calling, image input, streaming, automatic edits, repository discovery, sessions, signing,
-provider-specific Responses APIs, and provider endorsement are intentionally out of scope for
-`0.2.0`. The [competitive strategy](docs/COMPETITIVE_STRATEGY.md) explains this boundary and the
-evidence behind it.
+Tool calling, image input, streaming, automatic edits, repository discovery, ignore/glob expansion,
+sessions, signing, provider-specific Responses APIs, and provider endorsement are intentionally out
+of scope for `0.2.0`. The [competitive strategy](docs/COMPETITIVE_STRATEGY.md) explains this boundary
+and the evidence behind it.
 
 ## License, attribution, and support
 

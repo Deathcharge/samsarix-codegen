@@ -24,7 +24,13 @@ from samsarix_codegen.artifact import (
     render_request_artifact,
     require_fingerprint,
 )
-from samsarix_codegen.context import load_context_files
+from samsarix_codegen.context import (
+    ContextManifest,
+    load_context_files,
+    load_context_manifest,
+    parse_context_manifest,
+    render_context_manifest,
+)
 from samsarix_codegen.models import (
     ChatResult,
     ContextFile,
@@ -45,6 +51,7 @@ __all__ = [
     "ChatResult",
     "ContextRecord",
     "ContextFile",
+    "ContextManifest",
     "ContractSchema",
     "ExecutionResult",
     "ExecutionResultComparison",
@@ -63,11 +70,14 @@ __all__ = [
     "create_request_artifact",
     "estimate_tokens",
     "load_context_files",
+    "load_context_manifest",
     "load_contract_schema",
     "parse_execution_result",
+    "parse_context_manifest",
     "parse_request_artifact",
     "render_artifact_comparison",
     "render_artifact_summary",
+    "render_context_manifest",
     "render_execution_result",
     "render_execution_result_comparison",
     "render_markdown",

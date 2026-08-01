@@ -2,6 +2,16 @@
 
 `sample.py` is a small input for the offline quick start in the repository README.
 
+`review-context-v1.json` is a runnable versioned context manifest. It selects the context loader,
+prompt builder, and loader tests without scanning the repository:
+
+```bash
+samsarix-codegen build "Review the context boundary" \
+  --task review \
+  --context-manifest examples/review-context-v1.json \
+  --format json
+```
+
 `review-staged.sh` and `review-staged.ps1` compile the current repository's staged diff into
 `samsarix-review-request.json` (or a path passed as the first argument), validate it, and print its
 fingerprint. They stop when no changes are staged and never contact a model endpoint.

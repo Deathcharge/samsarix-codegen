@@ -8,10 +8,10 @@ Portfolio role: **standalone product candidate**. Develop this as a focused stan
 
 Current disposition: The productized default is merged and preserved by a rollback ref. Version
 `0.2.0` has merged deterministic request-artifact and offline review/comparison workflows.
-Versioned machine-readable contracts, an operator-run provider conformance check, and offline
-same-request result comparison are merged milestones. A gated release workflow can build and attest
-without publishing; PyPI owner setup, publication, pilot validation, and flagship adoption remain
-separate decisions.
+Versioned machine-readable contracts, explicitly invoked context manifests, an operator-run
+provider conformance check, and offline same-request result comparison are implemented milestones.
+A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
+pilot validation, and flagship adoption remain separate decisions.
 
 ## Stabilize the productized default
 
@@ -36,10 +36,12 @@ Current hardening backlog:
   package-verified for the review-tools follow-up.
 - Strict execution-result parsing and content-omitting same-request comparison are implemented for
   reproducible provider experiments; they intentionally do not score output quality.
+- Strict versioned context manifests make repeated component reviews portable without automatic
+  repository discovery, glob expansion, or a second path-loading boundary.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented
   and locally package-verified for the contract milestone.
 - A content-free, one-request provider check is implemented; no owner-selected live provider has
-  been certified. Streaming, ignore-aware manifests, and editor integration remain deferred.
+  been certified. Streaming, ignore-aware discovery, and editor integration remain deferred.
 - Package name reservation and publication are not owner-completed. Release checks, SHA-256
   manifests, GitHub provenance attestations, and Trusted Publishing workflow support are implemented.
 - A standard-library HTTP client creates a small but ongoing compatibility review burden across

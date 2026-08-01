@@ -30,7 +30,13 @@ from samsarix_codegen.artifact import (
     render_request_artifact,
     require_fingerprint,
 )
-from samsarix_codegen.context import DEFAULT_MAX_FILES, load_context_files, load_stream_context
+from samsarix_codegen.context import (
+    DEFAULT_MAX_FILES,
+    DEFAULT_MAX_MANIFESTS,
+    load_context_files,
+    load_context_manifest,
+    load_stream_context,
+)
 from samsarix_codegen.errors import ArtifactError, ConfigurationError, ContextError, SamsarixError
 from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages, render_markdown
@@ -274,6 +280,15 @@ def _add_request_arguments(parser: argparse.ArgumentParser) -> None:
         help=f"UTF-8 context file within --root; repeat up to {DEFAULT_MAX_FILES} total inputs",
     )
     parser.add_argument(
+        "--context-manifest",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "versioned JSON file allowlist within --root; repeat to compose explicit context sets"
+        ),
+    )
+    parser.add_argument(
         "--stdin-name",
         metavar="NAME",
         help="read one bounded UTF-8 context item from stdin and label it stdin:NAME",
@@ -355,13 +370,23 @@ def _add_provider_arguments(
 
 
 def _request_from_args(args: argparse.Namespace, stdin: BinaryIO) -> PromptRequest:
-    input_count = len(args.file) + (1 if args.stdin_name is not None else 0)
+    if len(args.context_manifest) > DEFAULT_MAX_MANIFESTS:
+        raise ContextError(f"at most {DEFAULT_MAX_MANIFESTS} context manifests may be selected")
+
+    selected_paths = list(args.file)
+    input_count = len(selected_paths) + (1 if args.stdin_name is not None else 0)
     if input_count > DEFAULT_MAX_FILES:
         raise ContextError(f"at most {DEFAULT_MAX_FILES} total context items may be selected")
+    for manifest_path in args.context_manifest:
+        manifest = load_context_manifest(manifest_path, root=args.root)
+        selected_paths.extend(manifest.files)
+        input_count += len(manifest.files)
+        if input_count > DEFAULT_MAX_FILES:
+            raise ContextError(f"at most {DEFAULT_MAX_FILES} total context items may be selected")
 
     files = list(
         load_context_files(
-            args.file,
+            selected_paths,
             root=args.root,
             max_files=DEFAULT_MAX_FILES,
             max_total_bytes=args.max_context_bytes,

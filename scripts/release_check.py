@@ -30,6 +30,7 @@ CHANGELOG_PATTERN = re.compile(r"^## \[([^]]+)] - (.+)$", re.MULTILINE)
 
 REQUIRED_SCHEMAS = (
     "artifact-comparison-v1.schema.json",
+    "context-manifest-v1.schema.json",
     "execution-result-v1.schema.json",
     "execution-result-comparison-v1.schema.json",
     "provider-check-v1.schema.json",
@@ -49,10 +50,12 @@ REQUIRED_SDIST_PATHS = (
     "SECURITY.md",
     "SUPPORT.md",
     "docs/COMPETITIVE_STRATEGY.md",
+    "docs/CONTEXT_MANIFEST.md",
     "docs/PILOT.md",
     "docs/PRODUCTIZATION.md",
     "docs/RELEASING.md",
     "docs/REQUEST_ARTIFACT.md",
+    "examples/review-context-v1.json",
     "pyproject.toml",
     "scripts/release_check.py",
     "src/samsarix_codegen/__init__.py",

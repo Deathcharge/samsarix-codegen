@@ -150,6 +150,7 @@ The package bundles self-contained
 | `comparison` | Artifact comparison schema version 1 | `src/samsarix_codegen/schemas/artifact-comparison-v1.schema.json` |
 | `result-comparison` | Execution-result comparison schema version 1 | `src/samsarix_codegen/schemas/execution-result-comparison-v1.schema.json` |
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
+| `context-manifest` | Explicit context manifest schema version 1 | `src/samsarix_codegen/schemas/context-manifest-v1.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
 `load_contract_schema()` from Python. The files are package data in both the sdist and wheel.
@@ -158,4 +159,5 @@ JSON Schema checks portable structure, types, bounds, required fields, and diges
 prove semantic relationships such as whether a fingerprint matches canonical content, context
 bytes sum correctly, estimates match messages, or deltas match their base/target values. Use
 `inspect`, `compare`, `compare-results`, or the corresponding Python parser for those semantic
-checks.
+checks. Context manifests are input contracts rather than request/result envelopes; their
+[separate contract](CONTEXT_MANIFEST.md) defines the additional runtime path and containment rules.

@@ -24,6 +24,9 @@ approves a first public release.
 - Strict execution-result parsing plus offline, same-request response hash/size and usage comparison
   without response-body disclosure.
 - A bundled Draft 2020-12 contract for execution-result comparisons.
+- Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
+  allowlists without repository discovery, globs, or ignore-file interpretation.
+- A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.
 - Fail-closed source/distribution release checks, a non-publishing dry-run path, SHA-256 manifests,
   build-provenance attestations, and gated PyPI/GitHub release automation.
 - A release and rollback runbook plus monthly GitHub Actions dependency updates.
