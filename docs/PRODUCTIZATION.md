@@ -420,9 +420,17 @@ tests, pinned workflows, and roadmap; it passed lint, formatting, strict typing,
 tests before rebuilding a Twine-valid wheel. The repository-built sdist and wheel passed Twine plus
 the fail-closed structural/metadata audit, which also produced a deterministic two-file
 `SHA256SUMS`. A dependency-free fresh environment installed the wheel, reported version `0.2.0`,
-loaded the provider-check schema, and exercised the typed public report API. The non-publishing
-GitHub workflow dry run remains to be recorded after the workflow reaches the default branch.
-Exact local digests are left in the build evidence rather than this sdist-contained document.
+loaded the provider-check schema, and exercised the typed public report API.
+
+[Default-branch release run 30719609291](https://github.com/Deathcharge/samsarix-codegen/actions/runs/30719609291)
+passed at commit `48e50a6`: every build, source, distribution, installed-wheel, upload, checksum, and
+attestation step succeeded; both publishing jobs were skipped; and the build job had zero GitHub
+annotations. Independently downloaded artifacts matched `SHA256SUMS`, and `gh attestation verify`
+passed for both against this repository. The exact remote digests were
+`068a55b0a2c607be5aab4c32dfd8fb441ef968e76c77d37ea367466fe328d0f1` for the wheel and
+`80db412fbdafb0a76f305066fee99540574747e7b9ef16888c92c4c9ee784e7a` for the sdist.
+[Post-merge CI run 30719540861](https://github.com/Deathcharge/samsarix-codegen/actions/runs/30719540861)
+also passed the four-platform matrix using the current full-SHA-pinned Node 24 Actions releases.
 
 ### Validation not run
 
@@ -433,8 +441,8 @@ Exact local digests are left in the build evidence rather than this sdist-contai
   redaction.
 - The three-developer pilot protocol is ready but has not been represented as completed; it requires
   three real participants using the same exact wheel.
-- Package publication, signing, and installation from PyPI were not attempted; they remain
-  owner-controlled actions.
+- Package publication, signed release-tag creation, and installation from PyPI were not attempted;
+  they remain owner-controlled actions.
 - The optional Codex Security workspace scan was skipped at the owner's request due its cost. The
   repository instead received a focused manual trust-boundary review plus adversarial tests and
   searches for secrets, unsafe endpoints, path escape, unbounded reads, command execution, stale
@@ -446,6 +454,7 @@ Exact local digests are left in the build evidence rather than this sdist-contai
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
 review-first artifact workflow, offline review/comparison tools, independent JSON contracts, and an
 operator-run provider conformance check; each has local clean-package evidence recorded above.
-Public release remains gated on owner control of the PyPI project and owner-controlled
-publication/signing. The usefulness claim remains gated on the three-developer pilot, and live
-provider certification remains optional unless the owner advertises specific providers.
+Public release remains gated on owner control of the PyPI project, creation of the signed release
+tag, and approval of the publishing environment. The usefulness claim remains gated on the
+three-developer pilot, and live provider certification remains optional unless the owner advertises
+specific providers.
