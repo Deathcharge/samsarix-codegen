@@ -18,6 +18,7 @@ from samsarix_codegen.prompt import estimate_tokens
 
 ARTIFACT_SCHEMA_VERSION = 2
 RESULT_SCHEMA_VERSION = 1
+COMPARISON_SCHEMA_VERSION = 1
 MAX_ARTIFACT_BYTES = 12 * 1024 * 1024
 MAX_ARTIFACT_MESSAGES = 32
 MAX_ARTIFACT_CONTEXT_ITEMS = 100
@@ -60,6 +61,58 @@ class RequestArtifact:
             "messages": payload["messages"],
             "context": payload["context"],
             "estimate": payload["estimate"],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RequestArtifactComparison:
+    """A content-safe structural comparison between two validated artifacts."""
+
+    base_fingerprint: str
+    target_fingerprint: str
+    changed_message_indices: tuple[int, ...]
+    base_message_count: int
+    target_message_count: int
+    added_context: tuple[ContextRecord, ...]
+    removed_context: tuple[ContextRecord, ...]
+    base_context_bytes: int
+    target_context_bytes: int
+    base_estimated_input_tokens: int
+    target_estimated_input_tokens: int
+
+    @property
+    def changed(self) -> bool:
+        """Return whether the canonical request fingerprints differ."""
+
+        return not hmac.compare_digest(self.base_fingerprint, self.target_fingerprint)
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return a JSON-compatible comparison without prompt contents."""
+
+        return {
+            "schema_version": COMPARISON_SCHEMA_VERSION,
+            "changed": self.changed,
+            "base_fingerprint": self.base_fingerprint,
+            "target_fingerprint": self.target_fingerprint,
+            "messages": {
+                "base_count": self.base_message_count,
+                "target_count": self.target_message_count,
+                "changed_indices": list(self.changed_message_indices),
+            },
+            "context": {
+                "base_bytes": self.base_context_bytes,
+                "target_bytes": self.target_context_bytes,
+                "byte_delta": self.target_context_bytes - self.base_context_bytes,
+                "added": [_context_record_payload(item) for item in self.added_context],
+                "removed": [_context_record_payload(item) for item in self.removed_context],
+            },
+            "estimate": {
+                "base_input_tokens": self.base_estimated_input_tokens,
+                "target_input_tokens": self.target_estimated_input_tokens,
+                "input_token_delta": (
+                    self.target_estimated_input_tokens - self.base_estimated_input_tokens
+                ),
+            },
         }
 
 
@@ -206,6 +259,78 @@ def render_execution_result(
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
+def compare_request_artifacts(
+    base: RequestArtifact,
+    target: RequestArtifact,
+) -> RequestArtifactComparison:
+    """Compare validated artifacts without reproducing their prompt contents."""
+
+    message_count = max(len(base.messages), len(target.messages))
+    changed_message_indices = tuple(
+        index
+        for index in range(message_count)
+        if index >= len(base.messages)
+        or index >= len(target.messages)
+        or base.messages[index] != target.messages[index]
+    )
+    added_context = _ordered_context_difference(target.context, base.context)
+    removed_context = _ordered_context_difference(base.context, target.context)
+    return RequestArtifactComparison(
+        base_fingerprint=base.fingerprint,
+        target_fingerprint=target.fingerprint,
+        changed_message_indices=changed_message_indices,
+        base_message_count=len(base.messages),
+        target_message_count=len(target.messages),
+        added_context=added_context,
+        removed_context=removed_context,
+        base_context_bytes=base.context_bytes,
+        target_context_bytes=target.context_bytes,
+        base_estimated_input_tokens=base.estimated_input_tokens,
+        target_estimated_input_tokens=target.estimated_input_tokens,
+    )
+
+
+def render_artifact_comparison(
+    comparison: RequestArtifactComparison,
+    *,
+    output_format: str = "text",
+) -> str:
+    """Render an artifact comparison as text or stable JSON."""
+
+    if output_format == "json":
+        return json.dumps(comparison.to_payload(), ensure_ascii=False, indent=2) + "\n"
+    if output_format != "text":
+        raise ArtifactError("artifact comparison format must be text or json")
+
+    lines = [
+        "Request artifacts differ." if comparison.changed else "Request artifacts are identical.",
+        f"Base: {comparison.base_fingerprint}",
+        f"Target: {comparison.target_fingerprint}",
+    ]
+    if comparison.changed_message_indices:
+        indices = ", ".join(str(index) for index in comparison.changed_message_indices)
+        lines.append(f"Messages: changed at zero-based index(es) {indices}")
+    else:
+        lines.append("Messages: unchanged")
+    lines.append(
+        "Context: "
+        f"{len(comparison.added_context)} added, {len(comparison.removed_context)} removed, "
+        f"{_format_delta(comparison.target_context_bytes - comparison.base_context_bytes)} bytes"
+    )
+    for item in comparison.removed_context:
+        lines.append(f"- {item.name}: {item.size_bytes:,} bytes, {item.content_sha256}")
+    for item in comparison.added_context:
+        lines.append(f"+ {item.name}: {item.size_bytes:,} bytes, {item.content_sha256}")
+    token_delta = comparison.target_estimated_input_tokens - comparison.base_estimated_input_tokens
+    lines.append(
+        "Estimated input: "
+        f"~{comparison.base_estimated_input_tokens:,} -> "
+        f"~{comparison.target_estimated_input_tokens:,} tokens "
+        f"({_format_delta(token_delta)})"
+    )
+    return "\n".join(lines) + "\n"
+
+
 def render_artifact_summary(artifact: RequestArtifact, *, output_format: str = "text") -> str:
     """Render a validated artifact summary without exposing prompt contents."""
 
@@ -281,6 +406,34 @@ def _unsigned_payload(
             "method": ESTIMATE_METHOD,
         },
     }
+
+
+def _context_record_payload(item: ContextRecord) -> dict[str, Any]:
+    return {
+        "name": item.name,
+        "bytes": item.size_bytes,
+        "content_sha256": item.content_sha256,
+    }
+
+
+def _ordered_context_difference(
+    items: Sequence[ContextRecord],
+    subtract: Sequence[ContextRecord],
+) -> tuple[ContextRecord, ...]:
+    remaining = list(subtract)
+    difference: list[ContextRecord] = []
+    for item in items:
+        try:
+            index = remaining.index(item)
+        except ValueError:
+            difference.append(item)
+        else:
+            remaining.pop(index)
+    return tuple(difference)
+
+
+def _format_delta(value: int) -> str:
+    return f"{value:+,}"
 
 
 def _fingerprint(unsigned_payload: Mapping[str, Any]) -> str:

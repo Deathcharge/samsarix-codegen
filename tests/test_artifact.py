@@ -7,8 +7,10 @@ import pytest
 
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
+    compare_request_artifacts,
     create_request_artifact,
     parse_request_artifact,
+    render_artifact_comparison,
     render_artifact_summary,
     render_execution_result,
     render_request_artifact,
@@ -141,3 +143,51 @@ def test_execution_result_is_machine_readable_and_omits_endpoint() -> None:
     assert payload["response"]["text"] == "Looks good"
     assert payload["usage"]["total_tokens"] == 12
     assert "endpoint" not in payload
+
+
+def test_comparison_identifies_message_and_context_changes_without_prompt_content() -> None:
+    base_request = PromptRequest(
+        Task.REVIEW,
+        "Review the old behavior",
+        files=(ContextFile("src/app.py", "secret old value", 16),),
+    )
+    target_request = PromptRequest(
+        Task.REVIEW,
+        "Review the new behavior",
+        files=(ContextFile("src/app.py", "secret new value", 16),),
+    )
+    base = create_request_artifact(build_messages(base_request), base_request.files)
+    target = create_request_artifact(build_messages(target_request), target_request.files)
+
+    comparison = compare_request_artifacts(base, target)
+    text = render_artifact_comparison(comparison)
+    payload = json.loads(render_artifact_comparison(comparison, output_format="json"))
+
+    assert comparison.changed
+    assert comparison.changed_message_indices == (1,)
+    assert len(comparison.added_context) == 1
+    assert len(comparison.removed_context) == 1
+    assert "secret old value" not in text
+    assert "secret new value" not in text
+    assert payload["changed"] is True
+    assert payload["messages"]["changed_indices"] == [1]
+    assert payload["context"]["added"][0]["name"] == "src/app.py"
+
+
+def test_comparison_reports_identical_artifacts() -> None:
+    artifact = make_artifact()
+
+    comparison = compare_request_artifacts(artifact, artifact)
+
+    assert not comparison.changed
+    assert comparison.changed_message_indices == ()
+    assert comparison.added_context == ()
+    assert comparison.removed_context == ()
+    assert render_artifact_comparison(comparison).startswith("Request artifacts are identical.")
+
+
+def test_comparison_renderer_rejects_unknown_format() -> None:
+    comparison = compare_request_artifacts(make_artifact(), make_artifact())
+
+    with pytest.raises(ArtifactError, match="format must be"):
+        render_artifact_comparison(comparison, output_format="yaml")

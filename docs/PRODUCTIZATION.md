@@ -200,6 +200,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - Removed false competitive, deployment, marketplace, package, license, and maturity claims.
 - Added deterministic request artifacts, offline inspection, pinned execution, bounded stdin,
   input-budget enforcement, structured results, and staged-review examples.
+- Added exact stored-prompt rendering and content-safe artifact comparison so reviewers can inspect
+  and explain approval-object drift without rebuilding source context.
 
 ## Deferred work and rationale
 
@@ -352,6 +354,16 @@ a fresh virtual environment, and installed commands ran from the temporary direc
 The generated distribution digests are recorded with the exact commit in its pull request or
 release evidence rather than embedded here, because updating a source-distribution document changes
 the source-distribution digest.
+
+### Artifact review-tools follow-up
+
+The same Python 3.14.6 clean-room process was repeated after adding exact-prompt review and offline
+comparison. Source checks passed with 75 tests in 9.84 seconds; the extracted sdist passed lint,
+format, strict typing, and 75 tests in 13.61 seconds. The rebuilt wheel installed with no broken
+requirements. From outside the checkout, installed commands rendered the exact stored prompt,
+reported changed and identical artifacts correctly, omitted both message bodies from comparison
+JSON, and exposed the typed `RequestArtifactComparison` public API. Package builds emitted no
+warnings. Exact distribution digests are attached to the corresponding pull request.
 
 ### Validation not run
 

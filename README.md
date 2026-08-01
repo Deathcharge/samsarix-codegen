@@ -54,6 +54,7 @@ git diff --staged | samsarix-codegen build "Review these staged changes" `
   --format json > request.json
 
 samsarix-codegen inspect request.json
+samsarix-codegen inspect request.json --format markdown > exact-prompt.md
 $fingerprint = samsarix-codegen inspect request.json --format fingerprint
 
 $env:SAMSARIX_MODEL = "your-local-model"
@@ -70,13 +71,15 @@ git diff --staged | samsarix-codegen build "Review these staged changes" \
   --format json > request.json
 
 samsarix-codegen inspect request.json
+samsarix-codegen inspect request.json --format markdown > exact-prompt.md
 fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
 
 export SAMSARIX_MODEL="your-local-model"
 samsarix-codegen execute request.json --expect-fingerprint "$fingerprint"
 ```
 
-The supplied [PowerShell](examples/review-staged.ps1) and
+The Markdown view is rendered from the validated artifact's exact stored messages; it does not
+re-read the source files. The supplied [PowerShell](examples/review-staged.ps1) and
 [POSIX](examples/review-staged.sh) scripts package this staged-diff workflow. `build` and `inspect`
 are offline. `execute` validates the artifact and fingerprint before constructing a provider
 client, then makes one non-streaming request.
@@ -84,6 +87,17 @@ client, then makes one non-streaming request.
 The fingerprint detects drift; it is not a signature. Anyone able to replace an artifact can also
 recompute its unkeyed hash. See the [request artifact contract](docs/REQUEST_ARTIFACT.md) before
 using artifacts across trust boundaries.
+
+Compare an earlier approval object with a rebuilt request without printing either prompt:
+
+```bash
+samsarix-codegen compare approved-request.json rebuilt-request.json
+samsarix-codegen compare approved-request.json rebuilt-request.json --format json
+```
+
+The comparison reports changed zero-based message indexes, added/removed context records, byte and
+estimated-token deltas, and both fingerprints. A changed context item appears as one removed record
+and one added record so both content hashes remain visible.
 
 ## Other real workflows
 
@@ -116,6 +130,7 @@ Both result files identify the common request fingerprint. They omit the endpoin
 | --- | --- | --- |
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
+| `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
 | `execute` | Once | Execute the exact messages in a validated artifact |
 | `run` | Once | Convenience path that builds and executes in one process |
 
