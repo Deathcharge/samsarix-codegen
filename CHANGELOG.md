@@ -21,6 +21,9 @@ approves a first public release.
 - A one-request `provider-check` preflight with a content-safe JSON evidence envelope, a 256-token
   hard ceiling, and a bundled Draft 2020-12 contract.
 - A privacy-preserving three-developer pilot protocol with explicit evidence and decision gates.
+- Fail-closed source/distribution release checks, a non-publishing dry-run path, SHA-256 manifests,
+  build-provenance attestations, and gated PyPI/GitHub release automation.
+- A release and rollback runbook plus monthly GitHub Actions dependency updates.
 - Competitive-positioning and request-artifact contract documentation.
 
 ### Changed
@@ -30,6 +33,7 @@ approves a first public release.
 - Execution-result rendering now rejects values outside its documented schema.
 - Provider requests reject HTTP redirects so bearer credentials cannot be forwarded to a redirect
   target.
+- GitHub Actions dependencies are pinned to verified full commit SHAs.
 - The version advances to `0.2.0` to mark the first post-productization workflow milestone.
 
 ## [0.1.0] - Unreleased

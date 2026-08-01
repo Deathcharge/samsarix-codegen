@@ -1,0 +1,175 @@
+name: Release readiness and publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing X.Y.Z source version to build without publishing
+        required: true
+        default: "0.2.0"
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, audit, and attest distributions
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.release-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Verify source release identity
+        id: release-version
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+            test "$(git rev-parse HEAD)" = "${tag_commit}"
+            git fetch --no-tags origin master:refs/remotes/origin/master
+            git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/master
+            python scripts/release_check.py source \
+              --version "${version}" \
+              --tag "${GITHUB_REF_NAME}" \
+              --require-clean
+          else
+            version="${DISPATCH_VERSION}"
+            python scripts/release_check.py source \
+              --version "${version}" \
+              --allow-unreleased \
+              --require-clean
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+      - name: Install project and release tools
+        run: >-
+          python -m pip install --disable-pip-version-check
+          -e ".[dev]" "twine>=6.2,<7"
+      - name: Verify source
+        run: |
+          python -m ruff check .
+          python -m ruff format --check .
+          python -m mypy src
+          python -m pytest -ra
+      - name: Build distributions
+        run: python -m build
+      - name: Verify distribution metadata and hashes
+        run: |
+          python -m twine check dist/*
+          python scripts/release_check.py artifacts \
+            --version "${{ steps.release-version.outputs.version }}" \
+            --dist-dir dist \
+            --write-checksums dist/SHA256SUMS
+      - name: Verify installed wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "${RUNNER_TEMP}/release-venv"
+          "${RUNNER_TEMP}/release-venv/bin/python" -m pip install \
+            --disable-pip-version-check --no-deps dist/*.whl
+          "${RUNNER_TEMP}/release-venv/bin/python" -m pip check
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" --version
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema provider-check \
+            > "${RUNNER_TEMP}/provider-check.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/python" -c \
+            "from samsarix_codegen import ProviderCheckReport; assert ProviderCheckReport('fixture', 64, 1).status == 'passed'"
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: python-package-distributions
+          path: |
+            dist/*.tar.gz
+            dist/*.whl
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload SHA-256 manifest
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: release-sha256-manifest
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+      - name: Attest release artifacts
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        with:
+          subject-path: dist/*
+
+  publish-to-pypi:
+    name: Publish tagged release to PyPI
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/samsarix-codegen
+    permissions:
+      id-token: write
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: python-package-distributions
+          path: dist
+      - name: Publish with PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+
+  publish-github-release:
+    name: Publish immutable-ready GitHub release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs:
+      - build
+      - publish-to-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: python-package-distributions
+          path: dist
+      - name: Download SHA-256 manifest
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: release-sha256-manifest
+          path: dist
+      - name: Verify downloaded release assets
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS
+      - name: Create draft, attach every asset, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists; refusing to modify it." >&2
+            exit 1
+          fi
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --draft \
+            --generate-notes \
+            --verify-tag
+          gh release edit "${GITHUB_REF_NAME}" --draft=false --verify-tag
