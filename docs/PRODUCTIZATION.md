@@ -393,9 +393,11 @@ verification-harness issue, not a package failure.
 
 ### Provider-conformance and pilot follow-up
 
-Python 3.14.6 source checks passed with 93 tests in 16.83 seconds. The clean-room sdist passed lint,
-format, strict typing, and 93 tests in 10.49 seconds. Its rebuilt wheel installed into a fresh
-environment with no broken or unconditional runtime dependencies. From outside the checkout, the
+Python 3.14.6 source checks passed with 93 tests. The clean-room sdist passed lint, format, strict
+typing, and 93 tests. A follow-up review also added explicit boolean
+rejection for public integer fields and independent fixed-message fixtures. Its rebuilt wheel
+installed into a fresh environment with no broken or unconditional runtime dependencies. From
+outside the checkout, the
 installed package exported and validated the provider-check schema, constructed the typed
 content-safe report envelope, returned exit 2 before network access when the model was absent, and
 included both the new module and schema resource. Local two-server integration tests also proved

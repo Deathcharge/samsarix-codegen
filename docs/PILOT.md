@@ -17,13 +17,18 @@ credentials, endpoint URLs, or request artifacts into the pilot record.
 Record the wheel before the first session:
 
 ```powershell
+$dirty = git status --porcelain
+if ($dirty) { throw "Build the pilot wheel from a clean worktree." }
+git rev-parse HEAD
 python -m build
 Get-FileHash .\dist\samsarix_codegen-0.2.0-py3-none-any.whl -Algorithm SHA256
 python -m pip install --force-reinstall --no-deps .\dist\samsarix_codegen-0.2.0-py3-none-any.whl
 samsarix-codegen --version
 ```
 
-On macOS or Linux, use `sha256sum dist/samsarix_codegen-0.2.0-py3-none-any.whl`.
+Copy the printed commit with the wheel digest. On macOS or Linux, require
+`test -z "$(git status --porcelain)"`, print `git rev-parse HEAD`, and use
+`sha256sum dist/samsarix_codegen-0.2.0-py3-none-any.whl`.
 
 ## Optional provider preflight
 

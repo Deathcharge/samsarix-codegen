@@ -14,10 +14,19 @@ from samsarix_codegen.errors import ConfigurationError, ProviderError
 from samsarix_codegen.models import ProviderConfig
 from samsarix_codegen.provider import OpenAIChatClient
 from samsarix_codegen.provider_check import (
-    PROVIDER_CHECK_MESSAGES,
     ProviderCheckReport,
     check_provider,
     render_provider_check,
+)
+
+EXPECTED_PROVIDER_CHECK_MESSAGES = (
+    {
+        "role": "system",
+        "content": (
+            "This is a provider compatibility check. Return a short plain-text acknowledgement."
+        ),
+    },
+    {"role": "user", "content": "Reply with SAMSARIX_OK."},
 )
 
 
@@ -105,7 +114,7 @@ def test_provider_check_sends_exactly_one_content_free_bounded_request() -> None
     assert isinstance(body, dict)
     assert body == {
         "model": "check-model",
-        "messages": list(PROVIDER_CHECK_MESSAGES),
+        "messages": list(EXPECTED_PROVIDER_CHECK_MESSAGES),
         "max_tokens": 64,
         "stream": False,
     }
@@ -122,6 +131,10 @@ def test_provider_check_sends_exactly_one_content_free_bounded_request() -> None
 def test_provider_check_report_rejects_invalid_public_values() -> None:
     with pytest.raises(ConfigurationError, match="response characters"):
         ProviderCheckReport(model="model", max_output_tokens=64, response_chars=0)
+    with pytest.raises(ConfigurationError, match="output tokens"):
+        ProviderCheckReport(model="model", max_output_tokens=True, response_chars=1)
+    with pytest.raises(ConfigurationError, match="response characters"):
+        ProviderCheckReport(model="model", max_output_tokens=64, response_chars=True)
 
 
 def test_client_accepts_text_content_parts() -> None:

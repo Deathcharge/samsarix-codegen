@@ -10,7 +10,16 @@ from samsarix_codegen.artifact import create_request_artifact, render_request_ar
 from samsarix_codegen.cli import main
 from samsarix_codegen.models import ChatResult, PromptRequest, Task
 from samsarix_codegen.prompt import build_messages
-from samsarix_codegen.provider_check import PROVIDER_CHECK_MESSAGES
+
+EXPECTED_PROVIDER_CHECK_MESSAGES = (
+    {
+        "role": "system",
+        "content": (
+            "This is a provider compatibility check. Return a short plain-text acknowledgement."
+        ),
+    },
+    {"role": "user", "content": "Reply with SAMSARIX_OK."},
+)
 
 
 def test_build_markdown_is_complete_local_journey(tmp_path: Path, capsys) -> None:
@@ -133,7 +142,7 @@ def test_provider_check_reports_content_safe_machine_evidence(capsys, monkeypatc
     def fake_complete(self, messages):
         nonlocal calls
         calls += 1
-        assert tuple(messages) == PROVIDER_CHECK_MESSAGES
+        assert tuple(messages) == EXPECTED_PROVIDER_CHECK_MESSAGES
         assert self.config.model == "pilot-model"
         assert self.config.api_key == "secret-check-key"
         assert self.config.max_output_tokens == 64

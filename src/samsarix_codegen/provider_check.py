@@ -47,12 +47,20 @@ class ProviderCheckReport:
             raise ConfigurationError("the provider check model cannot be empty")
         if len(model) > 200:
             raise ConfigurationError("the provider check model exceeds 200 characters")
-        if not 1 <= self.max_output_tokens <= MAX_PROVIDER_CHECK_OUTPUT_TOKENS:
+        if (
+            not isinstance(self.max_output_tokens, int)
+            or isinstance(self.max_output_tokens, bool)
+            or not 1 <= self.max_output_tokens <= MAX_PROVIDER_CHECK_OUTPUT_TOKENS
+        ):
             raise ConfigurationError(
                 "provider check output tokens must be between 1 and "
                 f"{MAX_PROVIDER_CHECK_OUTPUT_TOKENS}"
             )
-        if self.response_chars < 1:
+        if (
+            not isinstance(self.response_chars, int)
+            or isinstance(self.response_chars, bool)
+            or self.response_chars < 1
+        ):
             raise ConfigurationError("provider check response characters must be positive")
         for label, value in (
             ("prompt tokens", self.prompt_tokens),
