@@ -7,8 +7,9 @@ This roadmap separates four gates: merge, release, publication, and flagship ado
 Portfolio role: **standalone product candidate**. Develop this as a focused standalone product with its own distribution and support boundary. Integrate with the flagship through versioned contracts, not shared private source.
 
 Current disposition: The productized default is merged and preserved by a rollback ref. Version
-`0.2.0` has a merged deterministic request-artifact workflow; offline human-review and comparison
-tools are the next milestone. Release, publication, and flagship adoption remain separate decisions.
+`0.2.0` has merged deterministic request-artifact and offline review/comparison workflows.
+Versioned machine-readable contracts are the current milestone. Release, publication, and flagship
+adoption remain separate decisions.
 
 ## Stabilize the productized default
 
@@ -31,6 +32,8 @@ Current hardening backlog:
   input budgets are implemented and locally package-verified for `0.2.0`.
 - Exact stored-prompt rendering and content-safe artifact comparison are implemented and locally
   package-verified for the review-tools follow-up.
+- Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented
+  and locally package-verified for the contract milestone.
 - No live provider certification, streaming, ignore-aware manifest, or editor integration.
 - Package name, signing, and publication are not owner-completed.
 - A standard-library HTTP client creates a small but ongoing compatibility/security review burden across provider variants and redirects.

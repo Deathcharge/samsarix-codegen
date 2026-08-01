@@ -98,6 +98,9 @@ Research references:
 11. **Reviewable execution artifacts.** Schema-versioned JSON captures the exact provider messages,
     normalized context hashes, approximate input estimate, and a canonical request fingerprint.
     Construction and inspection stay offline; execution can fail closed on fingerprint drift.
+12. **Independent machine contracts.** Bundled Draft 2020-12 schemas describe request, result, and
+    comparison envelopes without requiring a consumer to import this package. CLI parsing remains
+    authoritative for integrity relationships JSON Schema cannot express.
 
 ## Assumptions
 
@@ -202,6 +205,8 @@ Final command evidence is recorded in the **Final verification** section after e
   input-budget enforcement, structured results, and staged-review examples.
 - Added exact stored-prompt rendering and content-safe artifact comparison so reviewers can inspect
   and explain approval-object drift without rebuilding source context.
+- Added versioned bundled schemas, offline schema export, and validator-backed conformance tests for
+  standalone CI and cross-repository consumers.
 
 ## Deferred work and rationale
 
@@ -365,6 +370,17 @@ reported changed and identical artifacts correctly, omitted both message bodies 
 JSON, and exposed the typed `RequestArtifactComparison` public API. Package builds emitted no
 warnings. Exact distribution digests are attached to the corresponding pull request.
 
+### Machine-contract follow-up
+
+Python 3.14.6 source checks passed with 87 tests in 9.48 seconds. The clean-room sdist passed lint,
+format, strict typing, and 87 tests in 8.47 seconds. A dependency-free fresh-venv wheel install
+exported all three bundled schemas, and real request, result, and comparison documents validated
+against those exports with the Draft 2020-12 validator. Wheel inspection found all three JSON
+resources, package builds emitted no warnings, and parsed wheel metadata confirmed zero
+unconditional dependencies plus five development-extra requirements. The first metadata check used
+a quote-sensitive text assertion and was replaced by the successful parsed-marker audit; it was a
+verification-harness issue, not a package failure.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -382,7 +398,7 @@ warnings. Exact distribution digests are attached to the corresponding pull requ
 
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
-review-first artifact workflow and is subject to the verification evidence recorded below. Public
-release remains gated on owner control of the PyPI project and owner-controlled
-publication/signing. Live hosted provider certification is optional unless the owner advertises
-specific providers.
+review-first artifact workflow, offline review/comparison tools, and independent JSON contracts;
+each has local clean-package evidence recorded above. Public release remains gated on owner control
+of the PyPI project and owner-controlled publication/signing. Live hosted provider certification is
+optional unless the owner advertises specific providers.

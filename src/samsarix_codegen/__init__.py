@@ -27,11 +27,13 @@ from samsarix_codegen.models import (
 )
 from samsarix_codegen.prompt import build_messages, estimate_tokens, render_markdown
 from samsarix_codegen.provider import OpenAIChatClient
+from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 
 __all__ = [
     "ChatResult",
     "ContextRecord",
     "ContextFile",
+    "ContractSchema",
     "OpenAIChatClient",
     "PromptRequest",
     "ProviderConfig",
@@ -43,10 +45,12 @@ __all__ = [
     "create_request_artifact",
     "estimate_tokens",
     "load_context_files",
+    "load_contract_schema",
     "parse_request_artifact",
     "render_artifact_comparison",
     "render_artifact_summary",
     "render_markdown",
     "render_request_artifact",
+    "render_contract_schema",
     "require_fingerprint",
 ]

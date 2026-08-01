@@ -56,3 +56,5 @@ jobs:
             samsarix-codegen build "Review the revised change" --task review --stdin-name staged.diff --format json > revised-request.json
           samsarix-codegen compare request.json revised-request.json --format json > comparison.json
           grep -q '"changed": true' comparison.json
+          samsarix-codegen schema request > request.schema.json
+          python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('request.schema.json', encoding='utf-8')); payload=json.load(open('request.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"

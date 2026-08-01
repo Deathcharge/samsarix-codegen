@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from samsarix_codegen.errors import ArtifactError
-from samsarix_codegen.models import ChatResult, ContextFile
+from samsarix_codegen.models import MAX_MODEL_CHARS, ChatResult, ContextFile
 from samsarix_codegen.prompt import estimate_tokens
 
 ARTIFACT_SCHEMA_VERSION = 2
@@ -245,10 +245,27 @@ def render_execution_result(
 ) -> str:
     """Render a machine-readable provider result without endpoint or credential data."""
 
+    if not isinstance(model, str) or not model.strip():
+        raise ArtifactError("execution result model cannot be empty")
+    normalized_model = model.strip()
+    if len(normalized_model) > MAX_MODEL_CHARS:
+        raise ArtifactError(f"execution result model exceeds the {MAX_MODEL_CHARS}-character limit")
+    if not isinstance(result.text, str) or not result.text:
+        raise ArtifactError("execution result response text cannot be empty")
+    for label, value in (
+        ("prompt_tokens", result.prompt_tokens),
+        ("completion_tokens", result.completion_tokens),
+        ("total_tokens", result.total_tokens),
+    ):
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+        ):
+            raise ArtifactError(f"execution result {label} must be a non-negative integer or null")
+
     payload = {
         "schema_version": RESULT_SCHEMA_VERSION,
         "request_fingerprint": artifact.fingerprint,
-        "model": model,
+        "model": normalized_model,
         "response": {"text": result.text},
         "usage": {
             "prompt_tokens": result.prompt_tokens,

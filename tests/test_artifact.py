@@ -145,6 +145,25 @@ def test_execution_result_is_machine_readable_and_omits_endpoint() -> None:
     assert "endpoint" not in payload
 
 
+@pytest.mark.parametrize(
+    ("result", "model", "match"),
+    [
+        (ChatResult(""), "local", "text cannot be empty"),
+        (ChatResult("ok", total_tokens=-1), "local", "non-negative integer"),
+        (ChatResult("ok", prompt_tokens=True), "local", "non-negative integer"),
+        (ChatResult("ok"), " ", "model cannot be empty"),
+        (ChatResult("ok"), "m" * 201, "200-character limit"),
+    ],
+)
+def test_execution_result_rejects_values_outside_its_public_contract(
+    result: ChatResult,
+    model: str,
+    match: str,
+) -> None:
+    with pytest.raises(ArtifactError, match=match):
+        render_execution_result(make_artifact(), result, model=model)
+
+
 def test_comparison_identifies_message_and_context_changes_without_prompt_content() -> None:
     base_request = PromptRequest(
         Task.REVIEW,

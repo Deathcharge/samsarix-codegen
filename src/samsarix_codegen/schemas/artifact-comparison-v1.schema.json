@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Samsarix Codegen Artifact Comparison",
+  "description": "A content-safe structural comparison of two validated request artifacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "changed",
+    "base_fingerprint",
+    "target_fingerprint",
+    "messages",
+    "context",
+    "estimate"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "changed": {"type": "boolean"},
+    "base_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "target_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "messages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_count", "target_count", "changed_indices"],
+      "properties": {
+        "base_count": {"type": "integer", "minimum": 1, "maximum": 32},
+        "target_count": {"type": "integer", "minimum": 1, "maximum": 32},
+        "changed_indices": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 0, "maximum": 31}
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_bytes", "target_bytes", "byte_delta", "added", "removed"],
+      "properties": {
+        "base_bytes": {"type": "integer", "minimum": 0},
+        "target_bytes": {"type": "integer", "minimum": 0},
+        "byte_delta": {"type": "integer"},
+        "added": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/context_record"}
+        },
+        "removed": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/context_record"}
+        }
+      }
+    },
+    "estimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_input_tokens", "target_input_tokens", "input_token_delta"],
+      "properties": {
+        "base_input_tokens": {"type": "integer", "minimum": 1},
+        "target_input_tokens": {"type": "integer", "minimum": 1},
+        "input_token_delta": {"type": "integer"}
+      }
+    }
+  },
+  "$defs": {
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "context_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "bytes", "content_sha256"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "bytes": {"type": "integer", "minimum": 0},
+        "content_sha256": {"$ref": "#/$defs/fingerprint"}
+      }
+    }
+  }
+}

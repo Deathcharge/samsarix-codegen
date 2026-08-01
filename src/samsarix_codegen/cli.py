@@ -30,6 +30,7 @@ from samsarix_codegen.errors import ArtifactError, ConfigurationError, ContextEr
 from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages, render_markdown
 from samsarix_codegen.provider import OpenAIChatClient
+from samsarix_codegen.schema import ContractSchema, render_contract_schema
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1"
 DEFAULT_MAX_CONTEXT_BYTES = 200_000
@@ -63,6 +64,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_request_arguments(run_command)
     _add_provider_arguments(run_command)
+
+    schema_command = subparsers.add_parser(
+        "schema", help="print a bundled versioned JSON Schema without network access"
+    )
+    schema_command.add_argument(
+        "contract",
+        choices=tuple(item.value for item in ContractSchema),
+        help="contract schema to print",
+    )
 
     inspect_command = subparsers.add_parser(
         "inspect", help="validate and summarize a stored request artifact without network access"
@@ -110,6 +120,9 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
     try:
         if args.command in {"build", "run"}:
             return _handle_request_command(args, input_stream)
+        if args.command == "schema":
+            _write_stdout(render_contract_schema(args.contract))
+            return 0
         if args.command == "inspect":
             artifact = _read_artifact(args.artifact, input_stream)
             if args.format == "markdown":

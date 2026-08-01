@@ -116,3 +116,22 @@ their original order. Comparison schema version `1` is independent of request sc
 
 Both artifact paths cannot be `-` because a single stdin stream cannot supply two independently
 bounded JSON documents.
+
+## Machine-readable contract schemas
+
+The package bundles self-contained
+[JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) files for every JSON envelope:
+
+| CLI name | Contract | Bundled file |
+| --- | --- | --- |
+| `request` | Request artifact schema version 2 | `src/samsarix_codegen/schemas/request-artifact-v2.schema.json` |
+| `result` | Execution result schema version 1 | `src/samsarix_codegen/schemas/execution-result-v1.schema.json` |
+| `comparison` | Artifact comparison schema version 1 | `src/samsarix_codegen/schemas/artifact-comparison-v1.schema.json` |
+
+Use `samsarix-codegen schema NAME` to print one without a network request, or
+`load_contract_schema()` from Python. The files are package data in both the sdist and wheel.
+
+JSON Schema checks portable structure, types, bounds, required fields, and digest syntax. It cannot
+prove semantic relationships such as whether a fingerprint matches canonical content, context
+bytes sum correctly, estimates match messages, or deltas match their base/target values. Use
+`inspect`, `compare`, or the Python parser for those semantic checks before execution.
