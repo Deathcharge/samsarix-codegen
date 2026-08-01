@@ -1,32 +1,32 @@
 # Samsarix Codegen
 
-Samsarix Codegen is a read-only Python CLI and library for building bounded, inspectable prompts
-for coding tasks. It can work entirely offline by rendering a prompt for review or copy/paste, or
-send one explicitly bounded request to an OpenAI-compatible chat-completions endpoint.
+Samsarix Codegen is a read-only request compiler for coding models. It turns an instruction plus
+explicit files or bounded standard input into a prompt you can read or a deterministic JSON
+artifact you can inspect, approve, and execute later against an OpenAI-compatible endpoint.
 
-It is for developers who want a small, transparent bridge between selected source files and a
-model—not an autonomous agent. Samsarix Codegen never edits files, executes generated code, runs
-shell commands, scans a repository automatically, or retries a paid request behind the user's back.
+It is for developers and CI maintainers who want reproducible AI requests without giving a model
+repository-discovery, file-write, shell, or retry authority. Samsarix Codegen never edits files,
+executes generated code, scans a repository automatically, or retries a paid request.
 
-> **Status:** `0.1.0` release candidate. The local `build` and provider-backed `run` journeys are
-> implemented and tested. No package has been published to PyPI.
+> **Status:** `0.2.0` release candidate. The offline build/inspect workflow and the one-request
+> run/execute workflow are implemented and tested. The package has not been published to PyPI.
 
-## Why this exists
+## What makes it useful
 
-Full coding agents already provide repository indexing, tool execution, and automated edits.
-Samsarix Codegen deliberately covers a narrower workflow:
+The core workflow separates request construction from credential-bearing execution:
 
-1. You select the files a model may see.
-2. The CLI verifies that they are UTF-8 text files inside a chosen project root and applies byte
-   caps.
-3. It builds a task-specific request that marks file content as untrusted data.
-4. You inspect or export the request locally, or make one bounded API call.
-5. The model response goes to standard output for you to review.
+1. Select the only context the model may receive with repeated `--file` options or
+   `--stdin-name`.
+2. Compile a schema-versioned artifact containing the exact messages, context provenance, content
+   hashes, and an approximate input-token estimate.
+3. Validate and summarize it offline with `inspect`.
+4. Record its canonical SHA-256 fingerprint as the approval object.
+5. Send exactly those reviewed messages once with `execute --expect-fingerprint`.
 
-This repository stands on its own. It does not require a private Samsarix service, the Samsarix
-CLI, SDK, editor extension, or any other repository in the wider portfolio.
+This makes staged-change review, CI approval handoffs, selected-log triage, and reproducible
+provider comparisons practical without a private Samsarix service or another repository.
 
-## Quick start: no model or credentials
+## Install and try it offline
 
 Prerequisite: Python 3.10 or newer.
 
@@ -39,56 +39,93 @@ samsarix-codegen build "Explain the behavior and edge cases" `
   --file examples/sample.py
 ```
 
-On macOS or Linux, activate the environment with `source .venv/bin/activate` and use `\` for shell
-line continuation. The command prints a complete Markdown prompt and performs no network request.
+On macOS or Linux, activate with `source .venv/bin/activate` and use `\` for shell continuation.
+`build` defaults to a readable Markdown prompt and performs no network request.
 
-Machine-readable output uses the same messages and includes a transparent token estimate:
+## Build, inspect, and execute one reviewed artifact
 
-```bash
-samsarix-codegen build "Review for correctness and missing tests" \
-  --task review \
-  --file examples/sample.py \
-  --format json
-```
-
-## Run with a model
-
-### Local OpenAI-compatible endpoint
-
-The default endpoint is `http://127.0.0.1:11434/v1`, matching the common local OpenAI-compatible
-shape. Start your local service and name an installed model explicitly:
-
-```bash
-samsarix-codegen run "Write focused tests for this function" \
-  --task tests \
-  --file examples/sample.py \
-  --model your-local-model \
-  --max-output-tokens 1200
-```
-
-The CLI prints the approximate input size and configured output cap to standard error, the model
-text to standard output, and provider-reported usage when available. It makes one non-streaming
-request and does not retry automatically.
-
-### Hosted endpoint
-
-Use HTTPS and place credentials only in the environment. For PowerShell:
+PowerShell:
 
 ```powershell
-$env:SAMSARIX_API_BASE = "https://provider.example/v1"
-$env:SAMSARIX_MODEL = "provider-model-name"
-$env:SAMSARIX_API_KEY = "your-provider-key"
-samsarix-codegen run "Identify security and reliability problems" `
+git diff --staged | samsarix-codegen build "Review these staged changes" `
   --task review `
-  --file src/samsarix_codegen/provider.py
+  --stdin-name staged.diff `
+  --max-estimated-input-tokens 50000 `
+  --format json > request.json
+
+samsarix-codegen inspect request.json
+$fingerprint = samsarix-codegen inspect request.json --format fingerprint
+
+$env:SAMSARIX_MODEL = "your-local-model"
+samsarix-codegen execute request.json --expect-fingerprint $fingerprint
 ```
 
-Equivalent POSIX shells use `export SAMSARIX_API_BASE=...`. There is intentionally no `--api-key`
-option, which reduces accidental exposure in shell history and process listings.
+POSIX shell:
 
-## Tasks
+```bash
+git diff --staged | samsarix-codegen build "Review these staged changes" \
+  --task review \
+  --stdin-name staged.diff \
+  --max-estimated-input-tokens 50000 \
+  --format json > request.json
 
-`--task` selects focused guidance while the user's instruction remains authoritative:
+samsarix-codegen inspect request.json
+fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
+
+export SAMSARIX_MODEL="your-local-model"
+samsarix-codegen execute request.json --expect-fingerprint "$fingerprint"
+```
+
+The supplied [PowerShell](examples/review-staged.ps1) and
+[POSIX](examples/review-staged.sh) scripts package this staged-diff workflow. `build` and `inspect`
+are offline. `execute` validates the artifact and fingerprint before constructing a provider
+client, then makes one non-streaming request.
+
+The fingerprint detects drift; it is not a signature. Anyone able to replace an artifact can also
+recompute its unkeyed hash. See the [request artifact contract](docs/REQUEST_ARTIFACT.md) before
+using artifacts across trust boundaries.
+
+## Other real workflows
+
+Inspect a selected log excerpt without scanning or retaining the surrounding system:
+
+```powershell
+Get-Content .\app.log -Tail 300 | samsarix-codegen build `
+  "Find the likely failure, supporting evidence, and next diagnostic" `
+  --task debug `
+  --stdin-name app.log `
+  --max-context-bytes 200000 `
+  --max-estimated-input-tokens 60000 `
+  --format json > incident-request.json
+```
+
+Run the same artifact against different operator-selected endpoints and compare response envelopes:
+
+```bash
+SAMSARIX_MODEL=model-a SAMSARIX_API_BASE=https://provider-a.example/v1 \
+  samsarix-codegen execute request.json --format json > result-a.json
+SAMSARIX_MODEL=model-b SAMSARIX_API_BASE=https://provider-b.example/v1 \
+  samsarix-codegen execute request.json --format json > result-b.json
+```
+
+Both result files identify the common request fingerprint. They omit the endpoint and API key.
+
+## Commands
+
+| Command | Network | Purpose |
+| --- | --- | --- |
+| `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
+| `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
+| `execute` | Once | Execute the exact messages in a validated artifact |
+| `run` | Once | Convenience path that builds and executes in one process |
+
+`run --format json` and `execute --format json` return a stable result envelope with the request
+fingerprint, model, response text, and provider usage when reported. Use
+`samsarix-codegen <command> --help` for the complete option set.
+
+## Task guidance
+
+`--task` adds focused guidance while the user's instruction remains authoritative:
 
 | Task | Intended output |
 | --- | --- |
@@ -99,38 +136,61 @@ option, which reduces accidental exposure in shell history and process listings.
 | `tests` | Normal, boundary, and failure tests |
 | `review` | Correctness, security, reliability, maintainability, and test gaps |
 
-Use `samsarix-codegen build --help` and `samsarix-codegen run --help` for all options.
+## Provider configuration
 
-## Context and safety limits
+The default endpoint is `http://127.0.0.1:11434/v1`, a common local OpenAI-compatible shape. Start
+your local service and name an installed model explicitly:
 
-- Only paths supplied with `--file` are read; the option can be repeated up to 20 times.
-- Paths are resolved and must remain inside `--root` (the current directory by default).
-- Symlinks are checked after resolution, duplicate files are included once, and directories fail.
-- Files must be valid UTF-8 text without NUL bytes.
-- Total context defaults to 200,000 bytes and can be raised only to a hard maximum of 5,000,000
-  with `--max-context-bytes`.
-- Instructions are limited to 20,000 characters.
-- Output is capped with `--max-output-tokens` (default 1,024; hard maximum 32,768).
-- Network calls time out after 60 seconds by default and can be bounded from 1 to 300 seconds.
-- Plain HTTP is accepted only for `localhost` and loopback addresses; remote endpoints require
-  HTTPS.
-- Responses larger than 10 MiB are rejected.
+```bash
+samsarix-codegen run "Write focused tests for this function" \
+  --task tests \
+  --file examples/sample.py \
+  --model your-local-model \
+  --max-output-tokens 1200
+```
 
-The token estimate is `ceil(total UTF-8 message bytes / 4)`. It is a planning approximation, not
-provider billing data. Consult the chosen provider's current pricing before using a paid endpoint.
+For a hosted provider, use HTTPS and put credentials only in the environment:
 
-## Configuration
+```powershell
+$env:SAMSARIX_API_BASE = "https://provider.example/v1"
+$env:SAMSARIX_MODEL = "provider-model-name"
+$env:SAMSARIX_API_KEY = "your-provider-key"
+samsarix-codegen run "Review this module" --task review `
+  --file src/samsarix_codegen/provider.py
+```
 
 | Environment variable | CLI equivalent | Default |
 | --- | --- | --- |
 | `SAMSARIX_API_BASE` | `--endpoint` | `http://127.0.0.1:11434/v1` |
-| `SAMSARIX_MODEL` | `--model` | none; required for `run` |
+| `SAMSARIX_MODEL` | `--model` | none; required for `run` and `execute` |
 | `SAMSARIX_API_KEY` | none by design | none |
-| `SAMSARIX_TIMEOUT` | `--timeout` | `60` |
+| `SAMSARIX_TIMEOUT` | `--timeout` | `60` seconds |
 | `SAMSARIX_MAX_OUTPUT_TOKENS` | `--max-output-tokens` | `1024` |
+| `SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS` | `--max-estimated-input-tokens` | no additional cap |
 
-Command-line values override environment-backed defaults. Configuration is read at process start;
-Samsarix Codegen does not load `.env` files, persist credentials, or log request content.
+Command-line values override environment-backed defaults. Samsarix Codegen does not load `.env`
+files, persist credentials, or log request content. There is intentionally no `--api-key` option,
+reducing accidental exposure in shell history and process listings.
+
+## Input, reliability, and cost limits
+
+- Only repeated `--file` paths and an explicitly named stdin stream are read, up to 20 total
+  inputs.
+- Files are resolved inside `--root`, deduplicated, and required to be regular UTF-8 text without
+  NUL bytes.
+- Total context defaults to 200,000 bytes and has a hard 5,000,000-byte ceiling.
+- Instructions are limited to 20,000 characters; artifacts read by `inspect` or `execute` are
+  limited to 12 MiB.
+- `--max-estimated-input-tokens` rejects a request before network access. The estimate is
+  `ceil(total UTF-8 message bytes / 4)`, not provider billing data.
+- Provider output defaults to 1,024 tokens and is capped at 32,768. Network timeouts range from 1
+  to 300 seconds and default to 60.
+- Requests are non-streaming and never automatically retried. Responses larger than 10 MiB fail.
+- Remote endpoints require HTTPS; plain HTTP is accepted only for localhost and loopback addresses.
+
+Consult the selected provider's current pricing. Samsarix cannot calculate monetary cost without a
+provider, model, and price schedule, so its enforceable controls are explicit context, an estimated
+input gate, one-request behavior, timeout, and output cap.
 
 ## Exit codes
 
@@ -138,94 +198,99 @@ Samsarix Codegen does not load `.env` files, persist credentials, or log request
 | --- | --- |
 | `0` | Success |
 | `1` | Unexpected internal failure |
-| `2` | Invalid command or provider configuration |
+| `2` | Invalid command, budget, or provider configuration |
 | `3` | Invalid, unsafe, or unreadable context input |
 | `4` | Endpoint, HTTP, timeout, or response-contract failure |
+| `5` | Invalid, unsupported, tampered, or unapproved artifact |
 | `130` | Cancelled with `Ctrl+C` |
 
 ## Library API
 
-The public API exposes validated request objects, context loading, prompt rendering, and the
-minimal provider client:
+The typed public API exposes request construction, artifact parsing/rendering, and the minimal
+provider client:
 
 ```python
-from samsarix_codegen import PromptRequest, Task, build_messages, render_markdown
+from samsarix_codegen import (
+    PromptRequest,
+    Task,
+    build_messages,
+    create_request_artifact,
+    render_request_artifact,
+)
 
 request = PromptRequest(task=Task.DEBUG, instruction="Find the likely failure")
-messages = build_messages(request)
-print(render_markdown(messages))
+artifact = create_request_artifact(build_messages(request), request.files)
+print(render_request_artifact(artifact))
 ```
 
 Unstable implementation helpers are not exported from `samsarix_codegen`.
 
-## Development and verification
+## Development and package verification
 
 ```bash
 python -m pip install -e ".[dev]"
 python -m ruff check .
 python -m ruff format --check .
 python -m mypy src
-python -m pytest
+python -m pytest -ra
 python -m build
 ```
 
-CI runs these checks plus a built-wheel installation and primary-journey smoke test on Python 3.10
-and 3.14 across Ubuntu and Windows. To inspect the package manually:
-
-```bash
-python -m build
-python -m pip install --force-reinstall --no-deps dist/*.whl
-samsarix-codegen --version
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution expectations,
-[SECURITY.md](SECURITY.md) for private vulnerability reporting, [SUPPORT.md](SUPPORT.md) for support
-channels, and [docs/PRODUCTIZATION.md](docs/PRODUCTIZATION.md) for the audit record and release
-gates.
+CI runs these checks plus a built-wheel installation and offline artifact smoke test on Python 3.10
+and 3.14 across Ubuntu and Windows. See [CONTRIBUTING.md](CONTRIBUTING.md),
+[SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
+[productization record](docs/PRODUCTIZATION.md).
 
 ## Architecture
 
 ```text
-CLI arguments and environment
-        |
-        v
-validated request + explicitly loaded context
-        |
-        v
-provider-neutral system/user messages
-        |                         |
-        v                         v
-Markdown/JSON output       one chat-completions request
-                                  |
-                                  v
-                         normalized text on stdout
+instruction + explicit files / named stdin
+                    |
+                    v
+          validated provider-neutral messages
+                    |
+          +---------+------------------+
+          |                            |
+          v                            v
+ readable Markdown          deterministic JSON artifact
+                                       |
+                                       v
+                           offline validation + approval
+                                       |
+                                       v
+                         one bounded provider request
+                                       |
+                                       v
+                           text or JSON result envelope
 ```
 
-The package uses only the Python standard library at runtime. The network client relies on Python's
-default TLS verification and implements only the non-streaming OpenAI-compatible
-`/chat/completions` subset used by the documented journey.
+The package has no runtime dependencies. The standard-library network client implements only the
+non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow.
 
-## Security, privacy, reliability, and cost
+## Security and privacy
 
-- Selected file contents and instructions leave the machine only when `run` is used.
-- File contents are untrusted prompt data. The system message asks the model not to follow embedded
-  instructions, but prompt injection cannot be eliminated; review every response.
-- Generated code may be incorrect or unsafe. Samsarix Codegen never executes or applies it.
-- There is no telemetry, analytics, background process, retry loop, or local history.
-- Provider compatibility varies. Tool calling, images, streaming, automatic edits, repository
-  discovery, conversation persistence, and provider-specific Responses APIs are out of scope for
-  `0.1.0`.
-- Monetary cost cannot be calculated without provider- and model-specific pricing. The input
-  estimate, one-request behavior, timeout, and output cap are the enforceable local controls.
+- Instructions and selected context leave the machine only through `run` or `execute`.
+- Artifacts contain the complete prompt and selected source/log content. Treat them with the same
+  confidentiality and retention controls as their inputs.
+- Artifact and context hashes detect drift but do not authenticate an author or reviewer.
+- File contents are untrusted prompt data. Prompt injection cannot be eliminated; review every
+  response.
+- Model output may be incorrect or unsafe. Samsarix Codegen never executes, applies, or persists it.
+- There is no telemetry, analytics, background process, automatic history, or retry loop.
+
+Tool calling, image input, streaming, automatic edits, repository discovery, sessions, signing,
+provider-specific Responses APIs, and provider certification are intentionally out of scope for
+`0.2.0`. The [competitive strategy](docs/COMPETITIVE_STRATEGY.md) explains this boundary and the
+evidence behind it.
 
 ## License, attribution, and support
 
 Copyright 2026 Samsarix LLC. Licensed under the [Apache License 2.0](LICENSE).
 
-Distributions must follow the license's attribution and notice requirements; [NOTICE](NOTICE)
-identifies Samsarix LLC, and [CITATION.cff](CITATION.cff) provides citation metadata. Apache-2.0 is a
-permissive open-source license and does not require downstream modifications to be published. It
-also does not grant broader rights to use the Samsarix name or branding beyond the license terms.
+Apache-2.0 preserves copyright and notice obligations for redistribution and includes an express
+patent grant. It is permissive: downstream modifications do not have to be published. [NOTICE](NOTICE)
+identifies Samsarix LLC, and [CITATION.cff](CITATION.cff) supplies citation metadata. The license
+does not grant broader rights to use Samsarix branding.
 
 For product and licensing questions, email `contact@samsarix.com`. For support or private security
 reports, email `support@samsarix.com`.

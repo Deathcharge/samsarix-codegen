@@ -26,3 +26,9 @@ class ProviderError(SamsarixError):
     """A configured model endpoint could not return a usable response."""
 
     exit_code = 4
+
+
+class ArtifactError(SamsarixError):
+    """A stored request artifact is invalid, unsupported, or unapproved."""
+
+    exit_code = 5

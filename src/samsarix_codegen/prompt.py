@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from typing import Any
 
 from samsarix_codegen.models import PromptRequest, Task
 
@@ -93,24 +92,3 @@ def render_markdown(messages: Sequence[Mapping[str, str]]) -> str:
         role = message.get("role", "message").capitalize()
         rendered.extend(["", f"## {role}", "", message.get("content", "")])
     return "\n".join(rendered).rstrip() + "\n"
-
-
-def render_json(
-    messages: Sequence[Mapping[str, str]],
-    *,
-    context_bytes: int,
-    context_files: int,
-) -> str:
-    """Render a stable, provider-neutral request envelope."""
-
-    payload: dict[str, Any] = {
-        "schema_version": 1,
-        "messages": list(messages),
-        "estimate": {
-            "input_tokens": estimate_tokens(messages),
-            "context_bytes": context_bytes,
-            "context_files": context_files,
-            "method": "ceil(total UTF-8 message bytes / 4)",
-        },
-    }
-    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"

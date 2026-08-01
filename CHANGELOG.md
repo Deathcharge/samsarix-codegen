@@ -3,6 +3,25 @@
 All notable changes will be documented here. Versions follow semantic versioning once the owner
 approves a first public release.
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- Deterministic schema-versioned request artifacts with canonical SHA-256 fingerprints, per-context
+  content hashes, and transparent input estimates.
+- Offline `inspect` and fingerprint-pinned `execute` commands for separating prompt review from
+  credential-bearing provider execution.
+- Explicit bounded UTF-8 stdin context for staged diffs, selected log excerpts, and shell pipelines.
+- Optional hard `--max-estimated-input-tokens` gate before any provider request.
+- Machine-readable provider result envelopes for `run` and `execute`.
+- Competitive-positioning and request-artifact contract documentation.
+
+### Changed
+
+- JSON `build` output is now executable request-artifact schema version 2.
+- Redirected and piped CLI output is emitted as UTF-8 consistently across platforms.
+- The version advances to `0.2.0` to mark the first post-productization workflow milestone.
+
 ## [0.1.0] - Unreleased
 
 ### Added

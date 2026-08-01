@@ -1,6 +1,6 @@
 # Productization Record
 
-Last updated: 2026-07-29
+Last updated: 2026-08-01
 
 ## Current repository assessment
 
@@ -26,8 +26,9 @@ into model guidance. The implemented product keeps that intent and removes unsup
 
 ## Chosen product definition
 
-**Samsarix Codegen is a read-only Python CLI and library that builds bounded, inspectable prompts for
-coding tasks and can optionally send one request to an OpenAI-compatible chat-completions endpoint.**
+**Samsarix Codegen is a read-only Python CLI and library that compiles explicit context into
+bounded, inspectable coding requests and can optionally send one reviewed request to an
+OpenAI-compatible chat-completions endpoint.**
 
 It is not a coding agent, IDE extension, private portfolio integration, or model provider. It does not
 discover a repository, edit files, execute generated code, run tools, persist chats, or retry calls.
@@ -38,11 +39,11 @@ The target user is a developer who wants to give an AI model a small, explicit s
 without granting file-write or shell access. The primary journey is:
 
 1. Install the package from the repository.
-2. Run `samsarix-codegen build` with a task, instruction, and zero or more explicit files.
-3. Inspect or pipe the generated Markdown/JSON prompt without a network call.
-4. Optionally run the same request with `samsarix-codegen run --model ...` against a local or hosted
-   OpenAI-compatible endpoint.
-5. Review the response on standard output and use the documented exit code or provider usage.
+2. Run `samsarix-codegen build` with a task, instruction, and explicit files or bounded stdin.
+3. Inspect the generated Markdown or schema-versioned JSON artifact without a network call.
+4. Record the artifact fingerprint as an approval object, then use `execute --expect-fingerprint`
+   against a local or hosted OpenAI-compatible endpoint.
+5. Review text output or retain the structured result envelope and provider-reported usage.
 
 ### Independent reason to exist
 
@@ -94,6 +95,9 @@ Research references:
    without requiring downstream source disclosure.
 10. **Clean rebrand.** The unreleased package, import, command, environment variables, user agent,
     and documentation use Samsarix naming without permanent legacy aliases.
+11. **Reviewable execution artifacts.** Schema-versioned JSON captures the exact provider messages,
+    normalized context hashes, approximate input estimate, and a canonical request fingerprint.
+    Construction and inspection stay offline; execution can fail closed on fingerprint drift.
 
 ## Assumptions
 
@@ -156,15 +160,16 @@ Final command evidence is recorded in the **Final verification** section after e
 
 - [ ] Add opt-in streaming after cancellation and partial-output semantics are designed and tested.
 - [ ] Add provider contract fixtures for additional confirmed compatible services.
-- [ ] Consider stdin context and ignore-file-based discovery only if explicit-file ergonomics prove
-  insufficient; retain visible budgets and path boundaries.
+- [x] Add bounded, explicitly named stdin context for staged diffs and selected log excerpts.
+- [ ] Consider ignore-file-based discovery only if explicit-input ergonomics prove insufficient;
+  retain visible budgets and path boundaries.
 - [ ] Add signed release automation after the package name is reserved and publishing is configured.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build` and `run` commands with useful help and version behavior.
+- [x] `build`, `inspect`, `execute`, and `run` commands with useful help and version behavior.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -176,6 +181,8 @@ Final command evidence is recorded in the **Final verification** section after e
 
 - Installation from the built wheel exposes `samsarix-codegen` and the documented package imports.
 - `build` works without network access or secrets and includes the selected source content.
+- JSON artifacts are deterministic, fail on schema/content drift, summarize offline, and can be
+  pinned before execution.
 - `run` succeeds against a deterministic local HTTP fixture and fails clearly for missing model,
   unsafe endpoint, HTTP rejection, malformed response, and unavailable provider.
 - Context traversal, binary input, invalid UTF-8, file-count, and byte-limit cases fail closed.
@@ -191,6 +198,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - Added validation, resource bounds, output separation, stable errors, and credential handling.
 - Added comprehensive test and release scaffolding plus reproducible documentation.
 - Removed false competitive, deployment, marketplace, package, license, and maturity claims.
+- Added deterministic request artifacts, offline inspection, pinned execution, bounded stdin,
+  input-budget enforcement, structured results, and staged-review examples.
 
 ## Deferred work and rationale
 
@@ -211,7 +220,6 @@ Final command evidence is recorded in the **Final verification** section after e
 | Package identity | Reserve `samsarix-codegen` on PyPI (the project URL returned 404 on 2026-07-29) | Owner-controlled PyPI project exists with matching metadata |
 | Publication | Configure trusted publishing or a scoped PyPI token | Tagged release publishes signed artifacts from CI |
 | Provider validation | Choose any hosted providers the project will officially support | Contract tests pass against owner-approved non-production test accounts |
-| Default-branch adoption | Review and merge `codex/productize-samsarix-codegen` | `master` contains the standalone package and repository security view no longer indexes the deleted prototype manifest |
 
 No deployment, account creation, package publication, spending, or live infrastructure change is
 required for local evaluation and none was performed.
@@ -220,11 +228,13 @@ required for local evaluation and none was performed.
 
 ### Trust boundaries
 
-- CLI arguments, environment configuration, selected file contents, endpoint responses, and model
-  output are untrusted inputs.
+- CLI arguments, environment configuration, selected file/stdin contents, request artifacts,
+  endpoint responses, and model output are untrusted inputs.
 - The invoking developer is trusted to choose a project root, files, model, and endpoint.
 - The model receives only explicit context, but embedded prompt injection can still influence output.
 - Generated output is never executed or written by Samsarix Codegen.
+- Stored artifacts contain the complete prompt. Their SHA-256 fingerprints detect drift but are not
+  signatures, so access control and authenticity remain external responsibilities.
 
 ### Controls
 
@@ -260,8 +270,8 @@ if adoption exists. A subscription is not justified without demand and cost evid
   claim it before the owner publishes or reserves the project.
 - The external provider matrix has not been owner-validated.
 - Model quality and output safety vary and are outside this package's control.
-- Until this branch is merged, the default branch still contains the discarded VS Code prototype
-  and its open moderate `esbuild` development-dependency alert. This branch deletes that manifest.
+- Request artifacts can retain sensitive source or log content outside the original repository;
+  users must apply equivalent access and retention controls.
 
 ## Pre-rebrand verification
 
@@ -315,6 +325,34 @@ temporary directory so ignored artifacts in the checkout could not supply import
 | Installed metadata and wheel inspection | Samsarix name/emails, Apache expression, `py.typed`, `LICENSE`, and `NOTICE` verified; no legacy package path |
 | [GitHub Actions run 30422299343](https://github.com/Deathcharge/samsarix-codegen/actions/runs/30422299343) | Exit 0; Python 3.10 and 3.14 passed on Ubuntu and Windows, including wheel smoke checks |
 
+## Version 0.2 artifact-workflow verification
+
+Current local verification used Python 3.14.6 on Windows. A new source distribution was created
+outside the checkout, extracted, tested, and rebuilt into a wheel. That wheel alone was installed in
+a fresh virtual environment, and installed commands ran from the temporary directory with
+`PYTHONPATH` removed.
+
+| Command or check | Actual result |
+| --- | --- |
+| `python -m ruff check .` | Exit 0; all checks passed |
+| `python -m ruff format --check .` | Exit 0; 16 Python files already formatted |
+| `python -m mypy src` | Exit 0; no issues in 9 source files |
+| `python -m pytest -ra` | Exit 0; 69 tests passed in 8.84 seconds |
+| `python -m build --sdist --outdir <temp>/sdist .` | Exit 0; built `samsarix_codegen-0.2.0.tar.gz` |
+| Required-file inspection of extracted sdist | Legal/support files, all three docs, typed package, artifact tests, and staged-review examples present |
+| Lint, format, mypy, and pytest from extracted sdist | Exit 0; 69 tests passed |
+| `python -m build --wheel --outdir <temp>/wheel .` from extracted sdist | Exit 0; built `samsarix_codegen-0.2.0-py3-none-any.whl` |
+| Fresh-venv install plus `python -m pip check` | Exit 0; no broken requirements |
+| Installed CLI and module versions | Both returned `samsarix-codegen 0.2.0` outside the checkout |
+| Installed artifact build/inspect/fingerprint smoke | Exit 0; one stdin item and valid canonical SHA-256 fingerprint |
+| Installed `execute` without a model | Expected exit 2 before network access |
+| Installed `inspect` after message tampering | Expected exit 5 for fingerprint/content mismatch |
+| Installed metadata and wheel inspection | Version, Apache expression, Samsarix LLC emails, isolated import path, `py.typed`, `LICENSE`, and `NOTICE` verified |
+
+The generated distribution digests are recorded with the exact commit in its pull request or
+release evidence rather than embedded here, because updating a source-distribution document changes
+the source-distribution digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -330,8 +368,9 @@ temporary directory so ignored artifacts in the checkout could not supply import
 
 ## Current release disposition
 
-**Release candidate with named external gates.** The local package and its primary journey meet the
-documented acceptance criteria, the four-job GitHub Actions matrix is green, and no locally
-actionable P0 is identified. Public release remains gated on (1) review and merge into the default
-branch, (2) owner control of the PyPI project, and (3) owner-controlled publication/signing. Live
-hosted provider certification is optional unless the owner chooses to advertise specific providers.
+**Release candidate with named external gates.** The productized default and its `0.1.0` journey met
+the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
+review-first artifact workflow and is subject to the verification evidence recorded below. Public
+release remains gated on owner control of the PyPI project and owner-controlled
+publication/signing. Live hosted provider certification is optional unless the owner advertises
+specific providers.

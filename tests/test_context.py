@@ -1,11 +1,12 @@
 # Copyright 2026 Samsarix LLC
 # SPDX-License-Identifier: Apache-2.0
 
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
-from samsarix_codegen.context import load_context_files
+from samsarix_codegen.context import load_context_files, load_stream_context
 from samsarix_codegen.errors import ContextError
 
 
@@ -95,3 +96,33 @@ def test_bounded_read_does_not_depend_only_on_stat_size(tmp_path: Path, monkeypa
 def test_enforces_file_count_before_reading(tmp_path: Path) -> None:
     with pytest.raises(ContextError, match="at most 1"):
         load_context_files(["missing-a", "missing-b"], root=tmp_path, max_files=1)
+
+
+def test_loads_bounded_utf8_stream_context() -> None:
+    context = load_stream_context(
+        "staged.diff", BytesIO("diff --git a/é b/é\n".encode()), max_bytes=50
+    )
+
+    assert context.path == "stdin:staged.diff"
+    assert context.content == "diff --git a/é b/é\n"
+    assert context.size_bytes == len(context.content.encode())
+
+
+@pytest.mark.parametrize(
+    ("name", "body", "match"),
+    [
+        ("", b"content", "cannot be blank"),
+        ("bad\nname", b"content", "control characters"),
+        ("empty", b"", "is empty"),
+        ("binary", b"a\x00b", "binary"),
+        ("legacy", b"\xff", "not valid UTF-8"),
+    ],
+)
+def test_rejects_invalid_stream_context(name: str, body: bytes, match: str) -> None:
+    with pytest.raises(ContextError, match=match):
+        load_stream_context(name, BytesIO(body), max_bytes=20)
+
+
+def test_enforces_stream_context_byte_limit() -> None:
+    with pytest.raises(ContextError, match="remaining 4-byte limit"):
+        load_stream_context("input", BytesIO(b"12345"), max_bytes=4)
