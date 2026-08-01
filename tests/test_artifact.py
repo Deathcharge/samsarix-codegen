@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from samsarix_codegen import render_execution_result as public_render_execution_result
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
     MAX_RESULT_BYTES,
@@ -188,6 +189,7 @@ def test_execution_result_round_trips_as_a_strict_envelope() -> None:
     assert parsed.completion_tokens == 3
     assert parsed.total_tokens == 13
     assert parsed.to_payload() == json.loads(rendered)
+    assert public_render_execution_result is render_execution_result
 
 
 @pytest.mark.parametrize(

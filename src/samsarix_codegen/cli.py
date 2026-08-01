@@ -387,51 +387,50 @@ def _request_from_args(args: argparse.Namespace, stdin: BinaryIO) -> PromptReque
 
 
 def _read_artifact(path: str, stdin: BinaryIO) -> RequestArtifact:
-    if path == "-":
-        try:
-            raw = stdin.read(MAX_ARTIFACT_BYTES + 1)
-        except OSError as exc:
-            raise ArtifactError(f"cannot read request artifact from stdin: {exc}") from exc
-    else:
-        artifact_path = Path(path)
-        try:
-            if not artifact_path.is_file():
-                raise ArtifactError(f"request artifact is not a regular file: {path}")
-            if artifact_path.stat().st_size > MAX_ARTIFACT_BYTES:
-                raise ArtifactError(
-                    f"request artifact exceeds the {MAX_ARTIFACT_BYTES:,}-byte safety limit"
-                )
-            with artifact_path.open("rb") as handle:
-                raw = handle.read(MAX_ARTIFACT_BYTES + 1)
-        except ArtifactError:
-            raise
-        except OSError as exc:
-            raise ArtifactError(f"cannot read request artifact {path}: {exc}") from exc
+    raw = _read_bounded_input(
+        path,
+        stdin,
+        maximum=MAX_ARTIFACT_BYTES,
+        label="request artifact",
+    )
     return parse_request_artifact(raw)
 
 
 def _read_execution_result(path: str, stdin: BinaryIO) -> ExecutionResult:
+    raw = _read_bounded_input(
+        path,
+        stdin,
+        maximum=MAX_RESULT_BYTES,
+        label="execution result",
+    )
+    return parse_execution_result(raw)
+
+
+def _read_bounded_input(
+    path: str,
+    stdin: BinaryIO,
+    *,
+    maximum: int,
+    label: str,
+) -> bytes:
     if path == "-":
         try:
-            raw = stdin.read(MAX_RESULT_BYTES + 1)
+            return stdin.read(maximum + 1)
         except OSError as exc:
-            raise ArtifactError(f"cannot read execution result from stdin: {exc}") from exc
-    else:
-        result_path = Path(path)
-        try:
-            if not result_path.is_file():
-                raise ArtifactError(f"execution result is not a regular file: {path}")
-            if result_path.stat().st_size > MAX_RESULT_BYTES:
-                raise ArtifactError(
-                    f"execution result exceeds the {MAX_RESULT_BYTES:,}-byte safety limit"
-                )
-            with result_path.open("rb") as handle:
-                raw = handle.read(MAX_RESULT_BYTES + 1)
-        except ArtifactError:
-            raise
-        except OSError as exc:
-            raise ArtifactError(f"cannot read execution result {path}: {exc}") from exc
-    return parse_execution_result(raw)
+            raise ArtifactError(f"cannot read {label} from stdin: {exc}") from exc
+
+    input_path = Path(path)
+    try:
+        if not input_path.is_file():
+            raise ArtifactError(f"{label} is not a regular file: {path}")
+        if input_path.stat().st_size > maximum:
+            raise ArtifactError(f"{label} exceeds the {maximum:,}-byte safety limit")
+        with input_path.open("rb") as handle:
+            return handle.read(maximum + 1)
+    except ArtifactError:
+        raise
+    except OSError as exc:
+        raise ArtifactError(f"cannot read {label} {path}: {exc}") from exc
 
 
 def _enforce_estimated_input_budget(

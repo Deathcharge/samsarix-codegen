@@ -47,8 +47,8 @@ The context-packing category is also established:
 
 The evaluation category validates demand for repeatable model comparisons:
 
-- [GitHub Models](https://docs.github.com/en/github-models/about-github-models) compares models with
-  identical prompts and inputs and offers evaluator metrics in its platform and CLI workflow.
+- [Microsoft Foundry playgrounds](https://learn.microsoft.com/azure/foundry/concepts/concept-playgrounds)
+  compare up to three models in parallel with synchronized prompt context and parameter settings.
 - [LangSmith](https://docs.langchain.com/langsmith/compare-experiment-results) compares experiments,
   outputs, regressions, metrics, and full or diff views.
 
