@@ -18,6 +18,7 @@ from samsarix_codegen.cli import main
 from samsarix_codegen.errors import ConfigurationError
 from samsarix_codegen.models import ChatResult, ContextFile, PromptRequest, Task
 from samsarix_codegen.prompt import build_messages
+from samsarix_codegen.provider_check import ProviderCheckReport, render_provider_check
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 
 
@@ -49,10 +50,24 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
             output_format="json",
         )
     )
+    provider_check_payload = json.loads(
+        render_provider_check(
+            ProviderCheckReport(
+                model="local-model",
+                max_output_tokens=64,
+                response_chars=11,
+                prompt_tokens=12,
+                completion_tokens=3,
+                total_tokens=15,
+            ),
+            output_format="json",
+        )
+    )
 
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
     Draft202012Validator(load_contract_schema("comparison")).validate(comparison_payload)
+    Draft202012Validator(load_contract_schema("provider-check")).validate(provider_check_payload)
 
 
 def test_request_schema_rejects_contract_drift() -> None:

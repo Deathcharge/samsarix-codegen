@@ -10,21 +10,32 @@ from urllib.error import URLError
 
 import pytest
 
-from samsarix_codegen.errors import ProviderError
+from samsarix_codegen.errors import ConfigurationError, ProviderError
 from samsarix_codegen.models import ProviderConfig
 from samsarix_codegen.provider import OpenAIChatClient
+from samsarix_codegen.provider_check import (
+    PROVIDER_CHECK_MESSAGES,
+    ProviderCheckReport,
+    check_provider,
+    render_provider_check,
+)
 
 
 @contextmanager
 def chat_server(
-    response: dict[str, object], *, status: int = 200
+    response: dict[str, object],
+    *,
+    status: int = 200,
+    response_headers: dict[str, str] | None = None,
 ) -> Iterator[tuple[str, dict[str, object]]]:
     captured: dict[str, object] = {}
+    captured["request_count"] = 0
     response_body = json.dumps(response).encode("utf-8")
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802
             length = int(self.headers.get("Content-Length", "0"))
+            captured["request_count"] = int(captured["request_count"]) + 1
             captured["path"] = self.path
             captured["authorization"] = self.headers.get("Authorization")
             captured["user_agent"] = self.headers.get("User-Agent")
@@ -32,6 +43,8 @@ def chat_server(
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(response_body)))
+            for name, value in (response_headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(response_body)
 
@@ -73,6 +86,44 @@ def test_client_sends_bounded_request_and_normalizes_usage() -> None:
     assert body["stream"] is False
 
 
+def test_provider_check_sends_exactly_one_content_free_bounded_request() -> None:
+    response = {
+        "choices": [{"message": {"content": "SAMSARIX_OK"}}],
+        "usage": {"prompt_tokens": 21, "completion_tokens": 4, "total_tokens": 25},
+    }
+    with chat_server(response) as (endpoint, captured):
+        config = ProviderConfig(
+            endpoint=endpoint,
+            model="check-model",
+            api_key="check-key",
+            max_output_tokens=64,
+        )
+        report = check_provider(config)
+
+    assert captured["request_count"] == 1
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body == {
+        "model": "check-model",
+        "messages": list(PROVIDER_CHECK_MESSAGES),
+        "max_tokens": 64,
+        "stream": False,
+    }
+    payload = json.loads(render_provider_check(report, output_format="json"))
+    assert payload["status"] == "passed"
+    assert payload["request"]["source_context_items"] == 0
+    assert payload["response"] == {"text_received": True, "text_chars": 11}
+    assert payload["usage"]["total_tokens"] == 25
+    assert endpoint not in json.dumps(payload)
+    assert "check-key" not in json.dumps(payload)
+    assert "SAMSARIX_OK" not in json.dumps(payload)
+
+
+def test_provider_check_report_rejects_invalid_public_values() -> None:
+    with pytest.raises(ConfigurationError, match="response characters"):
+        ProviderCheckReport(model="model", max_output_tokens=64, response_chars=0)
+
+
 def test_client_accepts_text_content_parts() -> None:
     response = {
         "choices": [{"message": {"content": [{"type": "text", "text": "one"}, {"text": " two"}]}}]
@@ -95,6 +146,25 @@ def test_http_error_redacts_api_key() -> None:
     assert secret not in str(caught.value)
 
 
+def test_client_rejects_redirect_without_contacting_target() -> None:
+    success = {"choices": [{"message": {"content": "must not be reached"}}]}
+    with chat_server(success) as (target_endpoint, target_capture):
+        target_url = f"{target_endpoint}/chat/completions"
+        with chat_server({}, status=307, response_headers={"Location": target_url}) as (
+            redirect_endpoint,
+            redirect_capture,
+        ):
+            client = OpenAIChatClient(
+                ProviderConfig(redirect_endpoint, "model", api_key="redirect-secret")
+            )
+            with pytest.raises(ProviderError, match="HTTP 307"):
+                client.complete([{"role": "user", "content": "fixed"}])
+
+    assert redirect_capture["request_count"] == 1
+    assert redirect_capture["authorization"] == "Bearer redirect-secret"
+    assert target_capture["request_count"] == 0
+
+
 class FakeResponse:
     def __init__(self, body: bytes):
         self.body = body
@@ -108,7 +178,8 @@ class FakeResponse:
 
 def test_client_rejects_invalid_json(monkeypatch) -> None:
     monkeypatch.setattr(
-        "samsarix_codegen.provider.urlopen", lambda request, timeout: FakeResponse(b"not-json")
+        "samsarix_codegen.provider._open_without_redirects",
+        lambda request, timeout: FakeResponse(b"not-json"),
     )
 
     with pytest.raises(ProviderError, match="invalid UTF-8 JSON"):
@@ -119,7 +190,7 @@ def test_client_reports_unavailable_endpoint(monkeypatch) -> None:
     def unavailable(request, timeout):
         raise URLError("connection refused")
 
-    monkeypatch.setattr("samsarix_codegen.provider.urlopen", unavailable)
+    monkeypatch.setattr("samsarix_codegen.provider._open_without_redirects", unavailable)
 
     with pytest.raises(ProviderError, match="endpoint is unavailable"):
         OpenAIChatClient(ProviderConfig("http://localhost:11434/v1", "model")).complete([])
@@ -129,7 +200,7 @@ def test_client_reports_timeout(monkeypatch) -> None:
     def timeout(request, timeout):
         raise TimeoutError
 
-    monkeypatch.setattr("samsarix_codegen.provider.urlopen", timeout)
+    monkeypatch.setattr("samsarix_codegen.provider._open_without_redirects", timeout)
 
     with pytest.raises(ProviderError, match="timed out after 2 seconds"):
         config = ProviderConfig("http://localhost:11434/v1", "model", timeout_seconds=2)
@@ -139,7 +210,8 @@ def test_client_reports_timeout(monkeypatch) -> None:
 def test_client_enforces_response_byte_cap(monkeypatch) -> None:
     monkeypatch.setattr("samsarix_codegen.provider.MAX_RESPONSE_BYTES", 4)
     monkeypatch.setattr(
-        "samsarix_codegen.provider.urlopen", lambda request, timeout: FakeResponse(b"12345")
+        "samsarix_codegen.provider._open_without_redirects",
+        lambda request, timeout: FakeResponse(b"12345"),
     )
 
     with pytest.raises(ProviderError, match="response exceeds"):

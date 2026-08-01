@@ -101,6 +101,10 @@ Research references:
 12. **Independent machine contracts.** Bundled Draft 2020-12 schemas describe request, result, and
     comparison envelopes without requiring a consumer to import this package. CLI parsing remains
     authoritative for integrity relationships JSON Schema cannot express.
+13. **Operator-run provider evidence.** `provider-check` exercises the same non-streaming Chat
+    Completions request/response path with two fixed messages, no source context, one request, no
+    retry, and a separate 256-token ceiling. Its report excludes endpoint, key, and response text.
+    A pass is scoped evidence, not Samsarix certification of a provider family.
 
 ## Assumptions
 
@@ -162,7 +166,8 @@ Final command evidence is recorded in the **Final verification** section after e
 ### P2 — valuable later work
 
 - [ ] Add opt-in streaming after cancellation and partial-output semantics are designed and tested.
-- [ ] Add provider contract fixtures for additional confirmed compatible services.
+- [x] Add a deterministic local provider fixture and an operator-run conformance command.
+- [ ] Record results for any provider/model Samsarix chooses to support explicitly.
 - [x] Add bounded, explicitly named stdin context for staged diffs and selected log excerpts.
 - [ ] Consider ignore-file-based discovery only if explicit-input ergonomics prove insufficient;
   retain visible budgets and path boundaries.
@@ -172,7 +177,8 @@ Final command evidence is recorded in the **Final verification** section after e
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build`, `inspect`, `execute`, and `run` commands with useful help and version behavior.
+- [x] `build`, `inspect`, `compare`, `execute`, `run`, `schema`, and `provider-check` commands with
+  useful help and version behavior.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -207,6 +213,8 @@ Final command evidence is recorded in the **Final verification** section after e
   and explain approval-object drift without rebuilding source context.
 - Added versioned bundled schemas, offline schema export, and validator-backed conformance tests for
   standalone CI and cross-repository consumers.
+- Added one-request provider conformance evidence and a bounded three-developer pilot protocol that
+  collects usability signals without collecting prompts, source, logs, responses, or credentials.
 
 ## Deferred work and rationale
 
@@ -226,7 +234,7 @@ Final command evidence is recorded in the **Final verification** section after e
 | --- | --- | --- |
 | Package identity | Reserve `samsarix-codegen` on PyPI (the project URL returned 404 on 2026-07-29) | Owner-controlled PyPI project exists with matching metadata |
 | Publication | Configure trusted publishing or a scoped PyPI token | Tagged release publishes signed artifacts from CI |
-| Provider validation | Choose any hosted providers the project will officially support | Contract tests pass against owner-approved non-production test accounts |
+| Provider validation | Choose any local/hosted providers the project will officially support and run `provider-check` plus contract tests | Exact endpoint/model/version evidence passes in an owner-approved non-production environment |
 
 No deployment, account creation, package publication, spending, or live infrastructure change is
 required for local evaluation and none was performed.
@@ -250,6 +258,8 @@ required for local evaluation and none was performed.
 - Count, byte, character, token, timeout, and response caps prevent unbounded local/API work.
 - Remote plaintext transport and URL credentials are rejected; Python's default TLS verification is
   retained.
+- HTTP redirects are rejected so bearer credentials cannot be forwarded to a provider-selected
+  target.
 - Keys are environment-only, omitted from request summaries, and redacted from HTTP error bodies.
 - Calls are non-streaming, cancellable by the process, and never automatically retried.
 
@@ -381,12 +391,27 @@ unconditional dependencies plus five development-extra requirements. The first m
 a quote-sensitive text assertion and was replaced by the successful parsed-marker audit; it was a
 verification-harness issue, not a package failure.
 
+### Provider-conformance and pilot follow-up
+
+Python 3.14.6 source checks passed with 93 tests in 16.83 seconds. The clean-room sdist passed lint,
+format, strict typing, and 93 tests in 10.49 seconds. Its rebuilt wheel installed into a fresh
+environment with no broken or unconditional runtime dependencies. From outside the checkout, the
+installed package exported and validated the provider-check schema, constructed the typed
+content-safe report envelope, returned exit 2 before network access when the model was absent, and
+included both the new module and schema resource. Local two-server integration tests also proved
+that a credential-bearing request stops at an HTTP redirect and never contacts its target. Package
+builds emitted no warnings. Exact distribution digests are attached to the corresponding pull
+request because recording a digest inside the sdist would change that digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
   required or authorized. Deterministic local HTTP integration tests cover request shape, auth
-  header behavior, text/usage normalization, HTTP rejection, invalid JSON, timeouts, unavailable
-  endpoints, response limits, and secret redaction.
+  header behavior, one-request provider conformance, text/usage normalization, HTTP rejection,
+  redirect blocking, invalid JSON, timeouts, unavailable endpoints, response limits, and secret
+  redaction.
+- The three-developer pilot protocol is ready but has not been represented as completed; it requires
+  three real participants using the same exact wheel.
 - Package publication, signing, and installation from PyPI were not attempted; they remain
   owner-controlled actions.
 - The optional Codex Security workspace scan was skipped at the owner's request due its cost. The
@@ -398,7 +423,8 @@ verification-harness issue, not a package failure.
 
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
-review-first artifact workflow, offline review/comparison tools, and independent JSON contracts;
-each has local clean-package evidence recorded above. Public release remains gated on owner control
-of the PyPI project and owner-controlled publication/signing. Live hosted provider certification is
-optional unless the owner advertises specific providers.
+review-first artifact workflow, offline review/comparison tools, independent JSON contracts, and an
+operator-run provider conformance check; each has local clean-package evidence recorded above.
+Public release remains gated on owner control of the PyPI project and owner-controlled
+publication/signing. The usefulness claim remains gated on the three-developer pilot, and live
+provider certification remains optional unless the owner advertises specific providers.
