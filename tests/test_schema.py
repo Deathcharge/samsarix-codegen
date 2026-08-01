@@ -8,10 +8,13 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from samsarix_codegen.artifact import (
+    compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
+    parse_execution_result,
     render_artifact_comparison,
     render_execution_result,
+    render_execution_result_comparison,
     render_request_artifact,
 )
 from samsarix_codegen.cli import main
@@ -44,6 +47,22 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
 
     request_payload = json.loads(render_request_artifact(base))
     result_payload = json.loads(render_execution_result(base, result, model="local-model"))
+    base_execution_result = parse_execution_result(
+        render_execution_result(base, result, model="local-model")
+    )
+    target_execution_result = parse_execution_result(
+        render_execution_result(
+            base,
+            ChatResult("Different review", 101, 22, 123),
+            model="other-model",
+        )
+    )
+    result_comparison_payload = json.loads(
+        render_execution_result_comparison(
+            compare_execution_results(base_execution_result, target_execution_result),
+            output_format="json",
+        )
+    )
     comparison_payload = json.loads(
         render_artifact_comparison(
             compare_request_artifacts(base, target),
@@ -67,6 +86,9 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
     Draft202012Validator(load_contract_schema("comparison")).validate(comparison_payload)
+    Draft202012Validator(load_contract_schema("result-comparison")).validate(
+        result_comparison_payload
+    )
     Draft202012Validator(load_contract_schema("provider-check")).validate(provider_check_payload)
 
 
@@ -76,6 +98,23 @@ def test_request_schema_rejects_contract_drift() -> None:
 
     with pytest.raises(ValidationError):
         Draft202012Validator(load_contract_schema("request")).validate(payload)
+
+
+@pytest.mark.parametrize("contract", ["result", "result-comparison"])
+def test_result_schemas_reject_noncanonical_model_labels(contract: str) -> None:
+    artifact = make_artifact("Review this")
+    result = parse_execution_result(
+        render_execution_result(artifact, ChatResult("Reviewed"), model="model")
+    )
+    if contract == "result":
+        payload = result.to_payload()
+        payload["model"] = " model "
+    else:
+        payload = compare_execution_results(result, result).to_payload()
+        payload["base"]["model"] = " model "
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(load_contract_schema(contract)).validate(payload)
 
 
 def test_schema_command_prints_standalone_machine_readable_contract(capsys) -> None:

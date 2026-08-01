@@ -21,6 +21,9 @@ approves a first public release.
 - A one-request `provider-check` preflight with a content-safe JSON evidence envelope, a 256-token
   hard ceiling, and a bundled Draft 2020-12 contract.
 - A privacy-preserving three-developer pilot protocol with explicit evidence and decision gates.
+- Strict execution-result parsing plus offline, same-request response hash/size and usage comparison
+  without response-body disclosure.
+- A bundled Draft 2020-12 contract for execution-result comparisons.
 - Fail-closed source/distribution release checks, a non-publishing dry-run path, SHA-256 manifests,
   build-provenance attestations, and gated PyPI/GitHub release automation.
 - A release and rollback runbook plus monthly GitHub Actions dependency updates.

@@ -19,7 +19,9 @@ from samsarix_codegen.prompt import estimate_tokens
 ARTIFACT_SCHEMA_VERSION = 2
 RESULT_SCHEMA_VERSION = 1
 COMPARISON_SCHEMA_VERSION = 1
+RESULT_COMPARISON_SCHEMA_VERSION = 1
 MAX_ARTIFACT_BYTES = 12 * 1024 * 1024
+MAX_RESULT_BYTES = 12 * 1024 * 1024
 MAX_ARTIFACT_MESSAGES = 32
 MAX_ARTIFACT_CONTEXT_ITEMS = 100
 MAX_CONTEXT_NAME_CHARS = 4_096
@@ -112,6 +114,152 @@ class RequestArtifactComparison:
                 "input_token_delta": (
                     self.target_estimated_input_tokens - self.base_estimated_input_tokens
                 ),
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionResult:
+    """A validated provider-result envelope linked to a request fingerprint."""
+
+    request_fingerprint: str
+    model: str
+    response_text: str
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+
+    def __post_init__(self) -> None:
+        if not _is_sha256(self.request_fingerprint):
+            raise ArtifactError("execution result contains an invalid request fingerprint")
+        _normalize_result_model(self.model, require_canonical=True)
+        if not isinstance(self.response_text, str) or not self.response_text:
+            raise ArtifactError("execution result response text cannot be empty")
+        response_bytes = _utf8_size(self.response_text, label="execution result response text")
+        if response_bytes > MAX_RESULT_BYTES:
+            raise ArtifactError(
+                f"execution result response exceeds the {MAX_RESULT_BYTES:,}-byte safety limit"
+            )
+        _parse_usage_value("prompt_tokens", self.prompt_tokens)
+        _parse_usage_value("completion_tokens", self.completion_tokens)
+        _parse_usage_value("total_tokens", self.total_tokens)
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return the stable JSON-compatible representation."""
+
+        return {
+            "schema_version": RESULT_SCHEMA_VERSION,
+            "request_fingerprint": self.request_fingerprint,
+            "model": self.model,
+            "response": {"text": self.response_text},
+            "usage": {
+                "prompt_tokens": self.prompt_tokens,
+                "completion_tokens": self.completion_tokens,
+                "total_tokens": self.total_tokens,
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionResultSummary:
+    """Content-omitting metadata for one validated execution result."""
+
+    model: str
+    response_chars: int
+    response_bytes: int
+    response_sha256: str
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+
+    def __post_init__(self) -> None:
+        _normalize_result_model(self.model, require_canonical=True)
+        for label, value in (
+            ("response characters", self.response_chars),
+            ("response bytes", self.response_bytes),
+        ):
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or not 1 <= value <= MAX_RESULT_BYTES
+            ):
+                raise ArtifactError(
+                    f"execution result {label} must be between 1 and {MAX_RESULT_BYTES:,}"
+                )
+        if not _is_sha256(self.response_sha256):
+            raise ArtifactError("execution result contains an invalid response fingerprint")
+        _parse_usage_value("prompt_tokens", self.prompt_tokens)
+        _parse_usage_value("completion_tokens", self.completion_tokens)
+        _parse_usage_value("total_tokens", self.total_tokens)
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return a JSON-compatible result summary without response text."""
+
+        return {
+            "model": self.model,
+            "response": {
+                "chars": self.response_chars,
+                "bytes": self.response_bytes,
+                "sha256": self.response_sha256,
+            },
+            "usage": {
+                "prompt_tokens": self.prompt_tokens,
+                "completion_tokens": self.completion_tokens,
+                "total_tokens": self.total_tokens,
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionResultComparison:
+    """A content-omitting comparison of results for the same reviewed request."""
+
+    request_fingerprint: str
+    base: ExecutionResultSummary
+    target: ExecutionResultSummary
+
+    def __post_init__(self) -> None:
+        if not _is_sha256(self.request_fingerprint):
+            raise ArtifactError(
+                "execution result comparison contains an invalid request fingerprint"
+            )
+        if not isinstance(self.base, ExecutionResultSummary) or not isinstance(
+            self.target, ExecutionResultSummary
+        ):
+            raise ArtifactError("execution result comparison requires validated result summaries")
+
+    @property
+    def model_changed(self) -> bool:
+        """Return whether the operator-recorded model names differ."""
+
+        return self.base.model != self.target.model
+
+    @property
+    def response_identical(self) -> bool:
+        """Return whether the UTF-8 response text digests match."""
+
+        return hmac.compare_digest(self.base.response_sha256, self.target.response_sha256)
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return a stable comparison without either response body."""
+
+        return {
+            "schema_version": RESULT_COMPARISON_SCHEMA_VERSION,
+            "request_fingerprint": self.request_fingerprint,
+            "model_changed": self.model_changed,
+            "response_identical": self.response_identical,
+            "base": self.base.to_payload(),
+            "target": self.target.to_payload(),
+            "delta": {
+                "response_chars": self.target.response_chars - self.base.response_chars,
+                "response_bytes": self.target.response_bytes - self.base.response_bytes,
+                "prompt_tokens": _optional_delta(
+                    self.base.prompt_tokens, self.target.prompt_tokens
+                ),
+                "completion_tokens": _optional_delta(
+                    self.base.completion_tokens, self.target.completion_tokens
+                ),
+                "total_tokens": _optional_delta(self.base.total_tokens, self.target.total_tokens),
             },
         }
 
@@ -245,35 +393,144 @@ def render_execution_result(
 ) -> str:
     """Render a machine-readable provider result without endpoint or credential data."""
 
-    if not isinstance(model, str) or not model.strip():
-        raise ArtifactError("execution result model cannot be empty")
-    normalized_model = model.strip()
-    if len(normalized_model) > MAX_MODEL_CHARS:
-        raise ArtifactError(f"execution result model exceeds the {MAX_MODEL_CHARS}-character limit")
+    normalized_model = _normalize_result_model(model)
     if not isinstance(result.text, str) or not result.text:
         raise ArtifactError("execution result response text cannot be empty")
-    for label, value in (
-        ("prompt_tokens", result.prompt_tokens),
-        ("completion_tokens", result.completion_tokens),
-        ("total_tokens", result.total_tokens),
-    ):
-        if value is not None and (
-            not isinstance(value, int) or isinstance(value, bool) or value < 0
-        ):
-            raise ArtifactError(f"execution result {label} must be a non-negative integer or null")
+    prompt_tokens = _parse_usage_value("prompt_tokens", result.prompt_tokens)
+    completion_tokens = _parse_usage_value("completion_tokens", result.completion_tokens)
+    total_tokens = _parse_usage_value("total_tokens", result.total_tokens)
+    execution_result = ExecutionResult(
+        request_fingerprint=artifact.fingerprint,
+        model=normalized_model,
+        response_text=result.text,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+    rendered = json.dumps(execution_result.to_payload(), ensure_ascii=False, indent=2) + "\n"
+    if len(rendered.encode("utf-8")) > MAX_RESULT_BYTES:
+        raise ArtifactError(f"execution result exceeds the {MAX_RESULT_BYTES:,}-byte safety limit")
+    return rendered
 
-    payload = {
-        "schema_version": RESULT_SCHEMA_VERSION,
-        "request_fingerprint": artifact.fingerprint,
-        "model": normalized_model,
-        "response": {"text": result.text},
-        "usage": {
-            "prompt_tokens": result.prompt_tokens,
-            "completion_tokens": result.completion_tokens,
-            "total_tokens": result.total_tokens,
-        },
+
+def parse_execution_result(raw: str | bytes) -> ExecutionResult:
+    """Parse and strictly validate one execution-result envelope."""
+
+    text = _decode_bounded_json(raw, label="execution result", maximum=MAX_RESULT_BYTES)
+    try:
+        decoded: Any = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ArtifactError(f"execution result is not valid JSON: {exc.msg}") from exc
+    if not isinstance(decoded, dict):
+        raise ArtifactError("execution result must be a JSON object")
+
+    expected_keys = {
+        "schema_version",
+        "request_fingerprint",
+        "model",
+        "response",
+        "usage",
     }
-    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    if set(decoded) != expected_keys:
+        raise ArtifactError("execution result fields do not match schema version 1")
+    schema_version = decoded.get("schema_version")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version != RESULT_SCHEMA_VERSION
+    ):
+        raise ArtifactError(
+            f"unsupported execution result schema: {schema_version!r}; "
+            f"expected {RESULT_SCHEMA_VERSION}"
+        )
+
+    fingerprint = decoded.get("request_fingerprint")
+    if not isinstance(fingerprint, str) or not _is_sha256(fingerprint):
+        raise ArtifactError("execution result contains an invalid request fingerprint")
+    model = _normalize_result_model(decoded.get("model"), require_canonical=True)
+
+    response = decoded.get("response")
+    if not isinstance(response, dict) or set(response) != {"text"}:
+        raise ArtifactError("execution result response must contain exactly text")
+    response_text = response.get("text")
+    if not isinstance(response_text, str) or not response_text:
+        raise ArtifactError("execution result response text cannot be empty")
+
+    usage = decoded.get("usage")
+    usage_keys = {"prompt_tokens", "completion_tokens", "total_tokens"}
+    if not isinstance(usage, dict) or set(usage) != usage_keys:
+        raise ArtifactError("execution result usage fields do not match schema version 1")
+
+    return ExecutionResult(
+        request_fingerprint=fingerprint,
+        model=model,
+        response_text=response_text,
+        prompt_tokens=_parse_usage_value("prompt_tokens", usage.get("prompt_tokens")),
+        completion_tokens=_parse_usage_value("completion_tokens", usage.get("completion_tokens")),
+        total_tokens=_parse_usage_value("total_tokens", usage.get("total_tokens")),
+    )
+
+
+def compare_execution_results(
+    base: ExecutionResult,
+    target: ExecutionResult,
+) -> ExecutionResultComparison:
+    """Compare two results only when they reference the same reviewed request."""
+
+    if not hmac.compare_digest(base.request_fingerprint, target.request_fingerprint):
+        raise ArtifactError("execution results reference different request fingerprints")
+    return ExecutionResultComparison(
+        request_fingerprint=base.request_fingerprint,
+        base=_summarize_execution_result(base),
+        target=_summarize_execution_result(target),
+    )
+
+
+def render_execution_result_comparison(
+    comparison: ExecutionResultComparison,
+    *,
+    output_format: str = "text",
+) -> str:
+    """Render a content-omitting execution-result comparison."""
+
+    if output_format == "json":
+        return json.dumps(comparison.to_payload(), ensure_ascii=False, indent=2) + "\n"
+    if output_format != "text":
+        raise ArtifactError("execution result comparison format must be text or json")
+
+    lines = [
+        "Execution results reference the same reviewed request.",
+        f"Request: {comparison.request_fingerprint}",
+        (
+            f"Models: {comparison.base.model} -> {comparison.target.model} "
+            f"({'changed' if comparison.model_changed else 'unchanged'})"
+        ),
+        ("Responses: identical" if comparison.response_identical else "Responses: different"),
+        (
+            "Response characters: "
+            f"{comparison.base.response_chars:,} -> {comparison.target.response_chars:,} "
+            f"({_format_delta(comparison.target.response_chars - comparison.base.response_chars)})"
+        ),
+        (
+            "Response bytes: "
+            f"{comparison.base.response_bytes:,} -> {comparison.target.response_bytes:,} "
+            f"({_format_delta(comparison.target.response_bytes - comparison.base.response_bytes)})"
+        ),
+        f"Base response: {comparison.base.response_sha256}",
+        f"Target response: {comparison.target.response_sha256}",
+        _render_usage_comparison(
+            "Prompt tokens", comparison.base.prompt_tokens, comparison.target.prompt_tokens
+        ),
+        _render_usage_comparison(
+            "Completion tokens",
+            comparison.base.completion_tokens,
+            comparison.target.completion_tokens,
+        ),
+        _render_usage_comparison(
+            "Total tokens", comparison.base.total_tokens, comparison.target.total_tokens
+        ),
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def compare_request_artifacts(
@@ -395,6 +652,78 @@ def require_fingerprint(artifact: RequestArtifact, expected: str | None) -> None
         raise ArtifactError(
             "request artifact does not match the fingerprint approved by the operator"
         )
+
+
+def _decode_bounded_json(raw: str | bytes, *, label: str, maximum: int) -> str:
+    if isinstance(raw, bytes):
+        if len(raw) > maximum:
+            raise ArtifactError(f"{label} exceeds the {maximum:,}-byte safety limit")
+        try:
+            return raw.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ArtifactError(f"{label} is not valid UTF-8") from exc
+    try:
+        encoded = raw.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ArtifactError(f"{label} is not valid UTF-8") from exc
+    if len(encoded) > maximum:
+        raise ArtifactError(f"{label} exceeds the {maximum:,}-byte safety limit")
+    return raw
+
+
+def _normalize_result_model(value: object, *, require_canonical: bool = False) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ArtifactError("execution result model cannot be empty")
+    normalized = value.strip()
+    if require_canonical and value != normalized:
+        raise ArtifactError("execution result model must not have surrounding whitespace")
+    if len(normalized) > MAX_MODEL_CHARS:
+        raise ArtifactError(f"execution result model exceeds the {MAX_MODEL_CHARS}-character limit")
+    if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+        raise ArtifactError("execution result model contains a control character")
+    return normalized
+
+
+def _parse_usage_value(label: str, value: object) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ArtifactError(f"execution result {label} must be a non-negative integer or null")
+    return value
+
+
+def _summarize_execution_result(result: ExecutionResult) -> ExecutionResultSummary:
+    response_bytes = _utf8_size(result.response_text, label="execution result response text")
+    return ExecutionResultSummary(
+        model=result.model,
+        response_chars=len(result.response_text),
+        response_bytes=response_bytes,
+        response_sha256=_sha256_text(result.response_text),
+        prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens,
+        total_tokens=result.total_tokens,
+    )
+
+
+def _optional_delta(base: int | None, target: int | None) -> int | None:
+    if base is None or target is None:
+        return None
+    return target - base
+
+
+def _utf8_size(value: str, *, label: str) -> int:
+    try:
+        return len(value.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise ArtifactError(f"{label} is not valid UTF-8") from exc
+
+
+def _render_usage_comparison(label: str, base: int | None, target: int | None) -> str:
+    if base is None or target is None:
+        base_value = "not reported" if base is None else f"{base:,}"
+        target_value = "not reported" if target is None else f"{target:,}"
+        return f"{label}: unavailable (base: {base_value}, target: {target_value})"
+    return f"{label}: {base:,} -> {target:,} ({_format_delta(target - base)})"
 
 
 def _unsigned_payload(

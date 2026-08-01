@@ -15,13 +15,18 @@ from typing import BinaryIO, cast
 from samsarix_codegen import __version__
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
+    MAX_RESULT_BYTES,
+    ExecutionResult,
     RequestArtifact,
+    compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
+    parse_execution_result,
     parse_request_artifact,
     render_artifact_comparison,
     render_artifact_summary,
     render_execution_result,
+    render_execution_result_comparison,
     render_request_artifact,
     require_fingerprint,
 )
@@ -112,6 +117,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="comparison output format (default: text)",
     )
 
+    compare_results_command = subparsers.add_parser(
+        "compare-results",
+        help="compare two same-request execution results without showing response contents",
+    )
+    compare_results_command.add_argument(
+        "base", metavar="BASE", help="base execution-result path, or - for stdin"
+    )
+    compare_results_command.add_argument(
+        "target", metavar="TARGET", help="target execution-result path, or - for stdin"
+    )
+    compare_results_command.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="comparison output format (default: text)",
+    )
+
     execute_command = subparsers.add_parser(
         "execute", help="send exactly the messages in a validated request artifact"
     )
@@ -152,6 +174,16 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             target = _read_artifact(args.target, input_stream)
             comparison = compare_request_artifacts(base, target)
             _write_stdout(render_artifact_comparison(comparison, output_format=args.format))
+            return 0
+        if args.command == "compare-results":
+            if args.base == "-" and args.target == "-":
+                raise ArtifactError("BASE and TARGET cannot both read from stdin")
+            base_result = _read_execution_result(args.base, input_stream)
+            target_result = _read_execution_result(args.target, input_stream)
+            result_comparison = compare_execution_results(base_result, target_result)
+            _write_stdout(
+                render_execution_result_comparison(result_comparison, output_format=args.format)
+            )
             return 0
         if args.command == "execute":
             artifact = _read_artifact(args.artifact, input_stream)
@@ -355,27 +387,50 @@ def _request_from_args(args: argparse.Namespace, stdin: BinaryIO) -> PromptReque
 
 
 def _read_artifact(path: str, stdin: BinaryIO) -> RequestArtifact:
+    raw = _read_bounded_input(
+        path,
+        stdin,
+        maximum=MAX_ARTIFACT_BYTES,
+        label="request artifact",
+    )
+    return parse_request_artifact(raw)
+
+
+def _read_execution_result(path: str, stdin: BinaryIO) -> ExecutionResult:
+    raw = _read_bounded_input(
+        path,
+        stdin,
+        maximum=MAX_RESULT_BYTES,
+        label="execution result",
+    )
+    return parse_execution_result(raw)
+
+
+def _read_bounded_input(
+    path: str,
+    stdin: BinaryIO,
+    *,
+    maximum: int,
+    label: str,
+) -> bytes:
     if path == "-":
         try:
-            raw = stdin.read(MAX_ARTIFACT_BYTES + 1)
+            return stdin.read(maximum + 1)
         except OSError as exc:
-            raise ArtifactError(f"cannot read request artifact from stdin: {exc}") from exc
-    else:
-        artifact_path = Path(path)
-        try:
-            if not artifact_path.is_file():
-                raise ArtifactError(f"request artifact is not a regular file: {path}")
-            if artifact_path.stat().st_size > MAX_ARTIFACT_BYTES:
-                raise ArtifactError(
-                    f"request artifact exceeds the {MAX_ARTIFACT_BYTES:,}-byte safety limit"
-                )
-            with artifact_path.open("rb") as handle:
-                raw = handle.read(MAX_ARTIFACT_BYTES + 1)
-        except ArtifactError:
-            raise
-        except OSError as exc:
-            raise ArtifactError(f"cannot read request artifact {path}: {exc}") from exc
-    return parse_request_artifact(raw)
+            raise ArtifactError(f"cannot read {label} from stdin: {exc}") from exc
+
+    input_path = Path(path)
+    try:
+        if not input_path.is_file():
+            raise ArtifactError(f"{label} is not a regular file: {path}")
+        if input_path.stat().st_size > maximum:
+            raise ArtifactError(f"{label} exceeds the {maximum:,}-byte safety limit")
+        with input_path.open("rb") as handle:
+            return handle.read(maximum + 1)
+    except ArtifactError:
+        raise
+    except OSError as exc:
+        raise ArtifactError(f"cannot read {label} {path}: {exc}") from exc
 
 
 def _enforce_estimated_input_budget(

@@ -17,6 +17,8 @@ Its product promise is narrower and testable:
 6. Publish versioned JSON contracts that independent CI systems can validate without private code.
 7. Let operators test the exact provider wire contract with one fixed, content-free request before
    sending reviewed source or logs.
+8. Compare two same-request result envelopes offline without reproducing either response or
+   pretending structural evidence is a quality score.
 
 ## Evidence from adjacent products
 
@@ -43,6 +45,17 @@ The context-packing category is also established:
 - [Aider's repository map](https://aider.chat/docs/repomap.html) selects important symbols from a
   repository to give its editing agent wider context.
 
+The evaluation category validates demand for repeatable model comparisons:
+
+- [Microsoft Foundry playgrounds](https://learn.microsoft.com/azure/foundry/concepts/concept-playgrounds)
+  compare up to three models in parallel with synchronized prompt context and parameter settings.
+- [LangSmith](https://docs.langchain.com/langsmith/compare-experiment-results) compares experiments,
+  outputs, regressions, metrics, and full or diff views.
+
+Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
+dependency-free offline check that both bounded result envelopes reference the same reviewed
+request, then emits only model labels, response hashes/sizes, and reported usage deltas.
+
 These products validate demand for automation and broad context. They also leave a useful boundary
 for teams that want a smaller approval object without granting repository discovery, shell access,
 or edit authority.
@@ -67,9 +80,10 @@ scan, history, telemetry, or persistent session is required.
 
 ### Reproducible provider comparison
 
-Execute the same artifact against two operator-chosen OpenAI-compatible endpoints. The common
-fingerprint proves that the message payload and context metadata were identical; it does not claim
-that provider behavior, tokenization, or outputs are equivalent.
+Execute the same artifact against two operator-chosen OpenAI-compatible endpoints, then run
+`compare-results` on their JSON envelopes. The common fingerprint links both envelopes to the same
+reviewed message payload; the comparison omits response bodies and does not claim provider
+authenticity, quality, tokenizer equivalence, or authorship.
 
 ## Defensible product constraints
 
@@ -79,6 +93,7 @@ that provider behavior, tokenization, or outputs are equivalent.
 - No automatic retry or provider fallback.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.
+- No claim that result hashes, length, or provider-reported usage evaluate response quality.
 
 ## Next evidence gates
 

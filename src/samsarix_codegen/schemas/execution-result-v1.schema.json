@@ -8,13 +8,18 @@
   "properties": {
     "schema_version": {"const": 1},
     "request_fingerprint": {"$ref": "#/$defs/fingerprint"},
-    "model": {"type": "string", "minLength": 1, "maxLength": 200},
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f]+$"
+    },
     "response": {
       "type": "object",
       "additionalProperties": false,
       "required": ["text"],
       "properties": {
-        "text": {"type": "string", "minLength": 1}
+        "text": {"type": "string", "minLength": 1, "maxLength": 12582912}
       }
     },
     "usage": {

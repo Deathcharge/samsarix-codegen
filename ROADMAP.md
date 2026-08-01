@@ -8,9 +8,10 @@ Portfolio role: **standalone product candidate**. Develop this as a focused stan
 
 Current disposition: The productized default is merged and preserved by a rollback ref. Version
 `0.2.0` has merged deterministic request-artifact and offline review/comparison workflows.
-Versioned machine-readable contracts and an operator-run provider conformance check are merged
-milestones. A gated release workflow can now build and attest without publishing; PyPI owner setup,
-publication, pilot validation, and flagship adoption remain separate decisions.
+Versioned machine-readable contracts, an operator-run provider conformance check, and offline
+same-request result comparison are merged milestones. A gated release workflow can build and attest
+without publishing; PyPI owner setup, publication, pilot validation, and flagship adoption remain
+separate decisions.
 
 ## Stabilize the productized default
 
@@ -33,6 +34,8 @@ Current hardening backlog:
   input budgets are implemented and locally package-verified for `0.2.0`.
 - Exact stored-prompt rendering and content-safe artifact comparison are implemented and locally
   package-verified for the review-tools follow-up.
+- Strict execution-result parsing and content-omitting same-request comparison are implemented for
+  reproducible provider experiments; they intentionally do not score output quality.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented
   and locally package-verified for the contract milestone.
 - A content-free, one-request provider check is implemented; no owner-selected live provider has

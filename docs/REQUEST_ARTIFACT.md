@@ -18,11 +18,11 @@ schema validation + offline inspect + fingerprint approval
 execute --expect-fingerprint
             |
             v
-one bounded provider request
+one bounded provider request -> result JSON -> offline compare-results
 ```
 
-`build`, `inspect`, and `compare` never make a network request. `execute` does not read source
-files; it sends the validated `messages` stored in the artifact.
+`build`, `inspect`, `compare`, and `compare-results` never make a network request. `execute` does
+not read source files; it sends the validated `messages` stored in the artifact.
 
 `inspect --format markdown` renders those exact stored messages for human review after validation;
 it does not rebuild them from files. Because that view contains the full prompt, handle it with the
@@ -76,7 +76,8 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
 
 ## Size and budget controls
 
-- Request artifacts are limited to 12 MiB when read by `inspect` or `execute`.
+- Request artifacts and execution-result envelopes are each limited to 12 MiB when read by offline
+  validation commands.
 - Context remains subject to the file-count and byte caps applied by `build`.
 - `--max-estimated-input-tokens` can fail `build`, `run`, or `execute` before a network request.
 - The estimate is deliberately approximate and is not provider billing data.
@@ -101,9 +102,11 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
 ```
 
 The endpoint and API key are intentionally absent. Usage values remain `null` when the provider does
-not return valid non-negative integers.
+not return valid non-negative integers. `parse_execution_result()` and `compare-results` enforce
+the exact fields, schema version, fingerprint syntax, canonical model label, non-empty UTF-8
+response, usage types, and size limit before comparison.
 
-## Offline comparison
+## Offline request comparison
 
 `compare BASE TARGET` validates both artifacts and reports whether their fingerprints differ. Its
 text and JSON forms contain both fingerprints, zero-based indexes of changed messages,
@@ -117,6 +120,24 @@ their original order. Comparison schema version `1` is independent of request sc
 Both artifact paths cannot be `-` because a single stdin stream cannot supply two independently
 bounded JSON documents.
 
+## Offline result comparison
+
+`compare-results BASE TARGET` validates two execution-result envelopes and fails unless they
+reference the same request fingerprint. Its text and JSON forms report the common fingerprint,
+whether model labels changed, whether response hashes match, response character/UTF-8 byte counts,
+both response SHA-256 hashes, and token-usage deltas when both providers reported the corresponding
+value. Neither response body is reproduced.
+
+The command establishes structural comparability: both envelopes claim the same reviewed request
+and expose content-omitting size, identity, and usage evidence. It does not score quality,
+authenticate a provider, prove that a provider received the request, or normalize provider
+tokenization. Result JSON and its hashes are not signatures. A response hash can confirm a guessed
+response, so comparison files still require handling appropriate to the underlying result.
+
+Both result paths cannot be `-` because a single stdin stream cannot supply two independently
+bounded JSON documents. Result-comparison schema version `1` is independent of execution-result
+schema version `1` and request schema version `2`.
+
 ## Machine-readable contract schemas
 
 The package bundles self-contained
@@ -127,6 +148,7 @@ The package bundles self-contained
 | `request` | Request artifact schema version 2 | `src/samsarix_codegen/schemas/request-artifact-v2.schema.json` |
 | `result` | Execution result schema version 1 | `src/samsarix_codegen/schemas/execution-result-v1.schema.json` |
 | `comparison` | Artifact comparison schema version 1 | `src/samsarix_codegen/schemas/artifact-comparison-v1.schema.json` |
+| `result-comparison` | Execution-result comparison schema version 1 | `src/samsarix_codegen/schemas/execution-result-comparison-v1.schema.json` |
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
@@ -135,4 +157,5 @@ Use `samsarix-codegen schema NAME` to print one without a network request, or
 JSON Schema checks portable structure, types, bounds, required fields, and digest syntax. It cannot
 prove semantic relationships such as whether a fingerprint matches canonical content, context
 bytes sum correctly, estimates match messages, or deltas match their base/target values. Use
-`inspect`, `compare`, or the Python parser for those semantic checks before execution.
+`inspect`, `compare`, `compare-results`, or the corresponding Python parser for those semantic
+checks.

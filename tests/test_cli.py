@@ -6,7 +6,11 @@ import sys
 from io import BytesIO, TextIOWrapper
 from pathlib import Path
 
-from samsarix_codegen.artifact import create_request_artifact, render_request_artifact
+from samsarix_codegen.artifact import (
+    create_request_artifact,
+    render_execution_result,
+    render_request_artifact,
+)
 from samsarix_codegen.cli import main
 from samsarix_codegen.models import ChatResult, PromptRequest, Task
 from samsarix_codegen.prompt import build_messages
@@ -361,4 +365,73 @@ def test_compare_rejects_two_stdin_inputs(capsys) -> None:
 
     captured = capsys.readouterr()
     assert exit_code == 5
+    assert "cannot both read from stdin" in captured.err
+
+
+def test_compare_results_is_machine_readable_and_omits_responses(tmp_path: Path, capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review provider behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    base_path = tmp_path / "result-a.json"
+    target_path = tmp_path / "result-b.json"
+    base_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult("secret response a", prompt_tokens=10, completion_tokens=2, total_tokens=12),
+            model="model-a",
+        ),
+        encoding="utf-8",
+    )
+    target_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult("secret response b", prompt_tokens=10, completion_tokens=4, total_tokens=14),
+            model="model-b",
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["compare-results", str(base_path), str(target_path), "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["request_fingerprint"] == artifact.fingerprint
+    assert payload["model_changed"] is True
+    assert payload["response_identical"] is False
+    assert payload["delta"]["completion_tokens"] == 2
+    assert "secret response a" not in captured.out
+    assert "secret response b" not in captured.out
+
+
+def test_compare_results_rejects_different_requests(tmp_path: Path, capsys) -> None:
+    base_request = PromptRequest(Task.REVIEW, "Review provider A")
+    target_request = PromptRequest(Task.REVIEW, "Review provider B")
+    base_artifact = create_request_artifact(build_messages(base_request), base_request.files)
+    target_artifact = create_request_artifact(build_messages(target_request), target_request.files)
+    base_path = tmp_path / "result-a.json"
+    target_path = tmp_path / "result-b.json"
+    base_path.write_text(
+        render_execution_result(base_artifact, ChatResult("a"), model="model-a"),
+        encoding="utf-8",
+    )
+    target_path.write_text(
+        render_execution_result(target_artifact, ChatResult("b"), model="model-b"),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["compare-results", str(base_path), str(target_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
+    assert "different request fingerprints" in captured.err
+
+
+def test_compare_results_rejects_two_stdin_inputs(capsys) -> None:
+    exit_code = main(["compare-results", "-", "-"], stdin=BytesIO(b"{}"))
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
     assert "cannot both read from stdin" in captured.err
