@@ -8,8 +8,9 @@ It is for developers and CI maintainers who want reproducible AI requests withou
 repository-discovery, file-write, shell, or retry authority. Samsarix Codegen never edits files,
 executes generated code, scans a repository automatically, or retries a paid request.
 
-> **Status:** `0.2.0` release candidate. The offline build/inspect workflow and the one-request
-> run/execute workflow are implemented and tested. The package has not been published to PyPI.
+> **Status:** `0.2.0` release candidate. The offline review workflow, one-request execution path,
+> and content-free provider conformance check are implemented and tested. The package has not been
+> published to PyPI or run through the documented three-developer pilot.
 
 ## What makes it useful
 
@@ -131,7 +132,8 @@ Both result files identify the common request fingerprint. They omit the endpoin
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
-| `schema` | Never | Print a bundled request, result, or comparison JSON Schema |
+| `schema` | Never | Print a bundled request, result, comparison, or provider-check JSON Schema |
+| `provider-check` | Once | Send a tiny fixed request to test the supported provider wire contract |
 | `execute` | Once | Execute the exact messages in a validated artifact |
 | `run` | Once | Convenience path that builds and executes in one process |
 
@@ -148,6 +150,7 @@ without installing another tool or using the network:
 samsarix-codegen schema request > request-artifact-v2.schema.json
 samsarix-codegen schema result > execution-result-v1.schema.json
 samsarix-codegen schema comparison > artifact-comparison-v1.schema.json
+samsarix-codegen schema provider-check > provider-check-v1.schema.json
 ```
 
 The same files ship inside the typed Python package and are available through
@@ -172,6 +175,18 @@ semantic integrity checks such as recomputing fingerprints, estimates, and byte 
 
 The default endpoint is `http://127.0.0.1:11434/v1`, a common local OpenAI-compatible shape. Start
 your local service and name an installed model explicitly:
+
+```bash
+samsarix-codegen provider-check --model your-local-model
+```
+
+This explicit preflight sends exactly one request containing two fixed messages and no source
+context. It is non-streaming, never retried, and capped at 64 output tokens by default (256 maximum),
+so provider charges may apply. Text and JSON reports omit the endpoint, credential, and response
+content. A pass establishes only that the selected endpoint/model satisfied the package's current
+Chat Completions wire contract for that request; it is not a provider endorsement or quality test.
+
+Then run a real request:
 
 ```bash
 samsarix-codegen run "Write focused tests for this function" \
@@ -217,7 +232,9 @@ reducing accidental exposure in shell history and process listings.
   `ceil(total UTF-8 message bytes / 4)`, not provider billing data.
 - Provider output defaults to 1,024 tokens and is capped at 32,768. Network timeouts range from 1
   to 300 seconds and default to 60.
-- Requests are non-streaming and never automatically retried. Responses larger than 10 MiB fail.
+- Requests are non-streaming, never automatically retried, and never follow HTTP redirects.
+  Responses larger than 10 MiB fail.
+- `provider-check` sends no selected context and has a separate 256-token hard output ceiling.
 - Remote endpoints require HTTPS; plain HTTP is accepted only for localhost and loopback addresses.
 
 Consult the selected provider's current pricing. Samsarix cannot calculate monetary cost without a
@@ -271,10 +288,12 @@ python -m pytest -ra
 python -m build
 ```
 
-CI runs these checks plus built-wheel artifact, comparison, and contract-schema smoke tests on
+CI runs these checks plus built-wheel artifact, comparison, provider-check contract, and schema
+smoke tests on
 Python 3.10 and 3.14 across Ubuntu and Windows. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
-[productization record](docs/PRODUCTIZATION.md).
+[productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
+the remaining external usefulness gate and its privacy-preserving evidence record.
 
 ## Architecture
 
@@ -314,7 +333,7 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - There is no telemetry, analytics, background process, automatic history, or retry loop.
 
 Tool calling, image input, streaming, automatic edits, repository discovery, sessions, signing,
-provider-specific Responses APIs, and provider certification are intentionally out of scope for
+provider-specific Responses APIs, and provider endorsement are intentionally out of scope for
 `0.2.0`. The [competitive strategy](docs/COMPETITIVE_STRATEGY.md) explains this boundary and the
 evidence behind it.
 

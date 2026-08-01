@@ -30,6 +30,13 @@ from samsarix_codegen.errors import ArtifactError, ConfigurationError, ContextEr
 from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages, render_markdown
 from samsarix_codegen.provider import OpenAIChatClient
+from samsarix_codegen.provider_check import (
+    DEFAULT_PROVIDER_CHECK_OUTPUT_TOKENS,
+    MAX_PROVIDER_CHECK_OUTPUT_TOKENS,
+    PROVIDER_CHECK_MESSAGES,
+    check_provider,
+    render_provider_check,
+)
 from samsarix_codegen.schema import ContractSchema, render_contract_schema
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1"
@@ -64,6 +71,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_request_arguments(run_command)
     _add_provider_arguments(run_command)
+
+    provider_check_command = subparsers.add_parser(
+        "provider-check",
+        help="send one small, content-free request to verify provider compatibility",
+    )
+    _add_provider_arguments(provider_check_command, provider_check=True)
 
     schema_command = subparsers.add_parser(
         "schema", help="print a bundled versioned JSON Schema without network access"
@@ -120,6 +133,8 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
     try:
         if args.command in {"build", "run"}:
             return _handle_request_command(args, input_stream)
+        if args.command == "provider-check":
+            return _handle_provider_check(args)
         if args.command == "schema":
             _write_stdout(render_contract_schema(args.contract))
             return 0
@@ -192,6 +207,25 @@ def _execute_artifact(artifact: RequestArtifact, args: argparse.Namespace) -> in
     return 0
 
 
+def _handle_provider_check(args: argparse.Namespace) -> int:
+    config = ProviderConfig(
+        endpoint=args.endpoint,
+        model=args.model or "",
+        api_key=os.environ.get("SAMSARIX_API_KEY"),
+        timeout_seconds=float(args.timeout),
+        max_output_tokens=args.max_output_tokens,
+    )
+    print(
+        f"Provider check will send one request containing {len(PROVIDER_CHECK_MESSAGES)} fixed "
+        f"messages, no source context, and at most {config.max_output_tokens:,} output tokens. "
+        "Provider charges may apply.",
+        file=sys.stderr,
+    )
+    report = check_provider(config)
+    _write_stdout(render_provider_check(report, output_format=args.format))
+    return 0
+
+
 def _add_request_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("instruction", help="the coding request")
     parser.add_argument(
@@ -242,7 +276,11 @@ def _add_estimated_input_budget(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_provider_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_provider_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    provider_check: bool = False,
+) -> None:
     parser.add_argument(
         "--endpoint",
         default=os.environ.get("SAMSARIX_API_BASE", DEFAULT_ENDPOINT),
@@ -260,12 +298,21 @@ def _add_provider_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="SECONDS",
         help="network timeout from 1 to 300 seconds (default: 60)",
     )
+    maximum_output_tokens = MAX_PROVIDER_CHECK_OUTPUT_TOKENS if provider_check else 32_768
+    default_output_tokens = (
+        str(DEFAULT_PROVIDER_CHECK_OUTPUT_TOKENS)
+        if provider_check
+        else os.environ.get("SAMSARIX_MAX_OUTPUT_TOKENS", "1024")
+    )
     parser.add_argument(
         "--max-output-tokens",
-        type=_bounded_int(1, 32_768, "max output tokens"),
-        default=os.environ.get("SAMSARIX_MAX_OUTPUT_TOKENS", "1024"),
+        type=_bounded_int(1, maximum_output_tokens, "max output tokens"),
+        default=default_output_tokens,
         metavar="TOKENS",
-        help="provider output cap from 1 to 32,768 tokens (default: 1024)",
+        help=(
+            f"provider output cap from 1 to {maximum_output_tokens:,} tokens "
+            f"(default: {default_output_tokens})"
+        ),
     )
     parser.add_argument(
         "--format",

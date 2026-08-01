@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import closing
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from samsarix_codegen import __version__
 from samsarix_codegen.errors import ProviderError
@@ -52,7 +52,7 @@ class OpenAIChatClient:
         )
 
         try:
-            with closing(urlopen(request, timeout=self.config.timeout_seconds)) as response:
+            with closing(_open_without_redirects(request, self.config.timeout_seconds)) as response:
                 raw = response.read(MAX_RESPONSE_BYTES + 1)
         except HTTPError as exc:
             detail = _read_http_error(exc, self.config.api_key)
@@ -114,6 +114,25 @@ def _extract_text(decoded: dict[str, Any]) -> str:
         if text:
             return text
     raise ProviderError("model response contains no text content")
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    """Fail closed so bearer credentials cannot follow a provider-controlled redirect."""
+
+    def redirect_request(
+        self,
+        req: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        raise HTTPError(req.full_url, code, "redirects are not allowed", headers, fp)
+
+
+def _open_without_redirects(request: Request, timeout: float) -> Any:
+    return build_opener(_RejectRedirects()).open(request, timeout=timeout)
 
 
 def _optional_nonnegative_int(value: object) -> int | None:

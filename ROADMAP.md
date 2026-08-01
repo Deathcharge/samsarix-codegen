@@ -8,8 +8,8 @@ Portfolio role: **standalone product candidate**. Develop this as a focused stan
 
 Current disposition: The productized default is merged and preserved by a rollback ref. Version
 `0.2.0` has merged deterministic request-artifact and offline review/comparison workflows.
-Versioned machine-readable contracts are the current milestone. Release, publication, and flagship
-adoption remain separate decisions.
+Versioned machine-readable contracts and an operator-run provider conformance check are merged
+milestones. Release, publication, pilot validation, and flagship adoption remain separate decisions.
 
 ## Stabilize the productized default
 
@@ -20,7 +20,7 @@ adoption remain separate decisions.
 
 ## Release candidate
 
-- Run a small user pilot against the exact packaged artifact.
+- Run the documented three-developer pilot against one exact packaged artifact.
 - Instrument only truthful, privacy-respecting product signals and define support ownership.
 - Promote from prerelease only after recovery, upgrade, and failure paths are demonstrated.
 
@@ -34,9 +34,11 @@ Current hardening backlog:
   package-verified for the review-tools follow-up.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented
   and locally package-verified for the contract milestone.
-- No live provider certification, streaming, ignore-aware manifest, or editor integration.
+- A content-free, one-request provider check is implemented; no owner-selected live provider has
+  been certified. Streaming, ignore-aware manifests, and editor integration remain deferred.
 - Package name, signing, and publication are not owner-completed.
-- A standard-library HTTP client creates a small but ongoing compatibility/security review burden across provider variants and redirects.
+- A standard-library HTTP client creates a small but ongoing compatibility review burden across
+  provider variants. Redirects are rejected to prevent bearer-credential forwarding.
 
 ## Samsarix adoption
 

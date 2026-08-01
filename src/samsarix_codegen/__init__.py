@@ -27,6 +27,11 @@ from samsarix_codegen.models import (
 )
 from samsarix_codegen.prompt import build_messages, estimate_tokens, render_markdown
 from samsarix_codegen.provider import OpenAIChatClient
+from samsarix_codegen.provider_check import (
+    ProviderCheckReport,
+    check_provider,
+    render_provider_check,
+)
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 
 __all__ = [
@@ -37,10 +42,12 @@ __all__ = [
     "OpenAIChatClient",
     "PromptRequest",
     "ProviderConfig",
+    "ProviderCheckReport",
     "RequestArtifact",
     "RequestArtifactComparison",
     "Task",
     "build_messages",
+    "check_provider",
     "compare_request_artifacts",
     "create_request_artifact",
     "estimate_tokens",
@@ -50,6 +57,7 @@ __all__ = [
     "render_artifact_comparison",
     "render_artifact_summary",
     "render_markdown",
+    "render_provider_check",
     "render_request_artifact",
     "render_contract_schema",
     "require_fingerprint",

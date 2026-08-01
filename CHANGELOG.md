@@ -18,6 +18,9 @@ approves a first public release.
 - Content-safe offline artifact comparison in text and JSON formats.
 - Bundled JSON Schema Draft 2020-12 contracts and an offline `schema` export command for request,
   result, and comparison envelopes.
+- A one-request `provider-check` preflight with a content-safe JSON evidence envelope, a 256-token
+  hard ceiling, and a bundled Draft 2020-12 contract.
+- A privacy-preserving three-developer pilot protocol with explicit evidence and decision gates.
 - Competitive-positioning and request-artifact contract documentation.
 
 ### Changed
@@ -25,6 +28,8 @@ approves a first public release.
 - JSON `build` output is now executable request-artifact schema version 2.
 - Redirected and piped CLI output is emitted as UTF-8 consistently across platforms.
 - Execution-result rendering now rejects values outside its documented schema.
+- Provider requests reject HTTP redirects so bearer credentials cannot be forwarded to a redirect
+  target.
 - The version advances to `0.2.0` to mark the first post-productization workflow milestone.
 
 ## [0.1.0] - Unreleased

@@ -19,12 +19,14 @@ class ContractSchema(str, Enum):
     REQUEST = "request"
     RESULT = "result"
     COMPARISON = "comparison"
+    PROVIDER_CHECK = "provider-check"
 
 
 _SCHEMA_FILES = {
     ContractSchema.REQUEST: "request-artifact-v2.schema.json",
     ContractSchema.RESULT: "execution-result-v1.schema.json",
     ContractSchema.COMPARISON: "artifact-comparison-v1.schema.json",
+    ContractSchema.PROVIDER_CHECK: "provider-check-v1.schema.json",
 }
 
 

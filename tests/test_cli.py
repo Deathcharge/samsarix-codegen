@@ -11,6 +11,16 @@ from samsarix_codegen.cli import main
 from samsarix_codegen.models import ChatResult, PromptRequest, Task
 from samsarix_codegen.prompt import build_messages
 
+EXPECTED_PROVIDER_CHECK_MESSAGES = (
+    {
+        "role": "system",
+        "content": (
+            "This is a provider compatibility check. Return a short plain-text acknowledgement."
+        ),
+    },
+    {"role": "user", "content": "Reply with SAMSARIX_OK."},
+)
+
 
 def test_build_markdown_is_complete_local_journey(tmp_path: Path, capsys) -> None:
     source = tmp_path / "hello.py"
@@ -124,6 +134,63 @@ def test_run_uses_samsarix_environment_configuration(capsys, monkeypatch) -> Non
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.out == "Environment configured\n"
+
+
+def test_provider_check_reports_content_safe_machine_evidence(capsys, monkeypatch) -> None:
+    calls = 0
+
+    def fake_complete(self, messages):
+        nonlocal calls
+        calls += 1
+        assert tuple(messages) == EXPECTED_PROVIDER_CHECK_MESSAGES
+        assert self.config.model == "pilot-model"
+        assert self.config.api_key == "secret-check-key"
+        assert self.config.max_output_tokens == 64
+        return ChatResult(
+            "SAMSARIX_OK",
+            prompt_tokens=18,
+            completion_tokens=4,
+            total_tokens=22,
+        )
+
+    monkeypatch.setenv("SAMSARIX_API_KEY", "secret-check-key")
+    monkeypatch.setattr("samsarix_codegen.provider_check.OpenAIChatClient.complete", fake_complete)
+
+    exit_code = main(["provider-check", "--model", "pilot-model", "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert calls == 1
+    assert payload["status"] == "passed"
+    assert payload["request"] == {
+        "message_count": 2,
+        "source_context_items": 0,
+        "max_output_tokens": 64,
+        "stream": False,
+    }
+    assert payload["response"]["text_chars"] == 11
+    assert payload["usage"]["total_tokens"] == 22
+    assert "Provider charges may apply" in captured.err
+    assert "secret-check-key" not in captured.out + captured.err
+    assert "SAMSARIX_OK" not in captured.out + captured.err
+
+
+def test_provider_check_requires_model_before_network(capsys, monkeypatch) -> None:
+    monkeypatch.delenv("SAMSARIX_MODEL", raising=False)
+
+    def fail_if_called(self, messages):
+        raise AssertionError("provider must not be called")
+
+    monkeypatch.setattr("samsarix_codegen.provider_check.OpenAIChatClient.complete", fail_if_called)
+
+    exit_code = main(["provider-check"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "a model is required" in captured.err
+    assert "Provider charges may apply" not in captured.err
 
 
 def test_run_rejects_remote_plain_http(capsys) -> None:

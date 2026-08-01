@@ -15,6 +15,8 @@ Its product promise is narrower and testable:
 4. Let a reviewer validate and pin the artifact fingerprint offline.
 5. Execute exactly that reviewed message payload once, without file writes, tools, or retries.
 6. Publish versioned JSON contracts that independent CI systems can validate without private code.
+7. Let operators test the exact provider wire contract with one fixed, content-free request before
+   sending reviewed source or logs.
 
 ## Evidence from adjacent products
 
@@ -80,8 +82,9 @@ that provider behavior, tokenization, or outputs are equivalent.
 
 ## Next evidence gates
 
-1. Three-developer pilot using pre-commit review and one non-code incident-triage workflow.
-2. Consumer adoption of the bundled schemas, plus contract tests against explicitly supported
-   local/provider endpoints.
+1. Complete the [three-developer pilot](PILOT.md) using pre-commit review and one non-code
+   incident-triage workflow.
+2. Record operator-run conformance reports and deeper contract tests against any local/provider
+   endpoints Samsarix chooses to support explicitly.
 3. Package reservation, trusted publishing, artifact signing, and documented rollback.
 4. Only after pilot evidence: consider opt-in streaming, ignore-aware manifests, or editor hooks.
