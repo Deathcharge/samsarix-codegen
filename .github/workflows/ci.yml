@@ -50,3 +50,9 @@ jobs:
           fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
           test "${fingerprint#sha256:}" != "$fingerprint"
           test "${#fingerprint}" -eq 71
+          samsarix-codegen inspect request.json --format markdown > reviewed-prompt.md
+          grep -q "Review this change" reviewed-prompt.md
+          printf 'diff --git a/app.py b/app.py\n+enabled = False\n' |
+            samsarix-codegen build "Review the revised change" --task review --stdin-name staged.diff --format json > revised-request.json
+          samsarix-codegen compare request.json revised-request.json --format json > comparison.json
+          grep -q '"changed": true' comparison.json

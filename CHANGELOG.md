@@ -14,6 +14,8 @@ approves a first public release.
 - Explicit bounded UTF-8 stdin context for staged diffs, selected log excerpts, and shell pipelines.
 - Optional hard `--max-estimated-input-tokens` gate before any provider request.
 - Machine-readable provider result envelopes for `run` and `execute`.
+- Exact stored-prompt rendering with `inspect --format markdown`.
+- Content-safe offline artifact comparison in text and JSON formats.
 - Competitive-positioning and request-artifact contract documentation.
 
 ### Changed

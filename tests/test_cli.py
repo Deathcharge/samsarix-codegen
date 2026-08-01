@@ -252,3 +252,46 @@ def test_inspect_reads_artifact_from_stdin(capsys) -> None:
     summary = json.loads(captured.out)
     assert exit_code == 0
     assert summary["request_fingerprint"] == artifact.fingerprint
+
+
+def test_inspect_renders_exact_stored_prompt_as_markdown(tmp_path: Path, capsys) -> None:
+    request = PromptRequest(Task.DEBUG, "Diagnose the exact failure")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    artifact_path = tmp_path / "request.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+
+    exit_code = main(["inspect", str(artifact_path), "--format", "markdown"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Task: debug" in captured.out
+    assert "Diagnose the exact failure" in captured.out
+
+
+def test_compare_artifacts_is_machine_readable_and_content_safe(tmp_path: Path, capsys) -> None:
+    base_request = PromptRequest(Task.REVIEW, "Review secret old behavior")
+    target_request = PromptRequest(Task.REVIEW, "Review secret new behavior")
+    base = create_request_artifact(build_messages(base_request), base_request.files)
+    target = create_request_artifact(build_messages(target_request), target_request.files)
+    base_path = tmp_path / "base.json"
+    target_path = tmp_path / "target.json"
+    base_path.write_text(render_request_artifact(base), encoding="utf-8")
+    target_path.write_text(render_request_artifact(target), encoding="utf-8")
+
+    exit_code = main(["compare", str(base_path), str(target_path), "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["changed"] is True
+    assert payload["messages"]["changed_indices"] == [1]
+    assert "secret old behavior" not in captured.out
+    assert "secret new behavior" not in captured.out
+
+
+def test_compare_rejects_two_stdin_inputs(capsys) -> None:
+    exit_code = main(["compare", "-", "-"], stdin=BytesIO(b"{}"))
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert "cannot both read from stdin" in captured.err

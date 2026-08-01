@@ -21,8 +21,12 @@ execute --expect-fingerprint
 one bounded provider request
 ```
 
-`build` and `inspect` never make a network request. `execute` does not read source files; it sends
-the validated `messages` stored in the artifact.
+`build`, `inspect`, and `compare` never make a network request. `execute` does not read source
+files; it sends the validated `messages` stored in the artifact.
+
+`inspect --format markdown` renders those exact stored messages for human review after validation;
+it does not rebuild them from files. Because that view contains the full prompt, handle it with the
+same confidentiality controls as the JSON artifact.
 
 ## Schema version 2
 
@@ -98,3 +102,17 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
 
 The endpoint and API key are intentionally absent. Usage values remain `null` when the provider does
 not return valid non-negative integers.
+
+## Offline comparison
+
+`compare BASE TARGET` validates both artifacts and reports whether their fingerprints differ. Its
+text and JSON forms contain both fingerprints, zero-based indexes of changed messages,
+added/removed context metadata, and byte/token-estimate deltas. They intentionally omit message
+contents.
+
+A context item whose name is unchanged but whose content hash or byte size changed is reported as
+one removed record and one added record. Duplicate metadata records are compared as a multiset in
+their original order. Comparison schema version `1` is independent of request schema version `2`.
+
+Both artifact paths cannot be `-` because a single stdin stream cannot supply two independently
+bounded JSON documents.

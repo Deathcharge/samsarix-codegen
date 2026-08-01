@@ -16,8 +16,10 @@ from samsarix_codegen import __version__
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
     RequestArtifact,
+    compare_request_artifacts,
     create_request_artifact,
     parse_request_artifact,
+    render_artifact_comparison,
     render_artifact_summary,
     render_execution_result,
     render_request_artifact,
@@ -68,9 +70,23 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_command.add_argument("artifact", metavar="PATH", help="artifact path, or - for stdin")
     inspect_command.add_argument(
         "--format",
-        choices=("text", "json", "fingerprint"),
+        choices=("text", "json", "fingerprint", "markdown"),
         default="text",
-        help="summary output format (default: text)",
+        help="summary, fingerprint, or exact stored prompt format (default: text)",
+    )
+
+    compare_command = subparsers.add_parser(
+        "compare", help="compare two validated request artifacts without showing prompt contents"
+    )
+    compare_command.add_argument("base", metavar="BASE", help="base artifact path, or - for stdin")
+    compare_command.add_argument(
+        "target", metavar="TARGET", help="target artifact path, or - for stdin"
+    )
+    compare_command.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="comparison output format (default: text)",
     )
 
     execute_command = subparsers.add_parser(
@@ -96,7 +112,18 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             return _handle_request_command(args, input_stream)
         if args.command == "inspect":
             artifact = _read_artifact(args.artifact, input_stream)
-            _write_stdout(render_artifact_summary(artifact, output_format=args.format))
+            if args.format == "markdown":
+                _write_stdout(render_markdown(artifact.messages))
+            else:
+                _write_stdout(render_artifact_summary(artifact, output_format=args.format))
+            return 0
+        if args.command == "compare":
+            if args.base == "-" and args.target == "-":
+                raise ArtifactError("BASE and TARGET cannot both read from stdin")
+            base = _read_artifact(args.base, input_stream)
+            target = _read_artifact(args.target, input_stream)
+            comparison = compare_request_artifacts(base, target)
+            _write_stdout(render_artifact_comparison(comparison, output_format=args.format))
             return 0
         if args.command == "execute":
             artifact = _read_artifact(args.artifact, input_stream)
