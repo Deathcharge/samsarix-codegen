@@ -27,3 +27,7 @@ their source material. Artifact fingerprints and per-context hashes detect drift
 they do not prove who created or approved an artifact. Use external access controls or signing when
 authenticity across a trust boundary is required. See the README and
 `docs/REQUEST_ARTIFACT.md` for implemented limits and residual risks.
+
+The bundled JSON Schemas validate envelope shape but do not authenticate content or recompute
+fingerprints, estimates, byte totals, or comparison deltas. Use `inspect`/`compare` or the Python
+parser for semantic validation; do not treat generic schema validation alone as execution approval.

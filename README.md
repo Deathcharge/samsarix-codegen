@@ -131,12 +131,29 @@ Both result files identify the common request fingerprint. They omit the endpoin
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
+| `schema` | Never | Print a bundled request, result, or comparison JSON Schema |
 | `execute` | Once | Execute the exact messages in a validated artifact |
 | `run` | Once | Convenience path that builds and executes in one process |
 
 `run --format json` and `execute --format json` return a stable result envelope with the request
 fingerprint, model, response text, and provider usage when reported. Use
 `samsarix-codegen <command> --help` for the complete option set.
+
+## Machine-readable contracts
+
+Export a self-contained [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) contract
+without installing another tool or using the network:
+
+```bash
+samsarix-codegen schema request > request-artifact-v2.schema.json
+samsarix-codegen schema result > execution-result-v1.schema.json
+samsarix-codegen schema comparison > artifact-comparison-v1.schema.json
+```
+
+The same files ship inside the typed Python package and are available through
+`load_contract_schema()`. They let CI or a separate repository validate the public JSON shape
+without importing Samsarix implementation code. JSON Schema validates structure; the CLI adds
+semantic integrity checks such as recomputing fingerprints, estimates, and byte totals.
 
 ## Task guidance
 
@@ -226,16 +243,19 @@ provider client:
 
 ```python
 from samsarix_codegen import (
+    ContractSchema,
     PromptRequest,
     Task,
     build_messages,
     create_request_artifact,
+    load_contract_schema,
     render_request_artifact,
 )
 
 request = PromptRequest(task=Task.DEBUG, instruction="Find the likely failure")
 artifact = create_request_artifact(build_messages(request), request.files)
 print(render_request_artifact(artifact))
+request_schema = load_contract_schema(ContractSchema.REQUEST)
 ```
 
 Unstable implementation helpers are not exported from `samsarix_codegen`.
@@ -251,8 +271,8 @@ python -m pytest -ra
 python -m build
 ```
 
-CI runs these checks plus a built-wheel installation and offline artifact smoke test on Python 3.10
-and 3.14 across Ubuntu and Windows. See [CONTRIBUTING.md](CONTRIBUTING.md),
+CI runs these checks plus built-wheel artifact, comparison, and contract-schema smoke tests on
+Python 3.10 and 3.14 across Ubuntu and Windows. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md).
 

@@ -14,6 +14,7 @@ Its product promise is narrower and testable:
 3. Make size, provenance, and the approximate input budget visible before any network request.
 4. Let a reviewer validate and pin the artifact fingerprint offline.
 5. Execute exactly that reviewed message payload once, without file writes, tools, or retries.
+6. Publish versioned JSON contracts that independent CI systems can validate without private code.
 
 ## Evidence from adjacent products
 
@@ -80,6 +81,7 @@ that provider behavior, tokenization, or outputs are equivalent.
 ## Next evidence gates
 
 1. Three-developer pilot using pre-commit review and one non-code incident-triage workflow.
-2. Contract tests against explicitly supported local/provider endpoints.
+2. Consumer adoption of the bundled schemas, plus contract tests against explicitly supported
+   local/provider endpoints.
 3. Package reservation, trusted publishing, artifact signing, and documented rollback.
 4. Only after pilot evidence: consider opt-in streaming, ignore-aware manifests, or editor hooks.

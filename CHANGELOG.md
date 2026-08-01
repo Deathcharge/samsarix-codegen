@@ -16,12 +16,15 @@ approves a first public release.
 - Machine-readable provider result envelopes for `run` and `execute`.
 - Exact stored-prompt rendering with `inspect --format markdown`.
 - Content-safe offline artifact comparison in text and JSON formats.
+- Bundled JSON Schema Draft 2020-12 contracts and an offline `schema` export command for request,
+  result, and comparison envelopes.
 - Competitive-positioning and request-artifact contract documentation.
 
 ### Changed
 
 - JSON `build` output is now executable request-artifact schema version 2.
 - Redirected and piped CLI output is emitted as UTF-8 consistently across platforms.
+- Execution-result rendering now rejects values outside its documented schema.
 - The version advances to `0.2.0` to mark the first post-productization workflow milestone.
 
 ## [0.1.0] - Unreleased
