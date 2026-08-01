@@ -5,7 +5,7 @@ type: software
 authors:
   - name: "Samsarix LLC"
     email: "contact@samsarix.com"
-version: 0.1.0
+version: 0.2.0
 repository-code: "https://github.com/Deathcharge/samsarix-codegen"
 url: "https://github.com/Deathcharge/samsarix-codegen"
 license: Apache-2.0

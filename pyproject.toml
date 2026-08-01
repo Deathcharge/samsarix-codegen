@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "samsarix-codegen"
-version = "0.1.0"
-description = "Build and optionally run bounded, inspectable prompts for coding tasks"
+version = "0.2.0"
+description = "Compile and execute bounded, reviewable requests for coding models"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"

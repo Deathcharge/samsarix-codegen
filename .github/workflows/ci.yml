@@ -38,9 +38,15 @@ jobs:
       - name: Verify wheel install and primary journey
         shell: bash
         run: |
+          set -euo pipefail
           wheel="$(find dist -name '*.whl' -print -quit)"
           python -m pip install --force-reinstall --no-deps "$wheel"
           python -m pip check
           samsarix-codegen --version
           samsarix-codegen build "Explain this function" --task explain --file examples/sample.py > prompt.md
           grep -q "def greet" prompt.md
+          printf 'diff --git a/app.py b/app.py\n+enabled = True\n' |
+            samsarix-codegen build "Review this change" --task review --stdin-name staged.diff --format json > request.json
+          fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
+          test "${fingerprint#sha256:}" != "$fingerprint"
+          test "${#fingerprint}" -eq 71

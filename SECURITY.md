@@ -17,6 +17,13 @@ eligible for security fixes. After publication, this section will identify suppo
 
 ## Scope and trust boundaries
 
-Samsarix Codegen reads only explicitly selected files, never applies or executes model output, and
-makes a network request only through the `run` command. File content, endpoint responses, and model
-output remain untrusted. See the README for the implemented limits and residual risks.
+Samsarix Codegen reads only explicitly selected files or a deliberately named stdin stream, never
+applies or executes model output, and makes a network request only through `run` or `execute`.
+File content, request artifacts, endpoint responses, and model output remain untrusted.
+
+Request artifacts contain the complete model messages and therefore can contain source code, logs,
+or other sensitive input. Store and transmit them under the same access and retention policy as
+their source material. Artifact fingerprints and per-context hashes detect drift but are unkeyed;
+they do not prove who created or approved an artifact. Use external access controls or signing when
+authenticity across a trust boundary is required. See the README and
+`docs/REQUEST_ARTIFACT.md` for implemented limits and residual risks.

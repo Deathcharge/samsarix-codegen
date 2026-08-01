@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
+from typing import BinaryIO
 
 from samsarix_codegen.errors import ContextError
 from samsarix_codegen.models import ContextFile
@@ -14,6 +15,7 @@ from samsarix_codegen.models import ContextFile
 DEFAULT_MAX_FILES = 20
 DEFAULT_MAX_TOTAL_BYTES = 200_000
 DEFAULT_MAX_FILE_BYTES = 100_000
+MAX_STDIN_NAME_CHARS = 200
 
 
 def load_context_files(
@@ -106,6 +108,41 @@ def load_context_files(
         )
 
     return tuple(loaded)
+
+
+def load_stream_context(
+    name: str,
+    stream: BinaryIO,
+    *,
+    max_bytes: int,
+) -> ContextFile:
+    """Load one explicitly requested, bounded UTF-8 context item from a binary stream."""
+
+    label = name.strip()
+    if not label:
+        raise ContextError("--stdin-name cannot be blank")
+    if len(label) > MAX_STDIN_NAME_CHARS:
+        raise ContextError(f"--stdin-name exceeds the {MAX_STDIN_NAME_CHARS}-character limit")
+    if any(not character.isprintable() for character in label):
+        raise ContextError("--stdin-name cannot contain control characters")
+    if max_bytes < 1:
+        raise ContextError("no context byte budget remains for stdin")
+
+    try:
+        raw = stream.read(max_bytes + 1)
+    except OSError as exc:
+        raise ContextError(f"cannot read stdin context: {exc}") from exc
+    if len(raw) > max_bytes:
+        raise ContextError(f"stdin context exceeds the remaining {max_bytes:,}-byte limit")
+    if not raw:
+        raise ContextError("stdin context is empty")
+    if b"\x00" in raw:
+        raise ContextError("binary stdin context is not supported")
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ContextError("stdin context is not valid UTF-8") from exc
+    return ContextFile(path=f"stdin:{label}", content=content, size_bytes=len(raw))
 
 
 def _resolve_root(root: str | Path) -> Path:

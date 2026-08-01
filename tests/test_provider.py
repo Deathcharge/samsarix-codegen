@@ -65,7 +65,7 @@ def test_client_sends_bounded_request_and_normalizes_usage() -> None:
     assert result.total_tokens == 15
     assert captured["path"] == "/v1/chat/completions"
     assert captured["authorization"] == "Bearer test-key"
-    assert captured["user_agent"] == "samsarix-codegen/0.1.0"
+    assert captured["user_agent"] == "samsarix-codegen/0.2.0"
     body = captured["body"]
     assert isinstance(body, dict)
     assert body["model"] == "test-model"
