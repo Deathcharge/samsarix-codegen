@@ -109,6 +109,9 @@ Research references:
     and attest but cannot publish. Only an exact `vX.Y.Z` tag contained in `master`, with matching
     source versions and a dated changelog, can reach the manually approved `pypi` environment.
     GitHub release publication waits for PyPI and uses a draft-first asset sequence.
+15. **Structural result comparison.** Strict parsing and a shared request fingerprint let operators
+    compare model labels, response equality, UTF-8 sizes, hashes, and reported token usage offline.
+    The comparison omits response bodies and is not a quality score or provider-authenticity proof.
 
 ## Assumptions
 
@@ -176,14 +179,15 @@ Final command evidence is recorded in the **Final verification** section after e
 - [ ] Consider ignore-file-based discovery only if explicit-input ergonomics prove insufficient;
   retain visible budgets and path boundaries.
 - [x] Add dry-runnable release verification, provenance, and gated Trusted Publishing automation.
+- [x] Add strict same-request execution-result comparison without reproducing response contents.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build`, `inspect`, `compare`, `execute`, `run`, `schema`, and `provider-check` commands with
-  useful help and version behavior.
+- [x] `build`, `inspect`, `compare`, `compare-results`, `execute`, `run`, `schema`, and
+  `provider-check` commands with useful help and version behavior.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -220,6 +224,8 @@ Final command evidence is recorded in the **Final verification** section after e
   standalone CI and cross-repository consumers.
 - Added one-request provider conformance evidence and a bounded three-developer pilot protocol that
   collects usability signals without collecting prompts, source, logs, responses, or credentials.
+- Added strict execution-result parsing, same-request content-omitting comparison, and a standalone
+  versioned schema for downstream CI consumers.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
   full-SHA-pinned Actions, provenance attestations, gated Trusted Publishing, immutable-ready GitHub
   release assembly, and a recovery runbook.
@@ -431,6 +437,19 @@ passed for both against this repository. The exact remote digests were
 `80db412fbdafb0a76f305066fee99540574747e7b9ef16888c92c4c9ee784e7a` for the sdist.
 [Post-merge CI run 30719540861](https://github.com/Deathcharge/samsarix-codegen/actions/runs/30719540861)
 also passed the four-platform matrix using the current full-SHA-pinned Node 24 Actions releases.
+
+### Execution-result comparison follow-up
+
+Python 3.14.6 source checks passed with 120 tests. The extracted sdist passed lint, formatting,
+strict typing, and the same 120 tests before producing a Twine-valid rebuilt wheel. The exact
+repository-built sdist/wheel pair passed Twine and the fail-closed release audit. A dependency-free
+fresh environment installed the audited wheel with no broken requirements or unconditional runtime
+dependencies. From outside the checkout, the installed command exported the result-comparison
+schema, compared two same-request envelopes without response-body disclosure, and produced JSON
+that validated against the shipped Draft 2020-12 contract. The installed typed parser, summary,
+comparison, schema enum, and render API were also exercised. Exact final distribution digests are
+attached to the corresponding pull request because recording them inside the sdist would change the
+sdist digest.
 
 ### Validation not run
 

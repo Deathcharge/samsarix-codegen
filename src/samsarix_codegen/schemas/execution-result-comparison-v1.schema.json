@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Samsarix Codegen Execution Result Comparison",
+  "description": "A content-omitting comparison of two provider results linked to one reviewed request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_fingerprint",
+    "model_changed",
+    "response_identical",
+    "base",
+    "target",
+    "delta"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "request_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "model_changed": {"type": "boolean"},
+    "response_identical": {"type": "boolean"},
+    "base": {"$ref": "#/$defs/result_summary"},
+    "target": {"$ref": "#/$defs/result_summary"},
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "response_chars",
+        "response_bytes",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens"
+      ],
+      "properties": {
+        "response_chars": {"type": "integer"},
+        "response_bytes": {"type": "integer"},
+        "prompt_tokens": {"$ref": "#/$defs/optional_delta"},
+        "completion_tokens": {"$ref": "#/$defs/optional_delta"},
+        "total_tokens": {"$ref": "#/$defs/optional_delta"}
+      }
+    }
+  },
+  "$defs": {
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "usage_value": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "optional_delta": {
+      "type": ["integer", "null"]
+    },
+    "result_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "response", "usage"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chars", "bytes", "sha256"],
+          "properties": {
+            "chars": {"type": "integer", "minimum": 1, "maximum": 12582912},
+            "bytes": {"type": "integer", "minimum": 1, "maximum": 12582912},
+            "sha256": {"$ref": "#/$defs/fingerprint"}
+          }
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+          "properties": {
+            "prompt_tokens": {"$ref": "#/$defs/usage_value"},
+            "completion_tokens": {"$ref": "#/$defs/usage_value"},
+            "total_tokens": {"$ref": "#/$defs/usage_value"}
+          }
+        }
+      }
+    }
+  }
+}

@@ -7,12 +7,19 @@ import pytest
 
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
+    MAX_RESULT_BYTES,
+    ExecutionResult,
+    ExecutionResultComparison,
+    ExecutionResultSummary,
+    compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
+    parse_execution_result,
     parse_request_artifact,
     render_artifact_comparison,
     render_artifact_summary,
     render_execution_result,
+    render_execution_result_comparison,
     render_request_artifact,
     require_fingerprint,
 )
@@ -162,6 +169,136 @@ def test_execution_result_rejects_values_outside_its_public_contract(
 ) -> None:
     with pytest.raises(ArtifactError, match=match):
         render_execution_result(make_artifact(), result, model=model)
+
+
+def test_execution_result_round_trips_as_a_strict_envelope() -> None:
+    artifact = make_artifact()
+    rendered = render_execution_result(
+        artifact,
+        ChatResult("Reviewed response", prompt_tokens=10, completion_tokens=3, total_tokens=13),
+        model="local-model",
+    )
+
+    parsed = parse_execution_result(b"\xef\xbb\xbf" + rendered.encode("utf-8"))
+
+    assert parsed.request_fingerprint == artifact.fingerprint
+    assert parsed.model == "local-model"
+    assert parsed.response_text == "Reviewed response"
+    assert parsed.prompt_tokens == 10
+    assert parsed.completion_tokens == 3
+    assert parsed.total_tokens == 13
+    assert parsed.to_payload() == json.loads(rendered)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (lambda payload: payload.update(schema_version=True), "unsupported.*schema"),
+        (lambda payload: payload.update(unexpected=True), "fields do not match"),
+        (lambda payload: payload.update(model=" local "), "surrounding whitespace"),
+        (lambda payload: payload["usage"].update(total_tokens=True), "non-negative integer"),
+        (lambda payload: payload["response"].update(text="\ud800"), "not valid UTF-8"),
+    ],
+)
+def test_execution_result_parser_rejects_contract_drift(mutate, match: str) -> None:
+    rendered = render_execution_result(
+        make_artifact(), ChatResult("Reviewed response"), model="local"
+    )
+    payload = json.loads(rendered)
+    mutate(payload)
+
+    with pytest.raises(ArtifactError, match=match):
+        parse_execution_result(json.dumps(payload))
+
+
+def test_execution_result_enforces_bounded_utf8_and_safe_model_labels() -> None:
+    with pytest.raises(ArtifactError, match="byte safety limit"):
+        parse_execution_result(b" " * (MAX_RESULT_BYTES + 1))
+
+    with pytest.raises(ArtifactError, match="control character"):
+        render_execution_result(make_artifact(), ChatResult("ok"), model="unsafe\nmodel")
+
+    fingerprint = make_artifact().fingerprint
+    with pytest.raises(ArtifactError, match="response exceeds"):
+        ExecutionResult(fingerprint, "model", "x" * (MAX_RESULT_BYTES + 1), None, None, None)
+
+
+def test_execution_result_comparison_public_values_fail_closed() -> None:
+    fingerprint = make_artifact().fingerprint
+    with pytest.raises(ArtifactError, match="response characters"):
+        ExecutionResultSummary("model", True, 1, fingerprint, None, None, None)
+    summary = ExecutionResultSummary("model", 1, 1, fingerprint, None, None, None)
+    with pytest.raises(ArtifactError, match="invalid request fingerprint"):
+        ExecutionResultComparison("invalid", summary, summary)
+
+
+def test_execution_result_comparison_is_same_request_and_content_omitting() -> None:
+    artifact = make_artifact()
+    base = parse_execution_result(
+        render_execution_result(
+            artifact,
+            ChatResult("secret α", prompt_tokens=10, completion_tokens=2, total_tokens=12),
+            model="model-a",
+        )
+    )
+    target = parse_execution_result(
+        render_execution_result(
+            artifact,
+            ChatResult(
+                "different secret", prompt_tokens=11, completion_tokens=None, total_tokens=15
+            ),
+            model="model-b",
+        )
+    )
+
+    comparison = compare_execution_results(base, target)
+    text = render_execution_result_comparison(comparison)
+    payload = json.loads(render_execution_result_comparison(comparison, output_format="json"))
+
+    assert comparison.model_changed
+    assert not comparison.response_identical
+    assert payload["request_fingerprint"] == artifact.fingerprint
+    assert payload["base"]["response"]["chars"] == len("secret α")
+    assert payload["base"]["response"]["bytes"] == len("secret α".encode())
+    assert payload["delta"]["prompt_tokens"] == 1
+    assert payload["delta"]["completion_tokens"] is None
+    assert payload["base"]["response"]["sha256"].startswith("sha256:")
+    assert "secret α" not in text
+    assert "different secret" not in text
+    assert "secret α" not in json.dumps(payload, ensure_ascii=False)
+    assert "different secret" not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_execution_result_comparison_rejects_different_requests() -> None:
+    base = parse_execution_result(
+        render_execution_result(make_artifact(), ChatResult("base"), model="model-a")
+    )
+    other_request = PromptRequest(Task.REVIEW, "Review something else")
+    other_artifact = create_request_artifact(build_messages(other_request), other_request.files)
+    target = parse_execution_result(
+        render_execution_result(other_artifact, ChatResult("target"), model="model-b")
+    )
+
+    with pytest.raises(ArtifactError, match="different request fingerprints"):
+        compare_execution_results(base, target)
+
+
+def test_execution_result_comparison_reports_identical_responses() -> None:
+    artifact = make_artifact()
+    base = parse_execution_result(
+        render_execution_result(artifact, ChatResult("same"), model="model-a")
+    )
+    target = parse_execution_result(
+        render_execution_result(artifact, ChatResult("same"), model="model-a")
+    )
+
+    comparison = compare_execution_results(base, target)
+
+    assert comparison.response_identical
+    assert not comparison.model_changed
+    assert "Responses: identical" in render_execution_result_comparison(comparison)
+    with pytest.raises(ArtifactError, match="format must be"):
+        render_execution_result_comparison(comparison, output_format="yaml")
 
 
 def test_comparison_identifies_message_and_context_changes_without_prompt_content() -> None:

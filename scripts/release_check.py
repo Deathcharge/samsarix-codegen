@@ -31,6 +31,7 @@ CHANGELOG_PATTERN = re.compile(r"^## \[([^]]+)] - (.+)$", re.MULTILINE)
 REQUIRED_SCHEMAS = (
     "artifact-comparison-v1.schema.json",
     "execution-result-v1.schema.json",
+    "execution-result-comparison-v1.schema.json",
     "provider-check-v1.schema.json",
     "request-artifact-v2.schema.json",
 )

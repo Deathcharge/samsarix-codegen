@@ -121,9 +121,15 @@ SAMSARIX_MODEL=model-a SAMSARIX_API_BASE=https://provider-a.example/v1 \
   samsarix-codegen execute request.json --format json > result-a.json
 SAMSARIX_MODEL=model-b SAMSARIX_API_BASE=https://provider-b.example/v1 \
   samsarix-codegen execute request.json --format json > result-b.json
+samsarix-codegen compare-results result-a.json result-b.json
+samsarix-codegen compare-results result-a.json result-b.json --format json
 ```
 
-Both result files identify the common request fingerprint. They omit the endpoint and API key.
+Both result files identify the common request fingerprint and omit the endpoint and API key.
+`compare-results` strictly validates both envelopes, refuses results with different request
+fingerprints, and reports model names, response UTF-8 sizes and SHA-256 hashes, equality, and
+available token-usage deltas without reproducing either response. It is an offline structural and
+resource comparison, not a quality score or proof that a provider authored an envelope.
 
 ## Commands
 
@@ -132,7 +138,8 @@ Both result files identify the common request fingerprint. They omit the endpoin
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
-| `schema` | Never | Print a bundled request, result, comparison, or provider-check JSON Schema |
+| `compare-results` | Never | Compare same-request results without response contents |
+| `schema` | Never | Print any bundled versioned contract JSON Schema |
 | `provider-check` | Once | Send a tiny fixed request to test the supported provider wire contract |
 | `execute` | Once | Execute the exact messages in a validated artifact |
 | `run` | Once | Convenience path that builds and executes in one process |
@@ -150,6 +157,7 @@ without installing another tool or using the network:
 samsarix-codegen schema request > request-artifact-v2.schema.json
 samsarix-codegen schema result > execution-result-v1.schema.json
 samsarix-codegen schema comparison > artifact-comparison-v1.schema.json
+samsarix-codegen schema result-comparison > execution-result-comparison-v1.schema.json
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
 ```
 
@@ -226,8 +234,8 @@ reducing accidental exposure in shell history and process listings.
 - Files are resolved inside `--root`, deduplicated, and required to be regular UTF-8 text without
   NUL bytes.
 - Total context defaults to 200,000 bytes and has a hard 5,000,000-byte ceiling.
-- Instructions are limited to 20,000 characters; artifacts read by `inspect` or `execute` are
-  limited to 12 MiB.
+- Instructions are limited to 20,000 characters; request artifacts and execution-result envelopes
+  read by offline commands are limited to 12 MiB each.
 - `--max-estimated-input-tokens` rejects a request before network access. The estimate is
   `ceil(total UTF-8 message bytes / 4)`, not provider billing data.
 - Provider output defaults to 1,024 tokens and is capped at 32,768. Network timeouts range from 1
@@ -275,7 +283,9 @@ print(render_request_artifact(artifact))
 request_schema = load_contract_schema(ContractSchema.REQUEST)
 ```
 
-Unstable implementation helpers are not exported from `samsarix_codegen`.
+`parse_execution_result()` and `compare_execution_results()` provide the same strict, content-
+omitting result-comparison path to typed consumers. Unstable implementation helpers are not
+exported from `samsarix_codegen`.
 
 ## Development and package verification
 
@@ -288,8 +298,8 @@ python -m pytest -ra
 python -m build
 ```
 
-CI runs these checks plus built-wheel artifact, comparison, provider-check contract, and schema
-smoke tests on
+CI runs these checks plus built-wheel request/result comparison, provider-check contract, and
+schema smoke tests on
 Python 3.10 and 3.14 across Ubuntu and Windows. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
@@ -332,6 +342,8 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - Artifacts contain the complete prompt and selected source/log content. Treat them with the same
   confidentiality and retention controls as their inputs.
 - Artifact and context hashes detect drift but do not authenticate an author or reviewer.
+- Result comparisons contain response hashes, which can confirm a guessed response even though
+  response text is omitted; protect comparison files according to the result sensitivity.
 - File contents are untrusted prompt data. Prompt injection cannot be eliminated; review every
   response.
 - Model output may be incorrect or unsafe. Samsarix Codegen never executes, applies, or persists it.

@@ -61,3 +61,8 @@ jobs:
           samsarix-codegen schema provider-check > provider-check.schema.json
           python -c "from pathlib import Path; from samsarix_codegen import ProviderCheckReport, render_provider_check; Path('provider-check.json').write_text(render_provider_check(ProviderCheckReport(model='fixture-model', max_output_tokens=64, response_chars=11), output_format='json'), encoding='utf-8')"
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('provider-check.schema.json', encoding='utf-8')); payload=json.load(open('provider-check.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
+          python -c "import json; from pathlib import Path; from samsarix_codegen import ExecutionResult; fingerprint=json.load(open('request.json', encoding='utf-8'))['fingerprint']; Path('result-a.json').write_text(json.dumps(ExecutionResult(fingerprint, 'model-a', 'first response', 10, 2, 12).to_payload()), encoding='utf-8'); Path('result-b.json').write_text(json.dumps(ExecutionResult(fingerprint, 'model-b', 'second response', 10, 3, 13).to_payload()), encoding='utf-8')"
+          samsarix-codegen compare-results result-a.json result-b.json --format json > result-comparison.json
+          ! grep -q "first response\|second response" result-comparison.json
+          samsarix-codegen schema result-comparison > result-comparison.schema.json
+          python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('result-comparison.schema.json', encoding='utf-8')); payload=json.load(open('result-comparison.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
