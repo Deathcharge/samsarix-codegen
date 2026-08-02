@@ -245,39 +245,63 @@ def test_result_policy_rendering_rejects_empty_or_unvalidated_values() -> None:
 
 def test_structured_policy_public_values_fail_closed() -> None:
     invalid_policies = (
-        {"schema_version": 1, "response_format": "json-object"},
-        {"schema_version": 2, "response_format": "json"},
-        {"schema_version": 2, "required_json_keys": ("answer",)},
-        {
-            "schema_version": 2,
-            "response_format": "json-object",
-            "required_json_keys": ("answer", "answer"),
-        },
-        {
-            "schema_version": 2,
-            "response_format": "json-object",
-            "required_json_keys": ("line\nbreak",),
-        },
-        {
-            "schema_version": 2,
-            "response_format": "json-object",
-            "required_json_keys": ("x" * 257,),
-        },
-        {
-            "schema_version": 2,
-            "response_format": "json-object",
-            "required_json_keys": ("answer",),
-            "allowed_json_keys": (),
-        },
-        {
-            "schema_version": 2,
-            "response_format": "json-object",
-            "json_key_types": (("answer", "date"),),
-        },
+        (
+            {"schema_version": 1, "response_format": "json-object"},
+            "JSON structure rules require schema version 2",
+        ),
+        (
+            {"schema_version": 2, "response_format": "json"},
+            "response format must be json-object",
+        ),
+        (
+            {"schema_version": 2, "required_json_keys": ("answer",)},
+            "JSON key rules require response_format json-object",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("answer", "answer"),
+            },
+            "required JSON keys cannot contain duplicates",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("line\nbreak",),
+            },
+            "required JSON keys entries cannot contain control characters",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("x" * 257,),
+            },
+            "required JSON keys entries cannot exceed 256 UTF-8 bytes",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("answer",),
+                "allowed_json_keys": (),
+            },
+            "required or typed JSON keys must be allowed",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "json_key_types": (("answer", "date"),),
+            },
+            "JSON key type must be one of",
+        ),
     )
 
-    for values in invalid_policies:
-        with pytest.raises(ArtifactError):
+    for values, match in invalid_policies:
+        with pytest.raises(ArtifactError, match=match):
             ExecutionResultPolicy(**values)  # type: ignore[arg-type]
 
 

@@ -732,7 +732,7 @@ Neither harness event was treated as a product pass.
 ### Structured-response policy follow-up
 
 Python 3.14.6 source checks passed formatting, lint, strict typing across 16 source files, the source
-release gate, installed self-check, and all 361 tests. Result-policy schema version 2 adds bounded
+release gate, installed self-check, and all 366 tests. Result-policy schema version 2 adds bounded
 valid JSON-object parsing, reviewed top-level required/allowed keys and value types, duplicate-key
 and non-finite-number rejection, and exact canonical fingerprints while preserving version 1
 parsing. Execution evidence advances to version 3 and exposes only response format and top-level

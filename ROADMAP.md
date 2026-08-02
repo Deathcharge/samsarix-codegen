@@ -19,7 +19,8 @@ plan fingerprint, and offline execution verification validates the full request/
 plus requested-model and reported-output-budget consistency without content disclosure. Evidence
 schema version 3 can also bind and enforce one separately approved result-policy fingerprint in the
 same fail-closed command. Result-policy schema version 2 optionally requires a bounded JSON object
-with reviewed top-level keys and types, while evidence exposes only its format and key count. A
+with reviewed top-level keys and types, while response-structure evidence exposes only its format
+and key count. A
 checked-in offline request/plan/synthetic-result/policy chain now makes
 that verifier runnable from a clone without credentials, a provider process, or network access.
 An installed-package self-check reproduces the same deterministic chain and validates every

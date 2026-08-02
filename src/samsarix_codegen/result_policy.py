@@ -69,7 +69,7 @@ def parse_execution_result_policy(raw: str | bytes) -> ExecutionResultPolicy:
         _STRUCTURED_POLICY_FIELDS if schema_version == 2 else ()
     )
     allowed_fields = {"schema_version", *policy_fields}
-    if "schema_version" not in decoded or not set(decoded).issubset(allowed_fields):
+    if not set(decoded).issubset(allowed_fields):
         raise ArtifactError(
             f"execution result policy fields do not match schema version {schema_version}"
         )

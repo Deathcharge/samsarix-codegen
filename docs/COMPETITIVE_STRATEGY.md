@@ -230,8 +230,9 @@ provider authenticity, or cross-provider tokenizer equivalence.
 Require result-policy version 2 when a later CI step expects a JSON object such as a diagnosis,
 evidence list, and next action. The gate rejects malformed or duplicate-keyed JSON, a non-object
 top level, missing or unapproved keys, and wrong top-level value types before the response reaches
-that consumer. Evidence retains only the approved policy, response hash/size, format, and key count;
-it does not copy response-derived names or values. This is structural readiness, not recursive JSON
+that consumer. For the structured response, evidence retains only the format and key count; it does
+not copy response-derived names or values. The full evidence record also includes the approved
+policy and content-omitting chain metadata. This is structural readiness, not recursive JSON
 Schema validation or proof that the diagnosis is correct.
 
 ### Repeatable project review

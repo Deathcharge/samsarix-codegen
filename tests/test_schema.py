@@ -449,6 +449,41 @@ def test_result_policy_schema_rejects_contract_drift(payload: dict[str, object])
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        {"schema_version": 1},
+        {"schema_version": 1, "unexpected": True},
+        {"schema_version": 1, "response_format": "json-object"},
+        {"schema_version": 2, "expected_model": "model-a"},
+    ],
+)
+def test_result_policy_v1_schema_rejects_invalid_documents(
+    payload: dict[str, object],
+) -> None:
+    repository = Path(__file__).resolve().parents[1]
+    schema = json.loads(
+        (
+            repository / "src/samsarix_codegen/schemas/execution-result-policy-v1.schema.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema).validate(payload)
+
+
+def test_embedded_policy_v2_definition_matches_standalone_schema() -> None:
+    standalone = load_contract_schema("result-policy")
+    evidence = load_contract_schema("execution-evidence")
+    embedded = evidence["$defs"]["result_policy_v2"]
+
+    for key in ("type", "additionalProperties", "required", "minProperties", "allOf"):
+        assert embedded[key] == standalone[key]
+    assert embedded["properties"] == standalone["properties"]
+    assert evidence["$defs"]["model"] == standalone["$defs"]["model"]
+    assert evidence["$defs"]["json_key"] == standalone["$defs"]["json_key"]
+
+
+@pytest.mark.parametrize(
     "mutator",
     [
         lambda payload: payload.pop("result_policy"),
