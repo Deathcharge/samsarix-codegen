@@ -56,6 +56,7 @@ from samsarix_codegen.execution_plan import (
     provider_config_from_execution_plan,
     render_execution_plan,
     render_execution_plan_verification,
+    require_execution_plan_result_policy,
     verify_execution_plan,
 )
 from samsarix_codegen.models import (
@@ -149,6 +150,15 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TOKENS",
         help="plan input ceiling (default: the supplied artifact's exact estimate)",
     )
+    create_plan_command.add_argument(
+        "--policy",
+        metavar="PATH",
+        help="bind the fingerprint of one explicit versioned result-policy file",
+    )
+    create_plan_command.add_argument(
+        "--expect-policy-fingerprint",
+        help="fail unless --policy matches this previously approved sha256 fingerprint",
+    )
     _add_provider_arguments(create_plan_command, include_format=False)
 
     schema_command = subparsers.add_parser(
@@ -217,6 +227,15 @@ def build_parser() -> argparse.ArgumentParser:
     verify_plan_command.add_argument(
         "--expect-plan-fingerprint",
         help="fail unless the plan matches this previously approved sha256 fingerprint",
+    )
+    verify_plan_command.add_argument(
+        "--policy",
+        metavar="PATH",
+        help="verify that this result-policy file matches the fingerprint bound by the plan",
+    )
+    verify_plan_command.add_argument(
+        "--expect-policy-fingerprint",
+        help="fail unless --policy matches this previously approved sha256 fingerprint",
     )
     verify_plan_command.add_argument(
         "--format",
@@ -344,12 +363,22 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
         if args.command == "create-plan":
             artifact = _read_artifact(args.artifact, input_stream)
             require_fingerprint(artifact, args.expect_fingerprint)
+            result_policy = _load_explicit_result_policy(
+                args.policy,
+                args.expect_policy_fingerprint,
+            )
             config = _provider_config_from_args(args, include_api_key=False)
             plan = create_execution_plan(
                 artifact,
                 config,
                 max_estimated_input_tokens=args.max_estimated_input_tokens,
+                result_policy_fingerprint=(
+                    None
+                    if result_policy is None
+                    else fingerprint_execution_result_policy(result_policy)
+                ),
             )
+            require_execution_plan_result_policy(plan, result_policy)
             _write_stdout(render_execution_plan(plan))
             return 0
         if args.command == "schema":
@@ -382,11 +411,18 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
         if args.command == "verify-plan":
             plan = _load_execution_plan(args.plan)
             artifact = _read_artifact(args.artifact, input_stream)
+            result_policy = _load_explicit_result_policy(
+                args.policy,
+                args.expect_policy_fingerprint,
+            )
             plan_verification = verify_execution_plan(
                 artifact,
                 plan,
                 expected_plan_fingerprint=args.expect_plan_fingerprint,
             )
+            if result_policy is not None and plan.result_policy_fingerprint is None:
+                raise ArtifactError("execution plan does not bind a result policy")
+            require_execution_plan_result_policy(plan, result_policy)
             _write_stdout(
                 render_execution_plan_verification(plan_verification, output_format=args.format)
             )
@@ -450,6 +486,7 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                     plan,
                     expected_plan_fingerprint=args.expect_plan_fingerprint,
                 )
+                require_execution_plan_result_policy(plan, result_policy)
                 print(
                     f"Execution plan {plan_verification.plan.fingerprint} matches the request.",
                     file=sys.stderr,

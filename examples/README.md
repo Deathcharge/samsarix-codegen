@@ -25,7 +25,7 @@ samsarix-codegen verify-result request.json result.json \
 top-level keys plus their expected JSON value types. It remains an offline structural gate rather
 than a correctness or semantic-quality score.
 
-`execution-request-v2.json`, `execution-plan-v1.json`, `structured-execution-result-v2.json`,
+`execution-request-v2.json`, `execution-plan-v2.json`, `structured-execution-result-v2.json`,
 `structured-result-policy-v2.json`, and `execution-evidence-v3.json` form one fully linked,
 policy-bound offline example. The request deterministically captures `sample.py`; the plan uses a
 localhost placeholder; the explicitly labeled synthetic result reports no provider model or usage;
@@ -35,17 +35,15 @@ contacts that endpoint:
 
 ```bash
 plan_fingerprint="$(samsarix-codegen verify-plan \
-  examples/execution-request-v2.json examples/execution-plan-v1.json \
+  examples/execution-request-v2.json examples/execution-plan-v2.json \
+  --policy examples/structured-result-policy-v2.json \
   --format fingerprint)"
-policy_fingerprint="$(samsarix-codegen fingerprint-policy \
-  examples/structured-result-policy-v2.json)"
 samsarix-codegen verify-execution \
   examples/execution-request-v2.json \
-  examples/execution-plan-v1.json \
+  examples/execution-plan-v2.json \
   examples/structured-execution-result-v2.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy examples/structured-result-policy-v2.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > checked-evidence.json
 python -c "import json; assert json.load(open('checked-evidence.json')) == json.load(open('examples/execution-evidence-v3.json'))"
 ```
@@ -53,7 +51,8 @@ python -c "import json; assert json.load(open('checked-evidence.json')) == json.
 This proves local structural integrity, canonical request/plan/policy fingerprints, linkage, model,
 budget and policy consistency, bounded JSON-object shape, response hashing, and deterministic
 content-omitting evidence rendering. Legacy `execution-evidence-v1.json` and
-`execution-evidence-v2.json` remain compatibility fixtures. This is not a provider
+`execution-evidence-v2.json` remain compatibility fixtures, and `execution-plan-v1.json` preserves
+the original plan parser/fingerprint contract. This is not a provider
 attestation or a claim that the synthetic result came from a model. Rebuild every artifact for real
 work instead of reusing the fixture's fingerprints.
 

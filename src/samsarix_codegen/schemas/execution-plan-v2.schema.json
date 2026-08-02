@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samsarix.com/schemas/codegen/execution-plan-v2.schema.json",
+  "title": "Samsarix Codegen execution plan",
+  "description": "Credential-free provider settings, budgets, and an optional result-policy approval bound to one reviewed request fingerprint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_fingerprint",
+    "request_fingerprint",
+    "provider",
+    "budgets",
+    "result_policy_fingerprint"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "plan_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "request_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "provider": {"$ref": "#/$defs/provider"},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_estimated_input_tokens"],
+      "properties": {
+        "max_estimated_input_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000000
+        }
+      }
+    },
+    "result_policy_fingerprint": {
+      "oneOf": [
+        {"$ref": "#/$defs/fingerprint"},
+        {"type": "null"}
+      ]
+    }
+  },
+  "$defs": {
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "model", "timeout_seconds", "max_output_tokens"],
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "anyOf": [
+            {
+              "pattern": "^https://(?:[^:/@?#\\s]+|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?(?:/[^?#\\s]*)?$"
+            },
+            {
+              "pattern": "^http://(?:localhost|127\\.(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){2}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|\\[::1\\])(?::[0-9]{1,5})?(?:/[^?#\\s]*)?$"
+            }
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\s\\u0000-\\u001f\\u007f](?:[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f])?$"
+        },
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300},
+        "max_output_tokens": {"type": "integer", "minimum": 1, "maximum": 32768}
+      }
+    }
+  }
+}

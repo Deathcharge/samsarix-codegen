@@ -178,6 +178,10 @@ def main() -> int:
                     "64",
                     "--max-estimated-input-tokens",
                     "10000",
+                    "--policy",
+                    str(policy_path),
+                    "--expect-policy-fingerprint",
+                    policy_fingerprint,
                 ],
                 cwd=root,
                 environment=environment,
@@ -188,6 +192,8 @@ def main() -> int:
                     "verify-plan",
                     str(request_path),
                     str(plan_path),
+                    "--policy",
+                    str(policy_path),
                     "--format",
                     "fingerprint",
                 ],
@@ -202,6 +208,8 @@ def main() -> int:
                     str(plan_path),
                     "--expect-plan-fingerprint",
                     plan_fingerprint,
+                    "--policy",
+                    str(policy_path),
                     "--format",
                     "json",
                 ],
@@ -215,6 +223,11 @@ def main() -> int:
             require(
                 b"enabled = True" not in verification.stdout,
                 "plan verification disclosed selected context",
+            )
+            verification_payload = json.loads(verification.stdout)
+            require(
+                verification_payload["result_policy_fingerprint"] == policy_fingerprint,
+                "plan verification omitted the bound result policy",
             )
 
             execution_environment = environment.copy()
@@ -249,6 +262,25 @@ def main() -> int:
                 len(FixtureHandler.requests) == 0,
                 "orphaned policy approval caused a provider request",
             )
+            rejected_missing_bound_policy = run_cli(
+                [
+                    "execute",
+                    str(request_path),
+                    "--plan",
+                    str(plan_path),
+                ],
+                cwd=root,
+                environment=execution_environment,
+                expected_exit=5,
+            )
+            require(
+                rejected_missing_bound_policy.stdout == b"",
+                "missing bound result policy produced normal output",
+            )
+            require(
+                len(FixtureHandler.requests) == 0,
+                "missing bound result policy caused a provider request",
+            )
             rejected_policy_approval = run_cli(
                 [
                     "execute",
@@ -282,8 +314,6 @@ def main() -> int:
                     plan_fingerprint,
                     "--policy",
                     str(policy_path),
-                    "--expect-policy-fingerprint",
-                    policy_fingerprint,
                     "--format",
                     "json",
                 ],
@@ -327,8 +357,6 @@ def main() -> int:
                     plan_fingerprint,
                     "--policy",
                     str(policy_path),
-                    "--expect-policy-fingerprint",
-                    policy_fingerprint,
                     "--format",
                     "json",
                 ],

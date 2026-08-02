@@ -27,18 +27,18 @@ Its product promise is narrower and testable:
     excessive/missing reported usage without sending another provider request.
 12. Let teams commit one strict, versioned result policy and apply the same reviewed limits locally
     and in CI without implicit configuration discovery or override precedence.
-13. Bind one reviewed request to an exact endpoint, model, timeout, input ceiling, and output
-    ceiling in a second credential-free approval object that cannot be changed by execution-time
-    provider overrides.
+13. Bind one reviewed request to an exact endpoint, model, timeout, input ceiling, output ceiling,
+    and optional result-policy fingerprint in a second credential-free approval object that cannot
+    be changed by execution-time overrides.
 14. Carry that reviewed plan fingerprint into the stored result and verify the complete
     request/plan/result chain offline, while distinguishing the requested model from the model
     label reported by the provider.
-15. Fingerprint one strict result policy before execution, then enforce and record that exact policy
-    in the same content-omitting offline evidence gate as the approved request and plan.
+15. Bind one strict result-policy fingerprint into the plan, then require, enforce, and record that
+    exact policy in the same content-omitting offline evidence gate.
 16. Require a bounded JSON object with approved top-level keys and types when a downstream machine
     must consume the response, without exposing response-derived fields or values in evidence.
-17. Apply that separately approved policy inside the one-request `execute` boundary, after response
-    normalization but before normal stdout, so CI cannot accidentally omit a second gating command.
+17. Apply that plan-bound policy inside the one-request `execute` boundary, after response
+    normalization but before normal stdout, so CI cannot substitute or omit the gate.
 
 ## Evidence from adjacent products
 
@@ -140,22 +140,29 @@ Provider/model configuration is itself a repeatability concern in adjacent produ
   store a provider, model, and parameters for reuse in Playground and evaluation workflows.
 - [GitHub Copilot CLI configuration](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference)
   documents model configuration and precedence across invocation and configuration sources.
+- [Terraform saved-plan mode](https://developer.hashicorp.com/terraform/cli/commands/apply) applies
+  choices already captured in a reviewed plan and refuses new planning options at apply time.
+- [GitHub Actions environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
+  can hold secrets behind required review, making a credential-free review job followed by a
+  protected credential-bearing job a standard automation shape.
 
 These sources support the need to make model/runtime parameters repeatable. Samsarix takes a
 narrower approval-oriented approach: one local plan binds the request fingerprint to canonical
-non-secret settings, has no remote “latest” resolution or implicit file discovery, and refuses
-execution-time provider/budget overrides instead of merging configuration layers. This is an
+non-secret settings and an optional policy fingerprint, has no remote “latest” resolution or
+implicit file discovery, and refuses execution-time provider/budget/policy overrides instead of
+merging configuration layers. This is an
 inference from the adjacent workflows, not a claim that they offer or lack an identical approval
 primitive.
 
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
 portable, dependency-free approval chain: a deterministic request, a credential-free plan, a
-plan-bound result, an optional separately fingerprinted deterministic policy, and an offline
+plan-bound result, an optional plan-bound deterministic policy, and an offline
 verifier that emits only operational metadata and a response hash/size. Policy version 2 adds a
 narrower alternative to full JSON Schema evaluation: bounded valid JSON-object parsing and
 top-level required/allowed/type rules, with no runtime dependency or second model call. `execute`
-can apply the separately fingerprinted policy after its one provider response and before stdout,
-making the deterministic gate operational rather than dependent on a later shell step. It also compares two
+can require the plan-bound policy before provider setup and apply it after its one provider response
+and before stdout, making the deterministic gate operational rather than dependent on a later shell
+step. It also compares two
 bounded same-request results without datasets, scorers, hosted traces, or another model call. The
 single policy-bound chain is an inference from adjacent CI quality-gate demand—such as Promptfoo's
 threshold assertions and CI failure controls—not a claim that local hashes provide authenticated
@@ -177,8 +184,8 @@ label, bytes, estimate, and fingerprint before choosing a provider.
 Build an artifact and execution plan in an unprivileged job, record the plan fingerprint as the
 complete non-secret approval object, and execute later in a credential-bearing job with
 `--plan --expect-plan-fingerprint`. The artifact contains the model messages and the plan contains
-the provider/budget intent, so the execution job does not need source-tree access or configuration
-precedence.
+the provider/budget intent plus an optional result-policy fingerprint, so the execution job does
+not need source-tree access or configuration precedence.
 
 ### Incident and log triage
 
@@ -196,9 +203,10 @@ authenticity, quality, tokenizer equivalence, or authorship.
 
 An unprivileged build/review job can create a request artifact, then create an execution plan that
 names the exact endpoint, model, timeout, output ceiling, and estimated-input ceiling. A reviewer
-can validate both offline and approve the plan fingerprint separately. The credential-bearing job
-receives only the two explicit files, that approved digest, and an environment-only API key;
-provider and budget environment settings cannot silently redirect or resize the approved run.
+can include an exact result-policy fingerprint, validate the files offline, and approve one plan
+fingerprint. The credential-bearing job receives only the explicit files, that approved digest, and
+an environment-only API key; provider, budget, and policy settings cannot silently redirect,
+resize, or weaken the approved run.
 
 This is useful when approval should cover both disclosed prompt content and non-secret execution
 intent. It is not endpoint or provider authentication: access control, TLS governance, signing, and
@@ -221,7 +229,7 @@ For plan-backed runs, retain all three artifacts and optionally an explicit resu
 `verify-execution`. The result records the reviewed plan fingerprint, requested model, and
 provider-reported response model separately. Evidence schema version 3 verifies every local
 linkage plus the plan's input and reported-output budgets; when a policy is supplied, it also
-requires its separately approved fingerprint, enforces every rule, and records the exact rules.
+requires the fingerprint bound by the plan, enforces every rule, and records the exact rules.
 Neither prompt nor response is reproduced. The record remains forgeable by an actor who can rewrite
 the whole chain and does not prove which provider infrastructure served the request.
 

@@ -8,8 +8,8 @@ It is for developers and CI maintainers who want reproducible AI requests withou
 repository-discovery, file-write, shell, or retry authority. Samsarix Codegen never edits files,
 executes generated code, scans a repository automatically, or retries a paid request.
 
-> **Status:** `0.2.0` release candidate. The offline review workflow, versioned execution-plan
-> handoff, policy-bound request-plan-result evidence chain with bounded JSON-object gates,
+> **Status:** `0.2.0` release candidate. The offline review workflow, policy-bound execution-plan
+> handoff, request-plan-result evidence chain with bounded JSON-object gates,
 > one-request execution path, and
 > content-free provider conformance check are implemented and tested. The package has not been published to
 > PyPI or run through the documented
@@ -24,13 +24,14 @@ The core workflow separates request construction from credential-bearing executi
 2. Compile a schema-versioned artifact containing the exact messages, context provenance, content
    hashes, and an approximate input-token estimate.
 3. Validate and summarize it offline with `inspect`.
-4. Bind the request fingerprint to an exact endpoint, model, timeout, input ceiling, and output
-   ceiling in a credential-free execution plan.
-5. Validate and pin the plan fingerprint offline.
-6. Validate and pin one explicit result-policy fingerprint when CI must enforce response metadata,
-   resource ceilings, or a bounded top-level JSON-object shape after execution.
+4. Bind the request fingerprint, exact endpoint, model, timeout, input/output ceilings, and optional
+   result-policy fingerprint in a credential-free execution plan.
+5. Validate and pin the single plan fingerprint offline; it covers every bound choice above.
+6. Keep the explicit policy file beside the plan when CI must enforce response metadata, resource
+   ceilings, or a bounded top-level JSON-object shape after execution.
 7. Send exactly that reviewed request with those reviewed settings once using `execute --plan`,
-   enforcing the separately approved result policy before normal output is emitted.
+   requiring the exact policy bound by the plan before provider setup and enforcing its rules before
+   normal output is emitted.
 8. Verify the request, plan, stored result, and optional exact policy together offline without
    reproducing prompt or response contents.
 
@@ -108,20 +109,19 @@ samsarix-codegen create-plan request.json `
   --expect-fingerprint $requestFingerprint `
   --model your-local-model `
   --max-output-tokens 1200 `
-  --max-estimated-input-tokens 50000 > execution-plan.json
+  --max-estimated-input-tokens 50000 `
+  --policy result-policy.json > execution-plan.json
 $planFingerprint = samsarix-codegen verify-plan request.json execution-plan.json `
+  --policy result-policy.json `
   --format fingerprint
-$policyFingerprint = samsarix-codegen fingerprint-policy result-policy.json
 samsarix-codegen execute request.json `
   --plan execution-plan.json `
   --expect-plan-fingerprint $planFingerprint `
   --policy result-policy.json `
-  --expect-policy-fingerprint $policyFingerprint `
   --format json > result.json
 samsarix-codegen verify-execution request.json execution-plan.json result.json `
   --expect-plan-fingerprint $planFingerprint `
   --policy result-policy.json `
-  --expect-policy-fingerprint $policyFingerprint `
   --format json > execution-evidence.json
 ```
 
@@ -141,20 +141,19 @@ samsarix-codegen create-plan request.json \
   --expect-fingerprint "$request_fingerprint" \
   --model your-local-model \
   --max-output-tokens 1200 \
-  --max-estimated-input-tokens 50000 > execution-plan.json
+  --max-estimated-input-tokens 50000 \
+  --policy result-policy.json > execution-plan.json
 plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json \
+  --policy result-policy.json \
   --format fingerprint)"
-policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
 samsarix-codegen execute request.json \
   --plan execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy result-policy.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > result.json
 samsarix-codegen verify-execution request.json execution-plan.json result.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy result-policy.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > execution-evidence.json
 ```
 
@@ -165,8 +164,9 @@ are offline. So are `create-plan` and `verify-plan`. Plan-backed `execute` valid
 plan integrity, request linkage, input budget, and optional separately approved plan fingerprint
 before constructing a provider client, then makes one non-streaming request. The
 [execution-plan contract](docs/EXECUTION_PLAN.md) defines its no-override behavior and trust limits.
-When `--policy` is selected, `execute` validates the policy and optional expected fingerprint
-before constructing the provider client. It then makes exactly one request, applies every rule to
+When the plan binds a result-policy fingerprint, `execute` requires that policy file and validates
+its exact fingerprint before constructing the provider client. It then makes exactly one request,
+applies every rule to
 the normalized result, and emits normal text or JSON only after the policy passes. A failed
 post-response rule returns artifact exit code `5` with empty normal stdout and no retry; the one
 provider request has already occurred and may still be billable. Plan-backed JSON execution records
@@ -182,17 +182,15 @@ To exercise that entire evidence path without credentials, a running model, or n
 
 ```bash
 plan_fingerprint="$(samsarix-codegen verify-plan \
-  examples/execution-request-v2.json examples/execution-plan-v1.json \
+  examples/execution-request-v2.json examples/execution-plan-v2.json \
+  --policy examples/structured-result-policy-v2.json \
   --format fingerprint)"
-policy_fingerprint="$(samsarix-codegen fingerprint-policy \
-  examples/structured-result-policy-v2.json)"
 samsarix-codegen verify-execution \
   examples/execution-request-v2.json \
-  examples/execution-plan-v1.json \
+  examples/execution-plan-v2.json \
   examples/structured-execution-result-v2.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy examples/structured-result-policy-v2.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > checked-evidence.json
 python -c "import json; assert json.load(open('checked-evidence.json')) == json.load(open('examples/execution-evidence-v3.json'))"
 ```
@@ -276,8 +274,8 @@ resource comparison, not a quality score or proof that a provider authored an en
 | `self-check` | Never | Verify the installed contracts and synthetic evidence path |
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
-| `create-plan` | Never | Bind one request to credential-free provider settings and budgets |
-| `verify-plan` | Never | Validate request/plan linkage and emit a content-omitting record |
+| `create-plan` | Never | Bind a request, provider settings, budgets, and optional policy approval |
+| `verify-plan` | Never | Validate request/plan linkage and expose the bound policy fingerprint |
 | `fingerprint-policy` | Never | Validate and fingerprint one explicit result-policy file |
 | `verify-execution` | Never | Validate a request/plan/result chain and exact metadata/shape policy without contents |
 | `inspect-result` | Never | Validate, metadata/shape-policy-check, and summarize one result without its contents |
@@ -310,8 +308,8 @@ samsarix-codegen schema result-comparison > execution-result-comparison-v2.schem
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
 samsarix-codegen schema context-manifest > context-manifest-v1.schema.json
 samsarix-codegen schema result-policy > execution-result-policy-v2.schema.json
-samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
-samsarix-codegen schema execution-plan-verification > execution-plan-verification-v1.schema.json
+samsarix-codegen schema execution-plan > execution-plan-v2.schema.json
+samsarix-codegen schema execution-plan-verification > execution-plan-verification-v2.schema.json
 samsarix-codegen schema execution-evidence > execution-evidence-verification-v3.schema.json
 samsarix-codegen schema self-check > self-check-v1.schema.json
 ```
@@ -404,7 +402,8 @@ one fingerprint covering the complete non-secret execution intent.
 - Structured policies parse at most 1 MiB of response JSON, accept at most 256 top-level keys, and
   bound each policy key set to 64 names. Duplicate keys at any depth and non-finite numbers fail.
 - Execution plans are strict UTF-8 JSON no larger than 64 KiB and bind one request fingerprint to
-  canonical provider settings and budgets. Unknown, duplicate, noncanonical, tampered, or
+  canonical provider settings, budgets, and an optional result-policy fingerprint. Unknown,
+  duplicate, noncanonical, tampered, policy-substituted, or
   request-mismatched plans fail closed.
 - `--max-estimated-input-tokens` rejects a request before network access. The estimate is
   `ceil(total UTF-8 message bytes / 4)`, not provider billing data.
@@ -468,8 +467,9 @@ expose the versioned file and approval contract. Unstable implementation helpers
 from `samsarix_codegen`.
 
 `ExecutionPlan`, `create_execution_plan()`, `parse_execution_plan()`,
-`verify_execution_plan()`, and `provider_config_from_execution_plan()` expose the same
-credential-free planning and exact runtime-configuration boundary to typed consumers.
+`verify_execution_plan()`, `require_execution_plan_result_policy()`, and
+`provider_config_from_execution_plan()` expose the same credential-free planning,
+policy-binding, and exact runtime-configuration boundary to typed consumers.
 `ExecutionEvidenceVerification`, `verify_execution_evidence()`, and
 `render_execution_evidence_verification()` expose the complete offline chain verifier.
 

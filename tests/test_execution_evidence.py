@@ -32,6 +32,7 @@ def make_chain(
     response_model: str | None = "served-model-2026-08",
     completion_tokens: int | None = 12,
     response_text: str = "Private provider response",
+    bound_policy: ExecutionResultPolicy | None = None,
 ):
     artifact = create_request_artifact(
         build_messages(PromptRequest(Task.REVIEW, "Private review instruction")),
@@ -46,6 +47,9 @@ def make_chain(
             max_output_tokens=64,
         ),
         max_estimated_input_tokens=artifact.estimated_input_tokens + 100,
+        result_policy_fingerprint=(
+            None if bound_policy is None else fingerprint_execution_result_policy(bound_policy)
+        ),
     )
     result = parse_execution_result(
         render_execution_result(
@@ -134,6 +138,28 @@ def test_execution_evidence_enforces_and_identifies_the_exact_result_policy() ->
     assert payload["result"]["response_structure"] is None
 
 
+def test_execution_evidence_requires_the_policy_bound_by_the_plan() -> None:
+    policy = ExecutionResultPolicy(
+        expected_model="requested-model",
+        max_response_bytes=100,
+        max_completion_tokens=12,
+    )
+    artifact, plan, result = make_chain(bound_policy=policy)
+
+    evidence = verify_execution_evidence(artifact, plan, result, result_policy=policy)
+
+    assert evidence.result_policy_fingerprint == plan.result_policy_fingerprint
+    with pytest.raises(ArtifactError, match="requires its bound result policy"):
+        verify_execution_evidence(artifact, plan, result)
+    with pytest.raises(ArtifactError, match="fingerprint bound"):
+        verify_execution_evidence(
+            artifact,
+            plan,
+            result,
+            result_policy=ExecutionResultPolicy(expected_model="requested-model"),
+        )
+
+
 def test_execution_evidence_records_structural_policy_without_response_values() -> None:
     private_response = json.dumps(
         {
@@ -197,7 +223,7 @@ def test_execution_evidence_rejects_policy_failure_or_unapproved_policy() -> Non
     artifact, plan, result = make_chain()
     passing_policy = ExecutionResultPolicy(expected_model="requested-model")
 
-    with pytest.raises(ArtifactError, match="does not match the expected model"):
+    with pytest.raises(ArtifactError, match="does not match the execution-plan model"):
         verify_execution_evidence(
             artifact,
             plan,

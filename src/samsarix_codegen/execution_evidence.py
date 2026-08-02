@@ -23,6 +23,7 @@ from samsarix_codegen.errors import ArtifactError
 from samsarix_codegen.execution_plan import (
     ExecutionPlan,
     ExecutionPlanVerification,
+    require_execution_plan_result_policy,
     verify_execution_plan,
 )
 from samsarix_codegen.result_policy import (
@@ -74,6 +75,7 @@ class ExecutionEvidenceVerification:
                 raise ArtifactError("execution evidence requires a validated result policy")
             fingerprint_execution_result_policy(self.result_policy)
             enforce_execution_result_summary_policy(self.result, self.result_policy)
+        require_execution_plan_result_policy(plan, self.result_policy)
 
     @property
     def result_policy_fingerprint(self) -> str | None:
@@ -174,6 +176,7 @@ def verify_execution_evidence(
                 "an expected result policy fingerprint requires an explicit result policy"
             )
         require_execution_result_policy_fingerprint(result_policy, expected_policy_fingerprint)
+    require_execution_plan_result_policy(plan, result_policy)
     return ExecutionEvidenceVerification(
         plan_verification=plan_verification,
         result=inspect_execution_result(result).summary,

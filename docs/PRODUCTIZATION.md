@@ -43,9 +43,10 @@ without granting file-write or shell access. The primary journey is:
    context manifests, or bounded stdin.
 3. Inspect the generated Markdown or schema-versioned JSON artifact without a network call.
 4. Record the artifact fingerprint, then create and validate a credential-free execution plan that
-   binds it to an endpoint, model, timeout, input ceiling, and output ceiling.
-5. Record the plan fingerprint and, when output rules matter, a separately reviewed policy
-   fingerprint; pass both approvals to `execute` in the credential-bearing boundary.
+   binds it to an endpoint, model, timeout, input ceiling, output ceiling, and optional exact
+   result-policy fingerprint.
+5. Record the single plan fingerprint; pass it plus the bound policy file to `execute` in the
+   credential-bearing boundary.
 6. When a result policy is selected, admit text output or a plan-bound structured result envelope
    only after the one provider response passes it.
 7. Verify the request, plan, and result together offline, retaining content-omitting linkage and
@@ -140,17 +141,18 @@ Research references:
     bounded, strict set of deterministic metadata, resource, and optional top-level JSON-object
     rules. Operators must pass its path explicitly; file rules cannot mix with flags, and no remote
     lookup, code execution, or hidden precedence is introduced. Version 1 remains compatible.
-19. **Reviewed execution intent.** Execution-plan schema version 1 binds one request fingerprint to
-    canonical endpoint, model, whole-second timeout, estimated-input ceiling, and output ceiling.
-    The plan is credential-free, explicit, bounded, internally fingerprinted, and independently
-    schema-validatable. Plan-backed execution reads only `SAMSARIX_API_KEY` at runtime and refuses
-    request/provider/budget overrides rather than merging configuration layers.
+19. **Reviewed execution intent.** Execution-plan schema version 2 binds one request fingerprint to
+    canonical endpoint, model, whole-second timeout, estimated-input ceiling, output ceiling, and an
+    optional exact result-policy fingerprint. The plan is credential-free, explicit, bounded,
+    internally fingerprinted, and independently schema-validatable. Plan-backed execution reads
+    only `SAMSARIX_API_KEY` at runtime and refuses request/provider/budget/policy overrides rather
+    than merging configuration layers. Version 1 remains parseable with its original fingerprint.
 20. **Portable policy-bound execution evidence.** Execution-result schema version 2 carries a
     nullable reviewed plan fingerprint and distinguishes the requested model from the
     provider-reported response model. Plan-backed execution populates the link automatically.
     `verify-execution` validates the full request/plan/result chain, requested model, input budget,
-    any reported completion usage, and an optional separately approved result-policy fingerprint
-    offline. Evidence schema version 3 emits exact passing policy rules, response hash/size, and
+    any reported completion usage, and the optional result-policy fingerprint approved inside the
+    plan offline. Evidence schema version 3 emits exact passing policy rules, response hash/size, and
     only a structured response format/key count rather than response-derived names or values;
     versions 1 and 2 remain bundled. Legacy result version 1 remains parseable. This
     is local integrity and deterministic-policy evidence, not signed approval or provider
@@ -270,8 +272,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Fail-closed post-result policy flags and a typed public enforcement API.
 - [x] Strict result-policy parsing/rendering/loading, bundled schema, example, and installed-wheel
   CI journey.
-- [x] Pre-network policy approval plus post-response fail-closed enforcement on `execute`, with no
-  retry and unchanged successful text/JSON output contracts.
+- [x] Pre-network plan-bound policy approval plus post-response fail-closed enforcement on
+  `execute`, with no retry and unchanged successful text/JSON output contracts.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -285,8 +287,9 @@ Final command evidence is recorded in the **Final verification** section after e
 - `build` works without network access or secrets and includes the selected source content.
 - JSON artifacts are deterministic, fail on schema/content drift, summarize offline, and can be
   pinned before execution.
-- Execution plans are deterministic, fail on plan/request drift, preserve exact provider/budget
-  intent, omit credentials/prompt contents, and refuse execution-time overrides.
+- Execution plans are deterministic, fail on plan/request/policy drift, preserve exact
+  provider/budget/policy intent, omit credentials/prompt contents, and refuse execution-time
+  overrides.
 - Plan-backed results record their reviewed plan; offline execution verification rejects linkage,
   requested-model, input-budget, or reported-output drift without disclosing either content body.
 - `run` succeeds against a deterministic local HTTP fixture and fails clearly for missing model,
@@ -329,6 +332,8 @@ Final command evidence is recorded in the **Final verification** section after e
   checked-in offline fixtures, and installed-wheel failure-path coverage without response values.
 - Added versioned execution plans, offline plan creation/verification, a typed public API, standalone
   plan and verification schemas, a checked-in example, and exact no-override plan-backed execution.
+- Added backward-compatible execution-plan version 2 so one plan fingerprint can also bind the exact
+  result-policy approval; execution and offline evidence require that policy before provider setup.
 - Added result schema version 2 with plan linkage and separate requested/response model labels,
   legacy version-1 parsing, offline policy-capable chain verification, a typed public API,
   standalone versioned evidence schemas, and installed-wheel evidence-chain coverage.
@@ -394,7 +399,8 @@ required for local evaluation and none was performed.
   exposes only format/key-count evidence after all approved rules pass.
 - Execution plans are explicitly selected files bounded to 64 KiB. They reject duplicate/unknown
   fields, noncanonical values, invalid endpoint settings, plan/request fingerprint drift, and input
-  budget excess before client construction. Provider/budget flags cannot override them, and only
+  budget excess before client construction. A bound policy is mandatory, cannot be substituted,
+  and must not contradict the plan's model. Provider/budget flags cannot override plans, and only
   the environment-only API key is resolved at plan-backed execution time.
 - Remote plaintext transport and URL credentials are rejected; Python's default TLS verification is
   retained.
@@ -816,6 +822,25 @@ same wheel digest and source commit, and the bundled pilot checker returned the 
 for the prefilled record. Exact reviewed distribution and kit digests belong in the pull-request or
 workflow evidence because the source commit is an input to the kit itself.
 
+### Policy-bound execution-plan v2 follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing across 16 source files, workflow
+YAML and documentation PowerShell parsing, the unreleased source gate, and all 398 tests.
+Execution-plan version 2 makes the result-policy fingerprint a canonical plan field, advances the
+plan-verification record to version 2, and preserves version 1 parsing and original fingerprints.
+The CLI binds an explicitly selected policy during `create-plan`; policy-bound `verify-plan`,
+`execute`, and `verify-execution` require that exact file. Missing, substituted, or
+model-incompatible policies fail before provider-client construction.
+
+The source-built sdist and wheel passed Twine and the fail-closed distribution audit, including all
+legacy/current plan schemas and examples. The extracted sdist passed the same lint, formatting,
+typing, source-release, and 398-test gates. A fresh environment installed only the audited wheel,
+reported no broken requirements, resolved the package outside the checkout, and passed the
+optimized self-check plus the one-request policy-bound installed smoke. The smoke proved zero
+provider requests for missing and wrong policy approvals and exactly one for the accepted chain.
+Exact final distribution digests belong in the pull-request evidence because recording them inside
+the source distribution would change the digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -844,6 +869,8 @@ reusable explicit context manifests, independent JSON contracts, and an operator
 conformance check. Version 2 structured-result policies, version 3 privacy-minimal evidence, and a
 deterministic attested evaluator kit now cover machine-consumable CI handoffs and exact-wheel pilot
 onboarding; each implemented capability has local clean-package evidence recorded above.
+Execution-plan version 2 reduces that CI handoff to one approved plan fingerprint covering the
+request, provider settings, budgets, and optional result policy while retaining version 1 parsing.
 Public release remains gated on owner control of the PyPI project, creation of the signed release
 tag, and approval of the publishing environment. The usefulness claim remains gated on the
 three-developer pilot, and live provider certification remains optional unless the owner advertises

@@ -29,6 +29,7 @@ from samsarix_codegen.execution_plan import (
 )
 from samsarix_codegen.models import ChatResult, ContextFile, PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages
+from samsarix_codegen.result_policy import fingerprint_execution_result_policy
 from samsarix_codegen.schema import ContractSchema, load_contract_schema
 
 SELF_CHECK_SCHEMA_VERSION = 1
@@ -58,7 +59,7 @@ EXPECTED_REQUEST_FINGERPRINT = (
     "sha256:4c04cb6a6352ef10b09403b8f5b7da03e71dbfd278606fc25edb5274c3399d59"
 )
 EXPECTED_PLAN_FINGERPRINT = (
-    "sha256:7d53d859b13986da8efcf8122fd060d07c34b91f34908d1ac4f89a1187c5df95"
+    "sha256:cbcaf0102a11fc20d056d9a3fdb1ab5e40822ed53852cbf181cb90c80a68a1d9"
 )
 EXPECTED_RESPONSE_FINGERPRINT = (
     "sha256:d10517f83c16d86209750ef9c9101cf06770a9df1b8f7a8386293921f7c3f7e5"
@@ -198,10 +199,24 @@ def run_self_check() -> SelfCheckReport:
             timeout_seconds=45,
             max_output_tokens=256,
         )
+        result_policy = ExecutionResultPolicy(
+            expected_model="example-review-model",
+            max_response_bytes=256,
+            response_format="json-object",
+            required_json_keys=("diagnosis", "evidence", "next_step"),
+            allowed_json_keys=("diagnosis", "evidence", "next_step"),
+            json_key_types=(
+                ("diagnosis", "string"),
+                ("evidence", "array"),
+                ("next_step", "string"),
+            ),
+            schema_version=2,
+        )
         plan = create_execution_plan(
             parsed_artifact,
             config,
             max_estimated_input_tokens=5000,
+            result_policy_fingerprint=fingerprint_execution_result_policy(result_policy),
         )
         _require_equal(plan.fingerprint, EXPECTED_PLAN_FINGERPRINT, label="plan fingerprint")
         parsed_plan = parse_execution_plan(render_execution_plan(plan))
@@ -224,20 +239,7 @@ def run_self_check() -> SelfCheckReport:
             parsed_plan,
             result,
             expected_plan_fingerprint=EXPECTED_PLAN_FINGERPRINT,
-            result_policy=ExecutionResultPolicy(
-                expected_model="example-review-model",
-                max_response_bytes=256,
-                response_format="json-object",
-                required_json_keys=("diagnosis", "evidence", "next_step"),
-                allowed_json_keys=("diagnosis", "evidence", "next_step"),
-                json_key_types=(
-                    ("diagnosis", "string"),
-                    ("evidence", "array"),
-                    ("next_step", "string"),
-                ),
-                schema_version=2,
-            ),
-            expected_policy_fingerprint=EXPECTED_POLICY_FINGERPRINT,
+            result_policy=result_policy,
         )
         _require_equal(
             evidence.result_policy_fingerprint,
