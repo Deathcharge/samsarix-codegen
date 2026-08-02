@@ -32,8 +32,19 @@ plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.jso
 samsarix-codegen verify-plan request.json execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" --format json > plan-verification.json
 
+cat > result-policy.json <<'JSON'
+{
+  "schema_version": 1,
+  "max_response_bytes": 262144
+}
+JSON
+cat result-policy.json
 policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
 ```
+
+This example policy places a 256 KiB ceiling on the stored response without requiring
+provider-reported usage. Review and tailor its explicit rules before approval; the
+[result-policy contract](RESULT_POLICY.md) documents every field and stricter checked-in examples.
 
 The credential-bearing job needs the two explicit files, separately approved plan and policy
 fingerprints, the explicit policy file, and an optional environment-only API key:
