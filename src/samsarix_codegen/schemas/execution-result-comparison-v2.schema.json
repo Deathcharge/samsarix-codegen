@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samsarix.com/schemas/codegen/execution-result-comparison-v2.schema.json",
+  "title": "Samsarix Codegen execution-result comparison",
+  "description": "A content-omitting comparison of two provider results linked to one request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_fingerprint",
+    "plan_changed",
+    "model_changed",
+    "response_model_changed",
+    "response_identical",
+    "base",
+    "target",
+    "delta"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "request_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "plan_changed": {"type": "boolean"},
+    "model_changed": {"type": "boolean"},
+    "response_model_changed": {"type": "boolean"},
+    "response_identical": {"type": "boolean"},
+    "base": {"$ref": "#/$defs/result_summary"},
+    "target": {"$ref": "#/$defs/result_summary"},
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["response_chars", "response_bytes", "prompt_tokens", "completion_tokens", "total_tokens"],
+      "properties": {
+        "response_chars": {"type": "integer"},
+        "response_bytes": {"type": "integer"},
+        "prompt_tokens": {"$ref": "#/$defs/optional_delta"},
+        "completion_tokens": {"$ref": "#/$defs/optional_delta"},
+        "total_tokens": {"$ref": "#/$defs/optional_delta"}
+      }
+    }
+  },
+  "$defs": {
+    "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "optional_fingerprint": {"anyOf": [{"$ref": "#/$defs/fingerprint"}, {"type": "null"}]},
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f](?:[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f])?$"
+    },
+    "optional_model": {"anyOf": [{"$ref": "#/$defs/model"}, {"type": "null"}]},
+    "usage_value": {"type": ["integer", "null"], "minimum": 0},
+    "optional_delta": {"type": ["integer", "null"]},
+    "result_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_fingerprint", "model", "response_model", "response", "usage"],
+      "properties": {
+        "plan_fingerprint": {"$ref": "#/$defs/optional_fingerprint"},
+        "model": {"$ref": "#/$defs/model"},
+        "response_model": {"$ref": "#/$defs/optional_model"},
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chars", "bytes", "sha256"],
+          "properties": {
+            "chars": {"type": "integer", "minimum": 1, "maximum": 12582912},
+            "bytes": {"type": "integer", "minimum": 1, "maximum": 12582912},
+            "sha256": {"$ref": "#/$defs/fingerprint"}
+          }
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+          "properties": {
+            "prompt_tokens": {"$ref": "#/$defs/usage_value"},
+            "completion_tokens": {"$ref": "#/$defs/usage_value"},
+            "total_tokens": {"$ref": "#/$defs/usage_value"}
+          }
+        }
+      }
+    }
+  }
+}

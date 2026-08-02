@@ -528,7 +528,7 @@ def test_execute_with_plan_uses_exact_settings_and_only_external_api_key(
         assert self.config.timeout_seconds == plan.timeout_seconds
         assert self.config.max_output_tokens == plan.max_output_tokens
         assert self.config.api_key == "external-key"
-        return ChatResult("Planned response", 10, 3, 13)
+        return ChatResult("Planned response", 10, 3, 13, "served-model")
 
     monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fake_complete)
 
@@ -548,8 +548,11 @@ def test_execute_with_plan_uses_exact_settings_and_only_external_api_key(
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert exit_code == 0
+    assert payload["schema_version"] == 2
     assert payload["request_fingerprint"] == artifact.fingerprint
+    assert payload["plan_fingerprint"] == plan.fingerprint
     assert payload["model"] == "planned-model"
+    assert payload["response_model"] == "served-model"
     assert payload["response"]["text"] == "Planned response"
     assert f"Execution plan {plan.fingerprint} matches" in captured.err
     assert "external-key" not in captured.out + captured.err
@@ -620,6 +623,95 @@ def test_execution_plan_cli_rejects_stdin_and_orphaned_approval(tmp_path: Path, 
     assert orphan_exit == 2
     assert orphaned.out == ""
     assert "requires --plan" in orphaned.err
+
+
+def test_verify_execution_cli_emits_content_omitting_chain_evidence(tmp_path: Path, capsys) -> None:
+    artifact = create_request_artifact(
+        build_messages(PromptRequest(Task.REVIEW, "Private execution evidence")), ()
+    )
+    plan = create_execution_plan(
+        artifact,
+        ProviderConfig(
+            "https://models.example.com/v1",
+            "requested-model",
+            max_output_tokens=64,
+        ),
+    )
+    request_path = tmp_path / "request.json"
+    plan_path = tmp_path / "plan.json"
+    result_path = tmp_path / "result.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+    result_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult(
+                "Private provider response",
+                10,
+                3,
+                13,
+                "served-model",
+            ),
+            model=plan.model,
+            plan_fingerprint=plan.fingerprint,
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--expect-plan-fingerprint",
+            plan.fingerprint,
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["plan_fingerprint"] == plan.fingerprint
+    assert payload["request"]["fingerprint"] == artifact.fingerprint
+    assert payload["provider"]["requested_model"] == plan.model
+    assert payload["provider"]["response_model"] == "served-model"
+    assert payload["budgets"]["reported_completion_tokens"] == 3
+    assert "Private execution evidence" not in captured.out
+    assert "Private provider response" not in captured.out
+
+
+def test_verify_execution_cli_rejects_unbound_result_and_two_stdin_inputs(
+    tmp_path: Path, capsys
+) -> None:
+    artifact = create_request_artifact(build_messages(PromptRequest(Task.REVIEW, "Review")), ())
+    plan = create_execution_plan(
+        artifact, ProviderConfig("http://localhost:11434/v1", "requested-model")
+    )
+    request_path = tmp_path / "request.json"
+    plan_path = tmp_path / "plan.json"
+    result_path = tmp_path / "result.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+    result_path.write_text(
+        render_execution_result(artifact, ChatResult("private"), model=plan.model),
+        encoding="utf-8",
+    )
+
+    unbound_exit = main(["verify-execution", str(request_path), str(plan_path), str(result_path)])
+    unbound = capsys.readouterr()
+    assert unbound_exit == 5
+    assert unbound.out == ""
+    assert "does not record a reviewed execution plan" in unbound.err
+
+    stdin_exit = main(["verify-execution", "-", str(plan_path), "-"], stdin=BytesIO(b"{}"))
+    stdin = capsys.readouterr()
+    assert stdin_exit == 5
+    assert stdin.out == ""
+    assert "cannot both read from stdin" in stdin.err
 
 
 def test_inline_execute_reports_invalid_deferred_environment(
@@ -876,7 +968,7 @@ def test_inspect_result_rejects_invalid_envelope(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 5
     assert captured.out == ""
-    assert "fields do not match schema version 1" in captured.err
+    assert "expected 1 or 2" in captured.err
 
 
 def test_verify_result_is_machine_readable_and_omits_contents(tmp_path: Path, capsys) -> None:

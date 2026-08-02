@@ -21,11 +21,14 @@ create-plan + offline plan verification/approval
 execute --plan -> one bounded provider request
             |
             v
-result JSON -> offline verify-result / inspect-result / compare-results
+plan-bound result JSON -> offline verify-execution
+            |
+            +-> verify-result / inspect-result / compare-results
 ```
 
-`build`, `inspect`, `create-plan`, `verify-plan`, `inspect-result`, `verify-result`, `compare`, and
-`compare-results` never make a network request. `execute` does not read source files; it sends the
+`build`, `inspect`, `create-plan`, `verify-plan`, `verify-execution`, `inspect-result`,
+`verify-result`, `compare`, and `compare-results` never make a network request. `execute` does not
+read source files; it sends the
 validated `messages` stored in the artifact. The [execution-plan contract](EXECUTION_PLAN.md)
 defines how endpoint, model, timeout, input ceiling, and output ceiling can join the same approval
 handoff without storing a credential or prompt contents in the plan.
@@ -97,9 +100,11 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "request_fingerprint": "sha256:<...>",
+  "plan_fingerprint": "sha256:<... or null>",
   "model": "operator-selected-model",
+  "response_model": "provider-reported-model-or-null",
   "response": {"text": "..."},
   "usage": {
     "prompt_tokens": null,
@@ -109,11 +114,15 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
 }
 ```
 
-The endpoint and API key are intentionally absent. Usage values remain `null` when the provider does
-not return valid non-negative integers. `parse_execution_result()`, `inspect-result`,
+The endpoint and API key are intentionally absent. `model` is the model label requested by
+Samsarix; `response_model` is the distinct model label returned by the provider when present.
+Plan-backed execution records the validated execution-plan fingerprint; inline `run` or `execute`
+records `null`. Usage values remain `null` when the provider does not return valid non-negative
+integers. `parse_execution_result()`, `inspect-result`,
 `verify-result`, and `compare-results` enforce the exact fields, schema version, fingerprint syntax,
 canonical model label, non-empty UTF-8 response, usage types, and size limit before emitting
-metadata or comparing.
+metadata or comparing. The parser accepts legacy schema version 1 and represents its absent plan
+and response-model fields as `null`; all newly rendered envelopes use version 2.
 
 ## Offline request comparison
 
@@ -131,6 +140,20 @@ bounded JSON documents.
 
 ## Offline result inspection and comparison
 
+`verify-execution REQUEST PLAN RESULT` performs the strongest local offline check. It recomputes
+and validates the request and plan fingerprints, verifies their linkage and estimated-input
+budget, requires the result to record that exact plan fingerprint and requested model, and rejects
+provider-reported completion usage above the plan's output ceiling. Its text and JSON forms omit
+prompt and response contents while retaining the endpoint, requested and response model labels,
+request metrics, budgets, usage, response size, and response SHA-256. The plan must be an explicit
+file, and at most one of request/result may be `-`.
+
+This verification shows that the three local documents are internally consistent. The result and
+hashes are not signed, and the requested endpoint/model are client configuration rather than
+independent proof of the infrastructure that handled the call. Anyone able to rewrite all files
+can construct another consistent chain. Use separately protected approval fingerprints,
+signatures/attestations, provider logs, or billing records when those properties matter.
+
 `verify-result REQUEST RESULT` strictly validates both bounded envelopes and fails unless the
 result's request fingerprint matches the recomputed fingerprint of the supplied request artifact.
 Its text and JSON forms emit the common fingerprint, request message/context counts and byte/token
@@ -143,7 +166,8 @@ rewrite the files can recompute unkeyed hashes. Use external access controls or 
 authenticity is required.
 
 `inspect-result RESULT` validates one execution-result envelope and emits content-omitting metadata
-in text or JSON. It reports the linked request fingerprint, operator-recorded model, response
+in text or JSON. It reports the linked request and optional plan fingerprints, requested and
+provider-reported models, response
 character/UTF-8 byte counts and SHA-256 hash, and provider usage when present. This supports
 fail-closed CI archiving and diagnostics even when there is no second run to compare. Neither form
 reproduces the response body.
@@ -176,7 +200,8 @@ tokenizers between providers, estimate price, or evaluate response correctness o
 
 `compare-results BASE TARGET` validates two execution-result envelopes and fails unless they
 reference the same request fingerprint. Its text and JSON forms report the common fingerprint,
-whether model labels changed, whether response hashes match, response character/UTF-8 byte counts,
+whether plan, requested-model, or response-model labels changed, whether response hashes match,
+response character/UTF-8 byte counts,
 both response SHA-256 hashes, and token-usage deltas when both providers reported the corresponding
 value. Neither response body is reproduced.
 
@@ -187,8 +212,8 @@ tokenization. Result JSON and its hashes are not signatures. A response hash can
 response, so comparison files still require handling appropriate to the underlying result.
 
 Both result paths cannot be `-` because a single stdin stream cannot supply two independently
-bounded JSON documents. Result-comparison schema version `1` is independent of execution-result
-schema version `1` and request schema version `2`.
+bounded JSON documents. Result-comparison schema version `2` is independent of execution-result
+schema version `2` and request schema version `2`.
 
 ## Machine-readable contract schemas
 
@@ -198,16 +223,17 @@ The package bundles self-contained
 | CLI name | Contract | Bundled file |
 | --- | --- | --- |
 | `request` | Request artifact schema version 2 | `src/samsarix_codegen/schemas/request-artifact-v2.schema.json` |
-| `result` | Execution result schema version 1 | `src/samsarix_codegen/schemas/execution-result-v1.schema.json` |
+| `result` | Execution result schema version 2 | `src/samsarix_codegen/schemas/execution-result-v2.schema.json` |
 | `comparison` | Artifact comparison schema version 1 | `src/samsarix_codegen/schemas/artifact-comparison-v1.schema.json` |
-| `result-inspection` | Execution-result inspection schema version 1 | `src/samsarix_codegen/schemas/execution-result-inspection-v1.schema.json` |
-| `result-verification` | Request/result verification schema version 1 | `src/samsarix_codegen/schemas/execution-result-verification-v1.schema.json` |
-| `result-comparison` | Execution-result comparison schema version 1 | `src/samsarix_codegen/schemas/execution-result-comparison-v1.schema.json` |
+| `result-inspection` | Execution-result inspection schema version 2 | `src/samsarix_codegen/schemas/execution-result-inspection-v2.schema.json` |
+| `result-verification` | Request/result verification schema version 2 | `src/samsarix_codegen/schemas/execution-result-verification-v2.schema.json` |
+| `result-comparison` | Execution-result comparison schema version 2 | `src/samsarix_codegen/schemas/execution-result-comparison-v2.schema.json` |
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
 | `context-manifest` | Explicit context manifest schema version 1 | `src/samsarix_codegen/schemas/context-manifest-v1.schema.json` |
 | `result-policy` | Execution-result policy schema version 1 | `src/samsarix_codegen/schemas/execution-result-policy-v1.schema.json` |
 | `execution-plan` | Credential-free execution plan schema version 1 | `src/samsarix_codegen/schemas/execution-plan-v1.schema.json` |
 | `execution-plan-verification` | Request/plan verification schema version 1 | `src/samsarix_codegen/schemas/execution-plan-verification-v1.schema.json` |
+| `execution-evidence` | Request/plan/result evidence schema version 1 | `src/samsarix_codegen/schemas/execution-evidence-verification-v1.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
 `load_contract_schema()` from Python. The files are package data in both the sdist and wheel.
@@ -215,10 +241,15 @@ Use `samsarix-codegen schema NAME` to print one without a network request, or
 JSON Schema checks portable structure, types, bounds, required fields, and digest syntax. It cannot
 prove semantic relationships such as whether a fingerprint matches canonical content, context
 bytes sum correctly, estimates match messages, or deltas match their base/target values. Use
-`inspect`, `inspect-result`, `verify-result`, `compare`, `compare-results`, or the corresponding
-Python parser for those semantic checks. Context manifests are input contracts rather than
+`inspect`, `inspect-result`, `verify-result`, `verify-execution`, `compare`, `compare-results`, or
+the corresponding Python parser for those semantic checks. Context manifests are input contracts rather than
 request/result envelopes; their [separate contract](CONTEXT_MANIFEST.md) defines the additional
 runtime path and containment rules. Result policies are explicitly selected input contracts; their
 [separate contract](RESULT_POLICY.md) defines rule enforcement and trust limits. Execution plans
 are explicitly selected input contracts; their [separate contract](EXECUTION_PLAN.md) defines
 authority, precedence, linkage, and trust limits.
+
+The checked-in [result](../examples/execution-result-v2.json) and
+[execution-evidence](../examples/execution-evidence-v1.json) examples are mutually consistent and
+validated against the bundled schemas in the test suite. They use placeholder fingerprints and
+must not be treated as approval records for a real request.

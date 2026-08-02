@@ -151,6 +151,7 @@ class ChatResult:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    response_model: str | None = None
 
 
 def _validate_endpoint(parsed: SplitResult) -> None:

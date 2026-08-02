@@ -9,8 +9,9 @@ repository-discovery, file-write, shell, or retry authority. Samsarix Codegen ne
 executes generated code, scans a repository automatically, or retries a paid request.
 
 > **Status:** `0.2.0` release candidate. The offline review workflow, versioned execution-plan
-> handoff, one-request execution path, and content-free provider conformance check are implemented
-> and tested. The package has not been published to PyPI or run through the documented
+> handoff, request-plan-result evidence chain, one-request execution path, and content-free
+> provider conformance check are implemented and tested. The package has not been published to
+> PyPI or run through the documented
 > three-developer pilot.
 
 ## What makes it useful
@@ -26,6 +27,8 @@ The core workflow separates request construction from credential-bearing executi
    ceiling in a credential-free execution plan.
 5. Validate and pin the plan fingerprint offline.
 6. Send exactly that reviewed request with those reviewed settings once using `execute --plan`.
+7. Verify the request, plan, and stored result together offline without reproducing prompt or
+   response contents.
 
 This makes staged-change review, CI approval handoffs, selected-log triage, and reproducible
 provider comparisons practical without a private Samsarix service or another repository.
@@ -97,6 +100,9 @@ $planFingerprint = samsarix-codegen verify-plan request.json execution-plan.json
   --format fingerprint
 samsarix-codegen execute request.json `
   --plan execution-plan.json `
+  --expect-plan-fingerprint $planFingerprint `
+  --format json > result.json
+samsarix-codegen verify-execution request.json execution-plan.json result.json `
   --expect-plan-fingerprint $planFingerprint
 ```
 
@@ -121,6 +127,9 @@ plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.jso
   --format fingerprint)"
 samsarix-codegen execute request.json \
   --plan execution-plan.json \
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --format json > result.json
+samsarix-codegen verify-execution request.json execution-plan.json result.json \
   --expect-plan-fingerprint "$plan_fingerprint"
 ```
 
@@ -131,6 +140,9 @@ are offline. So are `create-plan` and `verify-plan`. Plan-backed `execute` valid
 plan integrity, request linkage, input budget, and optional separately approved plan fingerprint
 before constructing a provider client, then makes one non-streaming request. The
 [execution-plan contract](docs/EXECUTION_PLAN.md) defines its no-override behavior and trust limits.
+Plan-backed JSON execution records the exact plan fingerprint in result schema version 2.
+`verify-execution` then validates request/plan/result linkage, the requested model, the reviewed
+budgets, and any reported completion usage offline.
 
 The fingerprint detects drift; it is not a signature. Anyone able to replace an artifact can also
 recompute its unkeyed hash. See the [request artifact contract](docs/REQUEST_ARTIFACT.md) before
@@ -179,10 +191,14 @@ samsarix-codegen compare-results result-a.json result-b.json --format json
 ```
 
 Both result files identify the common request fingerprint and omit the endpoint and API key.
+Result schema version 2 also records a nullable plan fingerprint, the requested model label, and a
+separate nullable provider-reported response model. Inline execution records a null plan
+fingerprint; plan-backed execution records the reviewed plan fingerprint.
 `verify-result` strictly validates a concrete request and result together, fails unless their
 fingerprints match, and emits content-omitting request metrics plus result metadata. It is a local
 linkage check, not proof that a provider authored either file or received the request.
-`inspect-result` strictly validates one envelope and reports its request fingerprint, model,
+`inspect-result` strictly validates one envelope and reports its request and optional plan
+fingerprints, requested and provider-reported models,
 response character/UTF-8 byte counts and SHA-256 hash, and available usage without reproducing the
 response. This makes a stored run fail-closed and loggable before a second run exists. Both
 `inspect-result` and `verify-result` can additionally require an exact model label and enforce hard
@@ -190,7 +206,7 @@ response-byte, prompt-token, completion-token, and total-token ceilings. A confi
 fails closed when that usage field was not reported. Put repeatable rules in a strict checked-in
 [execution-result policy](docs/RESULT_POLICY.md), or use the equivalent inline flags for one run.
 `compare-results` strictly validates both envelopes, refuses results with different request
-fingerprints, and reports model names, response UTF-8 sizes and SHA-256 hashes, equality, and
+fingerprints, and reports plan and model changes, response UTF-8 sizes and SHA-256 hashes, equality, and
 available token-usage deltas without reproducing either response. It is an offline structural and
 resource comparison, not a quality score or proof that a provider authored an envelope.
 
@@ -202,6 +218,7 @@ resource comparison, not a quality score or proof that a provider authored an en
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
 | `create-plan` | Never | Bind one request to credential-free provider settings and budgets |
 | `verify-plan` | Never | Validate request/plan linkage and emit a content-omitting record |
+| `verify-execution` | Never | Validate one request/plan/result chain without prompt or response contents |
 | `inspect-result` | Never | Validate, policy-check, and summarize one result without its response contents |
 | `verify-result` | Never | Link and policy-check one result against a validated request without contents |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
@@ -212,7 +229,9 @@ resource comparison, not a quality score or proof that a provider authored an en
 | `run` | Once | Convenience path that builds and executes in one process |
 
 `run --format json` and `execute --format json` return a stable result envelope with the request
-fingerprint, model, response text, and provider usage when reported. Use
+fingerprint, optional plan fingerprint, requested and provider-reported model labels, response
+text, and provider usage when reported. The parser remains compatible with legacy result schema
+version 1. Use
 `samsarix-codegen <command> --help` for the complete option set.
 
 ## Machine-readable contracts
@@ -222,16 +241,17 @@ without installing another tool or using the network:
 
 ```bash
 samsarix-codegen schema request > request-artifact-v2.schema.json
-samsarix-codegen schema result > execution-result-v1.schema.json
+samsarix-codegen schema result > execution-result-v2.schema.json
 samsarix-codegen schema comparison > artifact-comparison-v1.schema.json
-samsarix-codegen schema result-inspection > execution-result-inspection-v1.schema.json
-samsarix-codegen schema result-verification > execution-result-verification-v1.schema.json
-samsarix-codegen schema result-comparison > execution-result-comparison-v1.schema.json
+samsarix-codegen schema result-inspection > execution-result-inspection-v2.schema.json
+samsarix-codegen schema result-verification > execution-result-verification-v2.schema.json
+samsarix-codegen schema result-comparison > execution-result-comparison-v2.schema.json
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
 samsarix-codegen schema context-manifest > context-manifest-v1.schema.json
 samsarix-codegen schema result-policy > execution-result-policy-v1.schema.json
 samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
 samsarix-codegen schema execution-plan-verification > execution-plan-verification-v1.schema.json
+samsarix-codegen schema execution-evidence > execution-evidence-verification-v1.schema.json
 ```
 
 The same files ship inside the typed Python package and are available through
@@ -384,6 +404,8 @@ contract. Unstable implementation helpers are not exported from `samsarix_codege
 `ExecutionPlan`, `create_execution_plan()`, `parse_execution_plan()`,
 `verify_execution_plan()`, and `provider_config_from_execution_plan()` expose the same
 credential-free planning and exact runtime-configuration boundary to typed consumers.
+`ExecutionEvidenceVerification`, `verify_execution_evidence()`, and
+`render_execution_evidence_verification()` expose the complete offline chain verifier.
 
 ## Development and package verification
 
@@ -397,7 +419,7 @@ python -m build
 ```
 
 CI runs these checks plus a built-wheel request/plan handoff, one exact local-fixture plan execution,
-plan and result linkage verification, checked-in policy enforcement and schema validation,
+request/plan/result evidence verification, checked-in policy enforcement and schema validation,
 comparison, provider-check contract, and schema smoke tests on Python 3.10 and 3.14 across Ubuntu
 and Windows. See
 [CONTRIBUTING.md](CONTRIBUTING.md),
@@ -430,7 +452,10 @@ instruction + explicit files / explicit manifests / named stdin
                  one plan-bound provider request
                                        |
                                        v
-                           text or JSON result envelope
+                    text or plan-bound JSON result
+                                       |
+                                       v
+                    offline three-artifact verification
 ```
 
 The package has no runtime dependencies. The standard-library network client implements only the
@@ -451,6 +476,9 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - Execution plans contain no prompt or credential, but endpoints, model names, and limits can
   reveal deployment topology. Their unkeyed fingerprints detect drift but do not authenticate a
   reviewer, provider, or endpoint.
+- Content-omitting execution evidence includes endpoint/model metadata and response hashes. It
+  verifies local linkage, not provider authorship; protect it according to the underlying data and
+  deployment sensitivity.
 - File contents are untrusted prompt data. Prompt injection cannot be eliminated; review every
   response.
 - Model output may be incorrect or unsafe. Samsarix Codegen never executes, applies, or persists it.

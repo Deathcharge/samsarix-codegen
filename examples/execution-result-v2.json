@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "request_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "plan_fingerprint": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "model": "reviewed-model",
+  "response_model": "served-model-2026-08",
+  "response": {
+    "text": "Example response"
+  },
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 2,
+    "total_tokens": 12
+  }
+}

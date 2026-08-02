@@ -89,6 +89,9 @@ class OpenAIChatClient:
             prompt_tokens=_optional_nonnegative_int(usage.get("prompt_tokens")),
             completion_tokens=_optional_nonnegative_int(usage.get("completion_tokens")),
             total_tokens=_optional_nonnegative_int(usage.get("total_tokens")),
+            response_model=(
+                decoded.get("model") if isinstance(decoded.get("model"), str) else None
+            ),
         )
 
 

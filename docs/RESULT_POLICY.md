@@ -22,7 +22,8 @@ Unset rules must be omitted rather than set to `null`. Unknown and duplicate fie
 
 The fields mean:
 
-- `expected_model`: require an exact, canonical model-label match.
+- `expected_model`: require an exact match to the canonical model label Samsarix requested. It does
+  not gate the separate provider-reported response model.
 - `max_response_bytes`: limit the response's actual UTF-8 byte count from 1 through 12 MiB.
 - `max_prompt_tokens`, `max_completion_tokens`, and `max_total_tokens`: limit the corresponding
   provider-reported usage values. Each is a non-negative JSON-safe integer no greater than

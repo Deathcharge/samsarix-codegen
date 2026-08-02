@@ -1,6 +1,7 @@
 # Copyright 2026 Samsarix LLC
 # SPDX-License-Identifier: Apache-2.0
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from samsarix_codegen.artifact import (
 from samsarix_codegen.cli import main
 from samsarix_codegen.context import ContextManifest
 from samsarix_codegen.errors import ConfigurationError
+from samsarix_codegen.execution_evidence import verify_execution_evidence
 from samsarix_codegen.execution_plan import (
     create_execution_plan,
     parse_execution_plan,
@@ -151,6 +153,23 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
             verify_execution_plan(base, execution_plan), output_format="json"
         )
     )
+    plan_bound_result = parse_execution_result(
+        render_execution_result(
+            base,
+            ChatResult(
+                "Plan-bound review",
+                100,
+                20,
+                120,
+                response_model="served-model",
+            ),
+            model=execution_plan.model,
+            plan_fingerprint=execution_plan.fingerprint,
+        )
+    )
+    execution_evidence_payload = verify_execution_evidence(
+        base, execution_plan, plan_bound_result
+    ).to_payload()
 
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
@@ -172,6 +191,9 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     Draft202012Validator(load_contract_schema("execution-plan")).validate(execution_plan_payload)
     Draft202012Validator(load_contract_schema("execution-plan-verification")).validate(
         execution_plan_verification_payload
+    )
+    Draft202012Validator(load_contract_schema("execution-evidence")).validate(
+        execution_evidence_payload
     )
 
 
@@ -248,6 +270,24 @@ def test_execution_plan_example_is_schema_valid_and_internally_consistent() -> N
     assert plan.fingerprint == payload["plan_fingerprint"]
 
 
+def test_execution_result_and_evidence_examples_are_schema_valid_and_consistent() -> None:
+    examples = Path(__file__).resolve().parents[1] / "examples"
+    result = json.loads((examples / "execution-result-v2.json").read_text(encoding="utf-8"))
+    evidence = json.loads((examples / "execution-evidence-v1.json").read_text(encoding="utf-8"))
+
+    Draft202012Validator(load_contract_schema("result")).validate(result)
+    Draft202012Validator(load_contract_schema("execution-evidence")).validate(evidence)
+    assert evidence["plan_fingerprint"] == result["plan_fingerprint"]
+    assert evidence["request"]["fingerprint"] == result["request_fingerprint"]
+    assert evidence["provider"]["requested_model"] == result["model"]
+    assert evidence["provider"]["response_model"] == result["response_model"]
+    assert evidence["result"]["usage"] == result["usage"]
+    response = result["response"]["text"]
+    assert evidence["result"]["response"]["sha256"] == (
+        "sha256:" + hashlib.sha256(response.encode()).hexdigest()
+    )
+
+
 @pytest.mark.parametrize(
     "mutator",
     [
@@ -296,7 +336,13 @@ def test_result_policy_schema_rejects_contract_drift(payload: dict[str, object])
 
 @pytest.mark.parametrize(
     "contract",
-    ["result", "result-inspection", "result-verification", "result-comparison"],
+    [
+        "result",
+        "result-inspection",
+        "result-verification",
+        "result-comparison",
+        "execution-evidence",
+    ],
 )
 def test_result_schemas_reject_noncanonical_model_labels(contract: str) -> None:
     artifact = make_artifact("Review this")
@@ -312,9 +358,23 @@ def test_result_schemas_reject_noncanonical_model_labels(contract: str) -> None:
     elif contract == "result-verification":
         payload = verify_execution_result(artifact, result).to_payload()
         payload["result"]["model"] = " model "
-    else:
+    elif contract == "result-comparison":
         payload = compare_execution_results(result, result).to_payload()
         payload["base"]["model"] = " model "
+    else:
+        plan = create_execution_plan(
+            artifact, ProviderConfig("https://models.example.com/v1", "model")
+        )
+        plan_result = parse_execution_result(
+            render_execution_result(
+                artifact,
+                ChatResult("Reviewed", response_model="served-model"),
+                model="model",
+                plan_fingerprint=plan.fingerprint,
+            )
+        )
+        payload = verify_execution_evidence(artifact, plan, plan_result).to_payload()
+        payload["provider"]["response_model"] = " model "
 
     with pytest.raises(ValidationError):
         Draft202012Validator(load_contract_schema(contract)).validate(payload)

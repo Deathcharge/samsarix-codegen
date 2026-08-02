@@ -17,11 +17,12 @@ from samsarix_codegen.models import MAX_MODEL_CHARS, ChatResult, ContextFile
 from samsarix_codegen.prompt import estimate_tokens
 
 ARTIFACT_SCHEMA_VERSION = 2
-RESULT_SCHEMA_VERSION = 1
+LEGACY_RESULT_SCHEMA_VERSION = 1
+RESULT_SCHEMA_VERSION = 2
 COMPARISON_SCHEMA_VERSION = 1
-RESULT_INSPECTION_SCHEMA_VERSION = 1
-RESULT_VERIFICATION_SCHEMA_VERSION = 1
-RESULT_COMPARISON_SCHEMA_VERSION = 1
+RESULT_INSPECTION_SCHEMA_VERSION = 2
+RESULT_VERIFICATION_SCHEMA_VERSION = 2
+RESULT_COMPARISON_SCHEMA_VERSION = 2
 MAX_ARTIFACT_BYTES = 12 * 1024 * 1024
 MAX_RESULT_BYTES = 12 * 1024 * 1024
 MAX_RESULT_POLICY_TOKENS = (1 << 53) - 1
@@ -131,11 +132,17 @@ class ExecutionResult:
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    plan_fingerprint: str | None = None
+    response_model: str | None = None
 
     def __post_init__(self) -> None:
         if not _is_sha256(self.request_fingerprint):
             raise ArtifactError("execution result contains an invalid request fingerprint")
+        if self.plan_fingerprint is not None and not _is_sha256(self.plan_fingerprint):
+            raise ArtifactError("execution result contains an invalid plan fingerprint")
         _normalize_result_model(self.model, require_canonical=True)
+        if self.response_model is not None:
+            _normalize_result_model(self.response_model, require_canonical=True)
         if not isinstance(self.response_text, str) or not self.response_text:
             raise ArtifactError("execution result response text cannot be empty")
         response_bytes = _utf8_size(self.response_text, label="execution result response text")
@@ -153,7 +160,9 @@ class ExecutionResult:
         return {
             "schema_version": RESULT_SCHEMA_VERSION,
             "request_fingerprint": self.request_fingerprint,
+            "plan_fingerprint": self.plan_fingerprint,
             "model": self.model,
+            "response_model": self.response_model,
             "response": {"text": self.response_text},
             "usage": {
                 "prompt_tokens": self.prompt_tokens,
@@ -174,9 +183,15 @@ class ExecutionResultSummary:
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    plan_fingerprint: str | None = None
+    response_model: str | None = None
 
     def __post_init__(self) -> None:
         _normalize_result_model(self.model, require_canonical=True)
+        if self.plan_fingerprint is not None and not _is_sha256(self.plan_fingerprint):
+            raise ArtifactError("execution result summary contains an invalid plan fingerprint")
+        if self.response_model is not None:
+            _normalize_result_model(self.response_model, require_canonical=True)
         for label, value in (
             ("response characters", self.response_chars),
             ("response bytes", self.response_bytes),
@@ -199,7 +214,9 @@ class ExecutionResultSummary:
         """Return a JSON-compatible result summary without response text."""
 
         return {
+            "plan_fingerprint": self.plan_fingerprint,
             "model": self.model,
+            "response_model": self.response_model,
             "response": {
                 "chars": self.response_chars,
                 "bytes": self.response_bytes,
@@ -347,9 +364,21 @@ class ExecutionResultComparison:
 
     @property
     def model_changed(self) -> bool:
-        """Return whether the operator-recorded model names differ."""
+        """Return whether the requested model names differ."""
 
         return self.base.model != self.target.model
+
+    @property
+    def plan_changed(self) -> bool:
+        """Return whether the results record different reviewed execution plans."""
+
+        return self.base.plan_fingerprint != self.target.plan_fingerprint
+
+    @property
+    def response_model_changed(self) -> bool:
+        """Return whether the provider-reported model labels differ."""
+
+        return self.base.response_model != self.target.response_model
 
     @property
     def response_identical(self) -> bool:
@@ -363,7 +392,9 @@ class ExecutionResultComparison:
         return {
             "schema_version": RESULT_COMPARISON_SCHEMA_VERSION,
             "request_fingerprint": self.request_fingerprint,
+            "plan_changed": self.plan_changed,
             "model_changed": self.model_changed,
+            "response_model_changed": self.response_model_changed,
             "response_identical": self.response_identical,
             "base": self.base.to_payload(),
             "target": self.target.to_payload(),
@@ -507,10 +538,14 @@ def render_execution_result(
     result: ChatResult,
     *,
     model: str,
+    plan_fingerprint: str | None = None,
 ) -> str:
     """Render a machine-readable provider result without endpoint or credential data."""
 
     normalized_model = _normalize_result_model(model)
+    normalized_response_model = (
+        None if result.response_model is None else _normalize_result_model(result.response_model)
+    )
     if not isinstance(result.text, str) or not result.text:
         raise ArtifactError("execution result response text cannot be empty")
     prompt_tokens = _parse_usage_value("prompt_tokens", result.prompt_tokens)
@@ -523,6 +558,8 @@ def render_execution_result(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
+        plan_fingerprint=plan_fingerprint,
+        response_model=normalized_response_model,
     )
     rendered = json.dumps(execution_result.to_payload(), ensure_ascii=False, indent=2) + "\n"
     if len(rendered.encode("utf-8")) > MAX_RESULT_BYTES:
@@ -541,24 +578,43 @@ def parse_execution_result(raw: str | bytes) -> ExecutionResult:
     if not isinstance(decoded, dict):
         raise ArtifactError("execution result must be a JSON object")
 
-    expected_keys = {
+    legacy_keys = {
         "schema_version",
         "request_fingerprint",
         "model",
         "response",
         "usage",
     }
-    if set(decoded) != expected_keys:
-        raise ArtifactError("execution result fields do not match schema version 1")
     schema_version = decoded.get("schema_version")
-    if (
-        not isinstance(schema_version, int)
-        or isinstance(schema_version, bool)
-        or schema_version != RESULT_SCHEMA_VERSION
-    ):
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool):
         raise ArtifactError(
             f"unsupported execution result schema: {schema_version!r}; "
-            f"expected {RESULT_SCHEMA_VERSION}"
+            f"expected {LEGACY_RESULT_SCHEMA_VERSION} or {RESULT_SCHEMA_VERSION}"
+        )
+    current_keys = legacy_keys | {"plan_fingerprint", "response_model"}
+    if schema_version == LEGACY_RESULT_SCHEMA_VERSION:
+        if set(decoded) != legacy_keys:
+            raise ArtifactError("execution result fields do not match schema version 1")
+        plan_fingerprint = None
+        response_model = None
+    elif schema_version == RESULT_SCHEMA_VERSION:
+        if set(decoded) != current_keys:
+            raise ArtifactError("execution result fields do not match schema version 2")
+        plan_fingerprint = decoded.get("plan_fingerprint")
+        if plan_fingerprint is not None and (
+            not isinstance(plan_fingerprint, str) or not _is_sha256(plan_fingerprint)
+        ):
+            raise ArtifactError("execution result contains an invalid plan fingerprint")
+        response_model_value = decoded.get("response_model")
+        response_model = (
+            None
+            if response_model_value is None
+            else _normalize_result_model(response_model_value, require_canonical=True)
+        )
+    else:
+        raise ArtifactError(
+            f"unsupported execution result schema: {schema_version!r}; "
+            f"expected {LEGACY_RESULT_SCHEMA_VERSION} or {RESULT_SCHEMA_VERSION}"
         )
 
     fingerprint = decoded.get("request_fingerprint")
@@ -585,6 +641,8 @@ def parse_execution_result(raw: str | bytes) -> ExecutionResult:
         prompt_tokens=_parse_usage_value("prompt_tokens", usage.get("prompt_tokens")),
         completion_tokens=_parse_usage_value("completion_tokens", usage.get("completion_tokens")),
         total_tokens=_parse_usage_value("total_tokens", usage.get("total_tokens")),
+        plan_fingerprint=plan_fingerprint,
+        response_model=response_model,
     )
 
 
@@ -624,9 +682,7 @@ def enforce_execution_result_policy(
         raise ArtifactError(
             "execution result policy enforcement requires a validated result and policy"
         )
-    if policy.expected_model is not None and not hmac.compare_digest(
-        result.model, policy.expected_model
-    ):
+    if policy.expected_model is not None and result.model != policy.expected_model:
         raise ArtifactError(
             f"execution result model {result.model!r} does not match "
             f"the expected model {policy.expected_model!r}"
@@ -701,7 +757,9 @@ def render_execution_result_verification(
             f"{verification.request_context_bytes:,} bytes"
         ),
         f"Estimated input: ~{verification.request_estimated_input_tokens:,} tokens",
-        f"Model: {result.model}",
+        f"Plan: {result.plan_fingerprint or 'not recorded'}",
+        f"Requested model: {result.model}",
+        f"Response model: {result.response_model or 'not reported'}",
         f"Response characters: {result.response_chars:,}",
         f"Response bytes: {result.response_bytes:,}",
         f"Response: {result.response_sha256}",
@@ -728,7 +786,9 @@ def render_execution_result_inspection(
     lines = [
         "Execution result is valid.",
         f"Request: {inspection.request_fingerprint}",
-        f"Model: {summary.model}",
+        f"Plan: {summary.plan_fingerprint or 'not recorded'}",
+        f"Requested model: {summary.model}",
+        f"Response model: {summary.response_model or 'not reported'}",
         f"Response characters: {summary.response_chars:,}",
         f"Response bytes: {summary.response_bytes:,}",
         f"Response: {summary.response_sha256}",
@@ -755,8 +815,18 @@ def render_execution_result_comparison(
         "Execution results reference the same reviewed request.",
         f"Request: {comparison.request_fingerprint}",
         (
-            f"Models: {comparison.base.model} -> {comparison.target.model} "
+            f"Plans: {comparison.base.plan_fingerprint or 'not recorded'} -> "
+            f"{comparison.target.plan_fingerprint or 'not recorded'} "
+            f"({'changed' if comparison.plan_changed else 'unchanged'})"
+        ),
+        (
+            f"Requested models: {comparison.base.model} -> {comparison.target.model} "
             f"({'changed' if comparison.model_changed else 'unchanged'})"
+        ),
+        (
+            f"Response models: {comparison.base.response_model or 'not reported'} -> "
+            f"{comparison.target.response_model or 'not reported'} "
+            f"({'changed' if comparison.response_model_changed else 'unchanged'})"
         ),
         ("Responses: identical" if comparison.response_identical else "Responses: different"),
         (
@@ -959,6 +1029,8 @@ def _summarize_execution_result(result: ExecutionResult) -> ExecutionResultSumma
         prompt_tokens=result.prompt_tokens,
         completion_tokens=result.completion_tokens,
         total_tokens=result.total_tokens,
+        plan_fingerprint=result.plan_fingerprint,
+        response_model=result.response_model,
     )
 
 
