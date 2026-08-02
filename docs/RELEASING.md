@@ -10,13 +10,14 @@ publishes from a branch or manual dispatch.
 
 - Manual `workflow_dispatch`: verifies the existing `X.Y.Z` source version, runs all source checks,
   builds and audits one sdist/wheel pair, creates `SHA256SUMS`, installs the wheel in a fresh virtual
-  environment, uploads the three files as workflow artifacts, and generates GitHub build-provenance
+  environment, creates and self-verifies a deterministic evaluator pilot kit, adds that ZIP to
+  `SHA256SUMS`, uploads all four files as workflow artifacts, and generates GitHub build-provenance
   attestations. Both publish jobs are skipped.
 - A pushed `vX.Y.Z` tag: performs the same build, but first requires an exact source/tag version
   match, a dated changelog entry, a clean checkout, and proof that the tagged commit is contained in
   `master`. After the `pypi` environment is manually approved, Trusted Publishing uploads only the
-  sdist and wheel. A GitHub release is then created as a draft with both packages and `SHA256SUMS`
-  attached before it is published.
+  sdist and wheel. A GitHub release is then created as a draft with both packages, the evaluator
+  kit, and `SHA256SUMS` attached before it is published.
 
 Every external action is pinned to a verified full commit SHA. Dependabot is configured to propose
 monthly GitHub Actions updates while retaining the human-readable version comment.
@@ -52,6 +53,7 @@ $run = gh run list --workflow release.yml --limit 1 --json databaseId --jq '.[0]
 gh run watch $run --exit-status
 gh run download $run --name python-package-distributions --dir .\release-dry-run
 gh run download $run --name release-sha256-manifest --dir .\release-dry-run
+gh run download $run --name evaluator-pilot-kit --dir .\release-dry-run
 Push-Location .\release-dry-run
 Get-Content SHA256SUMS | ForEach-Object {
   if ($_ -notmatch '^([0-9a-f]{64})  (.+)$') { throw "Invalid SHA256SUMS line: $_" }
@@ -65,7 +67,22 @@ gh attestation verify .\release-dry-run\samsarix_codegen-0.2.0.tar.gz `
   --repo Deathcharge/samsarix-codegen
 gh attestation verify .\release-dry-run\samsarix_codegen-0.2.0-py3-none-any.whl `
   --repo Deathcharge/samsarix-codegen
+gh attestation verify .\release-dry-run\samsarix-codegen-pilot-kit-0.2.0.zip `
+  --repo Deathcharge/samsarix-codegen
+Expand-Archive .\release-dry-run\samsarix-codegen-pilot-kit-0.2.0.zip `
+  -DestinationPath .\release-dry-run
+Push-Location .\release-dry-run\samsarix-codegen-pilot-kit-0.2.0
+python scripts/pilot_bundle.py verify-directory .
+Pop-Location
 ```
+
+The pilot kit verifier proves internal consistency and wheel/commit linkage. The outer GitHub
+attestation establishes build provenance, but neither mechanism guarantees that the package is
+safe or that the pilot passed. GitHub Actions artifacts have a workflow-configured 30-day retention
+period; preserve the exact ZIP digest in the coordinator's release evidence rather than treating
+the artifact URL as permanent. See GitHub's documentation for
+[workflow artifact retention and digest validation](https://docs.github.com/en/actions/tutorials/store-and-share-data)
+and [artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
 
 The workflow run must show both publishing jobs as skipped. A dry run does not reserve a PyPI name,
 upload a package, create a release, or create a tag.
@@ -151,7 +168,7 @@ wheel or checkout.
 
 ## Release evidence record
 
-Record the version, tag, exact commit, release workflow URL, four CI jobs, sdist/wheel filenames and
-SHA-256 values, GitHub attestation verification, GitHub release URL, PyPI project/version URL, fresh
-installation result, approving owner, and any rollback action. Passing the build gate is not proof
-that PyPI publication or user adoption occurred.
+Record the version, tag, exact commit, release workflow URL, four CI jobs, sdist/wheel/pilot-kit
+filenames and SHA-256 values, GitHub attestation verification, extracted-kit verification, GitHub
+release URL, PyPI project/version URL, fresh installation result, approving owner, and any rollback
+action. Passing the build gate is not proof that PyPI publication or user adoption occurred.

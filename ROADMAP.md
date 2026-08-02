@@ -27,7 +27,9 @@ that verifier runnable from a clone without credentials, a provider process, or 
 An installed-package self-check reproduces the same deterministic chain and validates every
 bundled contract before a pilot participant selects project context or configures a provider.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
-pilot validation, and flagship adoption remain separate decisions.
+pilot validation, and flagship adoption remain separate decisions. The same workflow now emits a
+deterministic, self-verifying evaluator kit that pins the exact wheel and source commit and removes
+the repository-checkout requirement from pilot onboarding without claiming participant evidence.
 
 ## Stabilize the productized default
 
@@ -39,7 +41,8 @@ pilot validation, and flagship adoption remain separate decisions.
 ## Release candidate
 
 - Run the documented three-developer pilot against one exact packaged artifact; its plan-backed
-  workflow, privacy-minimal record, and deterministic decision checker are ready for participants.
+  workflow, attested evaluator kit, privacy-minimal prefilled record, and deterministic decision
+  checker are ready for participants.
 - Instrument only truthful, privacy-respecting product signals and define support ownership.
 - Promote from prerelease only after recovery, upgrade, and failure paths are demonstrated.
 
@@ -80,7 +83,8 @@ Current hardening backlog:
   been certified. Streaming, ignore-aware discovery, and editor integration remain deferred.
 - Package name reservation and publication are not owner-completed. Release checks, SHA-256
   manifests, unexpected-wheel-root rejection, GitHub provenance attestations, and Trusted
-  Publishing workflow support are implemented.
+  Publishing workflow support are implemented. Manual release runs also produce a deterministic
+  pilot ZIP with archive/directory verification and a separate 30-day workflow artifact.
 - A standard-library HTTP client creates a small but ongoing compatibility review burden across
   provider variants. Redirects are rejected to prevent bearer-credential forwarding.
 

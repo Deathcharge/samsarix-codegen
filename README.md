@@ -492,11 +492,14 @@ schema validation, comparison, provider-check contract, and schema smoke tests o
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
 the remaining external usefulness gate, a strict privacy-minimal record, and a deterministic
-maintainer-side decision checker.
+decision checker. Each manual release dry run also produces an attested, deterministic evaluator
+kit with the exact wheel, a prefilled record, schemas, instructions, and standalone verification so
+participants do not need a repository checkout.
 
 The [release runbook](docs/RELEASING.md) documents a non-publishing workflow dry run, exact
 version/tag/changelog gates, SHA-256 manifests, provenance attestation, manually approved PyPI
-Trusted Publishing, immutable-ready GitHub releases, verification, and rollback. No package is
+Trusted Publishing, an independently uploaded evaluator kit, immutable-ready GitHub releases,
+verification, and rollback. No package is
 published merely by running CI or manually dispatching that workflow.
 
 ## Architecture

@@ -291,8 +291,9 @@ every installed-wheel CI job.
 
 ## Next evidence gates
 
-1. Complete the [three-developer pilot](PILOT.md) using pre-commit review and one non-code
-   incident-triage workflow.
+1. Distribute one workflow-built, attested evaluator kit and complete the
+   [three-developer pilot](PILOT.md) using pre-commit review and one non-code incident-triage
+   workflow. The kit reduces setup variance; it is not adoption evidence by itself.
 2. Record operator-run conformance reports and deeper contract tests against any local/provider
    endpoints Samsarix chooses to support explicitly.
 3. Configure the implemented trusted-publishing/attestation pipeline, reserve the package, and
