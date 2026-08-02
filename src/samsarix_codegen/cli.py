@@ -721,11 +721,7 @@ def _enforce_result_policy(result: ExecutionResult, args: argparse.Namespace) ->
         args.max_total_tokens,
     )
     if args.policy is not None:
-        if args.policy == "-":
-            raise ConfigurationError("--policy requires a file path and cannot read from stdin")
-        if any(value is not None for value in inline_values):
-            raise ConfigurationError("--policy cannot be combined with inline result-policy flags")
-        policy = load_execution_result_policy(args.policy)
+        policy = _load_result_policy_file(args.policy, inline_values=inline_values)
     else:
         policy = ExecutionResultPolicy(
             expected_model=args.expect_model,
@@ -745,12 +741,22 @@ def _load_explicit_result_policy(
         if expected_fingerprint is not None:
             raise ConfigurationError("--expect-policy-fingerprint requires --policy")
         return None
-    if policy_path == "-":
-        raise ConfigurationError("--policy requires a file path and cannot read stdin")
-    policy = load_execution_result_policy(policy_path)
+    policy = _load_result_policy_file(policy_path)
     if expected_fingerprint is not None:
         require_execution_result_policy_fingerprint(policy, expected_fingerprint)
     return policy
+
+
+def _load_result_policy_file(
+    policy_path: str,
+    *,
+    inline_values: Sequence[object] = (),
+) -> ExecutionResultPolicy:
+    if policy_path == "-":
+        raise ConfigurationError("--policy requires a file path and cannot read from stdin")
+    if any(value is not None for value in inline_values):
+        raise ConfigurationError("--policy cannot be combined with inline result-policy flags")
+    return load_execution_result_policy(policy_path)
 
 
 def _provider_config_from_args(
