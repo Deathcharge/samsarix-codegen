@@ -127,6 +127,8 @@ execution attempt; a failed preflight stops the session:
 samsarix-codegen execute request.json `
   --plan execution-plan.json `
   --expect-plan-fingerprint $planFingerprint `
+  --policy result-policy.json `
+  --expect-policy-fingerprint $policyFingerprint `
   --format json > result.json
 
 samsarix-codegen verify-execution request.json execution-plan.json result.json `
@@ -181,10 +183,12 @@ Get-Content incident-result-policy.json
 Stop before execution if the exact prompt contains a secret, personal data, or context that the
 selected provider is not authorized to receive. If execution is approved, use the same
 plan-backed `execute` and `verify-execution` sequence as Session A, substituting the incident file
-names and incident plan fingerprint, and pass `incident-result-policy.json` plus
-`$incidentPolicyFingerprint`. The version 2 policy makes the incident workflow's downstream JSON
+names and both incident fingerprints. Pass `--policy incident-result-policy.json` and
+`--expect-policy-fingerprint $incidentPolicyFingerprint` to `execute` as well as to the later
+offline `verify-execution`. The version 2 policy makes the incident workflow's downstream JSON
 handoff fail closed on invalid JSON, unapproved top-level keys, or wrong top-level types. It does
-not establish that the diagnosis or next step is correct.
+not establish that the diagnosis or next step is correct. A rejected response still consumes the
+single provider request, produces no normal stdout, and is never retried.
 
 ## Results record
 

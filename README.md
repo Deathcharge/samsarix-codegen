@@ -29,7 +29,8 @@ The core workflow separates request construction from credential-bearing executi
 5. Validate and pin the plan fingerprint offline.
 6. Validate and pin one explicit result-policy fingerprint when CI must enforce response metadata,
    resource ceilings, or a bounded top-level JSON-object shape after execution.
-7. Send exactly that reviewed request with those reviewed settings once using `execute --plan`.
+7. Send exactly that reviewed request with those reviewed settings once using `execute --plan`,
+   enforcing the separately approved result policy before normal output is emitted.
 8. Verify the request, plan, stored result, and optional exact policy together offline without
    reproducing prompt or response contents.
 
@@ -114,6 +115,8 @@ $policyFingerprint = samsarix-codegen fingerprint-policy result-policy.json
 samsarix-codegen execute request.json `
   --plan execution-plan.json `
   --expect-plan-fingerprint $planFingerprint `
+  --policy result-policy.json `
+  --expect-policy-fingerprint $policyFingerprint `
   --format json > result.json
 samsarix-codegen verify-execution request.json execution-plan.json result.json `
   --expect-plan-fingerprint $planFingerprint `
@@ -145,6 +148,8 @@ policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
 samsarix-codegen execute request.json \
   --plan execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy result-policy.json \
+  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > result.json
 samsarix-codegen verify-execution request.json execution-plan.json result.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
@@ -160,7 +165,12 @@ are offline. So are `create-plan` and `verify-plan`. Plan-backed `execute` valid
 plan integrity, request linkage, input budget, and optional separately approved plan fingerprint
 before constructing a provider client, then makes one non-streaming request. The
 [execution-plan contract](docs/EXECUTION_PLAN.md) defines its no-override behavior and trust limits.
-Plan-backed JSON execution records the exact plan fingerprint in result schema version 2.
+When `--policy` is selected, `execute` validates the policy and optional expected fingerprint
+before constructing the provider client. It then makes exactly one request, applies every rule to
+the normalized result, and emits normal text or JSON only after the policy passes. A failed
+post-response rule returns artifact exit code `5` with empty normal stdout and no retry; the one
+provider request has already occurred and may still be billable. Plan-backed JSON execution records
+the exact plan fingerprint in result schema version 2.
 `verify-execution` then validates request/plan/result linkage, the requested model, the reviewed
 budgets, any reported completion usage, and an optional explicitly selected result policy offline.
 When a policy is supplied, evidence schema version 3 records its canonical fingerprint and exact
@@ -276,7 +286,7 @@ resource comparison, not a quality score or proof that a provider authored an en
 | `compare-results` | Never | Compare same-request results without response contents |
 | `schema` | Never | Print any bundled versioned contract JSON Schema |
 | `provider-check` | Once | Send a tiny fixed request to test the supported provider wire contract |
-| `execute` | Once | Execute the exact messages in a validated artifact |
+| `execute` | Once | Execute a validated artifact once and optionally policy-gate its output |
 | `run` | Once | Convenience path that builds and executes in one process |
 
 `run --format json` and `execute --format json` return a stable result envelope with the request
@@ -531,6 +541,8 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - Result-policy files contain no prompt or response, but an expected model can reveal deployment
   choices. Their unkeyed fingerprints detect drift but do not authenticate approval; their limits
   do not authenticate provider-reported usage or prove monetary cost.
+- An `execute` result-policy failure suppresses normal output and never retries, but it occurs after
+  the provider response and therefore cannot prevent or reverse that request's cost.
 - Execution plans contain no prompt or credential, but endpoints, model names, and limits can
   reveal deployment topology. Their unkeyed fingerprints detect drift but do not authenticate a
   reviewer, provider, or endpoint.

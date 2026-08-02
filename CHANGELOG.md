@@ -52,6 +52,8 @@ approves a first public release.
   top-level type gates, duplicate-key rejection, and compatibility with version 1 policies.
 - Execution-evidence schema version 3 with response format and top-level key count after structured
   policy success, without emitting response-derived key names or values.
+- Policy-gated `execute` with pre-network policy/fingerprint approval, one provider request,
+  post-response fail-closed enforcement before normal stdout, and no retry on rejection.
 - A fully linked, reproducible offline request/plan/synthetic-result example whose rendered
   evidence must exactly match the checked-in record in tests and the installed-wheel CI journey.
 - An installed-package `self-check` command and standalone report schema that load every bundled

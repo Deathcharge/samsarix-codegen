@@ -228,6 +228,50 @@ def main() -> int:
                     "SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS": "not-an-integer",
                 }
             )
+            rejected_orphaned_policy_approval = run_cli(
+                [
+                    "execute",
+                    str(request_path),
+                    "--plan",
+                    str(plan_path),
+                    "--expect-policy-fingerprint",
+                    policy_fingerprint,
+                ],
+                cwd=root,
+                environment=execution_environment,
+                expected_exit=2,
+            )
+            require(
+                rejected_orphaned_policy_approval.stdout == b"",
+                "orphaned policy approval produced normal output",
+            )
+            require(
+                len(FixtureHandler.requests) == 0,
+                "orphaned policy approval caused a provider request",
+            )
+            rejected_policy_approval = run_cli(
+                [
+                    "execute",
+                    str(request_path),
+                    "--plan",
+                    str(plan_path),
+                    "--policy",
+                    str(policy_path),
+                    "--expect-policy-fingerprint",
+                    "sha256:" + "0" * 64,
+                ],
+                cwd=root,
+                environment=execution_environment,
+                expected_exit=5,
+            )
+            require(
+                rejected_policy_approval.stdout == b"",
+                "unapproved result policy produced normal output",
+            )
+            require(
+                len(FixtureHandler.requests) == 0,
+                "unapproved result policy caused a provider request",
+            )
             executed = run_cli(
                 [
                     "execute",
@@ -236,6 +280,10 @@ def main() -> int:
                     str(plan_path),
                     "--expect-plan-fingerprint",
                     plan_fingerprint,
+                    "--policy",
+                    str(policy_path),
+                    "--expect-policy-fingerprint",
+                    policy_fingerprint,
                     "--format",
                     "json",
                 ],

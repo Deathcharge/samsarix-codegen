@@ -1,6 +1,6 @@
 # Productization Record
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 ## Current repository assessment
 
@@ -44,14 +44,14 @@ without granting file-write or shell access. The primary journey is:
 3. Inspect the generated Markdown or schema-versioned JSON artifact without a network call.
 4. Record the artifact fingerprint, then create and validate a credential-free execution plan that
    binds it to an endpoint, model, timeout, input ceiling, and output ceiling.
-5. Record the plan fingerprint as the complete non-secret execution approval, then use
-   `execute --plan --expect-plan-fingerprint` in the credential-bearing boundary.
-6. Review text output or retain the plan-bound structured result envelope, requested and
-   provider-reported model labels, and provider-reported usage.
+5. Record the plan fingerprint and, when output rules matter, a separately reviewed policy
+   fingerprint; pass both approvals to `execute` in the credential-bearing boundary.
+6. Admit text output or a plan-bound structured result envelope only after the one provider
+   response passes the selected deterministic policy.
 7. Verify the request, plan, and result together offline, retaining content-omitting linkage and
-   budget evidence.
-8. Optionally apply deterministic model, response-byte, and reported-token policy gates before CI
-   retains a content-omitting inspection or request/result verification record.
+   budget and exact-policy evidence.
+8. Use offline inspection, request/result verification, or same-request comparison for retained
+   results without reproducing their contents in ordinary logs.
 
 ### Independent reason to exist
 
@@ -159,6 +159,10 @@ Research references:
     top-level object, required/allowed top-level keys, and JSON value types. Duplicate keys and
     non-finite numbers fail. This dependency-free offline check is deliberately narrower than
     recursive JSON Schema validation and does not score correctness or quality.
+22. **Policy-gated execution.** `execute` can validate one explicit policy and separately retained
+    fingerprint before constructing the provider client, make exactly one request, and enforce the
+    normalized response before normal stdout. A rejected response is never retried or disclosed by
+    the policy error, but its completed provider request may still be billable.
 
 ## Assumptions
 
@@ -233,6 +237,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add deterministic post-result model, size, and reported-usage gates for CI.
 - [x] Add a versioned, checked-in execution-result policy contract for repeatable team CI rules.
 - [x] Add bounded JSON-object shape gates and privacy-minimal structure evidence for downstream CI.
+- [x] Apply one exact approved result policy directly inside `execute` so response admission cannot
+  depend on a later shell step.
 - [x] Add a versioned execution-plan contract so approval covers the request and exact non-secret
   provider/budget intent across the credential boundary.
 - [x] Bind plan-backed results to that approval and verify the complete request/plan/result chain
@@ -256,6 +262,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Fail-closed post-result policy flags and a typed public enforcement API.
 - [x] Strict result-policy parsing/rendering/loading, bundled schema, example, and installed-wheel
   CI journey.
+- [x] Pre-network policy approval plus post-response fail-closed enforcement on `execute`, with no
+  retry and unchanged successful text/JSON output contracts.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -754,6 +762,31 @@ deterministic format validation as a normal evaluation/CI capability. Samsarix d
 a narrower dependency-free position: top-level structural readiness within the existing approved
 request/plan/result chain, not recursive JSON Schema validation, model grading, or a correctness
 claim. The linked sources and inference are recorded in `docs/COMPETITIVE_STRATEGY.md`.
+
+### Policy-gated execution follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing across 16 source files, the
+source release gate, and all 375 tests. `execute` now accepts only one explicit versioned policy
+file and optional separately retained fingerprint. Policy absence, stdin selection, malformed
+documents, and fingerprint drift fail before provider-client construction. After one response,
+the normalized result must pass model, size, reported-usage, and optional bounded JSON-object rules
+before either text or JSON is emitted. Failure returns artifact exit `5`, empty normal stdout, no
+response-value disclosure, and no retry; the one completed request may still be billable.
+
+The installed-plan smoke now proves both zero-request policy preflight failures and one successful
+plan/policy-bound execution against the local fixture while retaining its exact one-request
+invariant. The source-built sdist and wheel passed the fail-closed distribution audit, and a fresh
+zero-dependency environment installed only the wheel, reported no broken requirements, exposed the
+new `execute` options, passed installed self-check, and completed that smoke. The release workflow
+also exports the current execution-evidence and self-check schemas and runs installed self-check
+before the installed one-request journey.
+
+Official Promptfoo and Braintrust documentation treats deterministic assertions, format scorers,
+and CI pass/fail thresholds as operational gates; OpenAI documents a stronger provider-specific
+JSON Schema path through Structured Outputs. Samsarix remains the narrower cross-provider local
+boundary: one reviewed request, no retry, no second model, and deterministic output admission
+without claiming recursive schema or semantic validation. Links and the explicit inference are in
+`docs/COMPETITIVE_STRATEGY.md`.
 
 ### Validation not run
 

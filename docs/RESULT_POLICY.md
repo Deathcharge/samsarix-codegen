@@ -77,6 +77,33 @@ object encoded as UTF-8 with keys sorted, no insignificant whitespace, and unesc
 Input indentation and object field order therefore do not change the fingerprint. The schema
 version and every configured rule do change it.
 
+## Enforce during execution
+
+Pass the explicit policy and its separately retained approval directly to `execute`:
+
+```bash
+samsarix-codegen execute request.json \
+  --plan execution-plan.json \
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy result-policy.json \
+  --expect-policy-fingerprint "$policy_fingerprint" \
+  --format json > result.json
+```
+
+The policy file, document shape, and optional expected fingerprint are validated before the
+provider client is constructed. A malformed, missing, stdin-selected, or fingerprint-mismatched
+policy therefore makes no provider request. After exactly one provider response, Samsarix creates
+the same normalized execution-result envelope, enforces every configured rule, and emits the
+normal text or JSON response only if all rules pass. A post-response failure returns artifact exit
+code `5`, leaves normal stdout empty, does not disclose the response through the policy error, and
+never retries or calls a second model.
+
+This is an output-admission gate, not a request-cost prevention mechanism. A rule can evaluate only
+after the provider returned the response, so that single request may still be billable even when
+the gate rejects it. Store a successful JSON result and use the offline evidence command below to
+prove its linkage later. The same explicit execution gate is available for inline `execute`, but
+the plan-backed form retains the stronger reviewed provider/budget handoff.
+
 Use that approval with the full offline evidence gate:
 
 ```bash
