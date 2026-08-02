@@ -62,6 +62,21 @@ EXPECTED_PLAN_FINGERPRINT = (
 EXPECTED_RESPONSE_FINGERPRINT = (
     "sha256:0e7f7114c7721470a498c106ec93f961e49855039964243a1f2eba11a7925fc0"
 )
+EXPECTED_CONTRACTS = (
+    "request",
+    "result",
+    "comparison",
+    "result-inspection",
+    "result-verification",
+    "result-comparison",
+    "provider-check",
+    "context-manifest",
+    "result-policy",
+    "execution-plan",
+    "execution-plan-verification",
+    "execution-evidence",
+    "self-check",
+)
 _VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _PYTHON_VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+")
 _SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -147,7 +162,7 @@ def run_self_check() -> SelfCheckReport:
     """Exercise bundled contracts and the core evidence path without user input or network."""
 
     try:
-        _check_bundled_contracts()
+        contract_count = _check_bundled_contracts()
 
         source_bytes = SELF_CHECK_SOURCE.encode("utf-8")
         context = ContextFile(
@@ -220,7 +235,7 @@ def run_self_check() -> SelfCheckReport:
         package_version=__version__,
         python_implementation=platform.python_implementation(),
         python_version=platform.python_version(),
-        contract_count=len(ContractSchema),
+        contract_count=contract_count,
         request_fingerprint=artifact.fingerprint,
         plan_fingerprint=plan.fingerprint,
         response_fingerprint=evidence.result.response_sha256,
@@ -254,7 +269,9 @@ def render_self_check(
     )
 
 
-def _check_bundled_contracts() -> None:
+def _check_bundled_contracts() -> int:
+    registered = tuple(contract.value for contract in ContractSchema)
+    _require_equal(registered, EXPECTED_CONTRACTS, label="contract registry")
     for contract in ContractSchema:
         schema = load_contract_schema(contract)
         if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
@@ -263,6 +280,7 @@ def _check_bundled_contracts() -> None:
             )
         if schema.get("type") != "object":
             raise SelfCheckError(f"bundled {contract.value} contract is not an object schema")
+    return len(registered)
 
 
 def _require_equal(actual: object, expected: object, *, label: str) -> None:

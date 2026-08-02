@@ -29,6 +29,7 @@ Get-FileHash .\dist\samsarix_codegen-0.2.0-py3-none-any.whl -Algorithm SHA256
 python -m pip install --force-reinstall --no-deps .\dist\samsarix_codegen-0.2.0-py3-none-any.whl
 samsarix-codegen --version
 samsarix-codegen self-check --format json > self-check.json
+if ($LASTEXITCODE -ne 0) { throw "The installed package self-check failed." }
 ```
 
 The self-check must exit `0` and report `status: passed`, `network.attempted: false`, and

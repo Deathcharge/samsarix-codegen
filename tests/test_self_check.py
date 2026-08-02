@@ -98,6 +98,17 @@ def test_self_check_fails_cleanly_on_deterministic_drift(monkeypatch, capsys) ->
     assert "error: installed-package self-check request fingerprint does not match" in captured.err
 
 
+def test_self_check_fails_when_the_contract_registry_drifts(monkeypatch, capsys) -> None:
+    monkeypatch.setattr("samsarix_codegen.self_check.EXPECTED_CONTRACTS", ("request",))
+
+    exit_code = main(["self-check"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "error: installed-package self-check contract registry does not match" in captured.err
+
+
 def test_self_check_rejects_invalid_renderer_inputs() -> None:
     with pytest.raises(SelfCheckError, match="validated report"):
         render_self_check(object())  # type: ignore[arg-type]
