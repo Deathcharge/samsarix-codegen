@@ -39,6 +39,20 @@ def test_example_is_valid_but_intentionally_not_ready(capsys: pytest.CaptureFixt
     assert evaluate_pilot(record) == output
 
 
+def test_malformed_record_returns_invalid_exit_code(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "invalid.json"
+    path.write_text("{}", encoding="utf-8")
+
+    exit_code = main([str(path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "pilot check failed:" in captured.err
+
+
 def test_three_participants_and_both_workflows_pass() -> None:
     record = _passing_record()
 

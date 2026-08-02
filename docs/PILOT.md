@@ -70,6 +70,10 @@ A passing report demonstrates only that this endpoint/model returned non-empty t
 wire contract used by this package at that time. It is not a Samsarix endorsement, uptime promise,
 quality evaluation, or guarantee that every model or provider feature is compatible.
 
+Each session's `provider_check` object records only a preflight attempted as part of that session.
+If one passing preflight is reused for a second workflow, record the second session's status as
+`not-run` rather than copying the earlier passing outcome.
+
 ## Session A: staged-change review
 
 Each participant completes this task once with a real, non-sensitive staged diff:
