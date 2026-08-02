@@ -1,0 +1,187 @@
+# Copyright 2026 Samsarix LLC
+# SPDX-License-Identifier: Apache-2.0
+
+"""Offline verification of a request, reviewed plan, and stored provider result."""
+
+from __future__ import annotations
+
+import hmac
+import json
+from dataclasses import dataclass
+from typing import Any
+
+from samsarix_codegen.artifact import (
+    ExecutionResult,
+    ExecutionResultSummary,
+    RequestArtifact,
+    inspect_execution_result,
+    verify_execution_result,
+)
+from samsarix_codegen.errors import ArtifactError
+from samsarix_codegen.execution_plan import (
+    ExecutionPlan,
+    ExecutionPlanVerification,
+    verify_execution_plan,
+)
+
+EXECUTION_EVIDENCE_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionEvidenceVerification:
+    """Content-omitting evidence for one internally consistent execution chain."""
+
+    plan_verification: ExecutionPlanVerification
+    result: ExecutionResultSummary
+    result_request_fingerprint: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.plan_verification, ExecutionPlanVerification):
+            raise ArtifactError("execution evidence requires a validated plan verification")
+        if not isinstance(self.result, ExecutionResultSummary):
+            raise ArtifactError("execution evidence requires a validated result summary")
+
+        plan = self.plan_verification.plan
+        if not _is_sha256(self.result_request_fingerprint):
+            raise ArtifactError("execution evidence contains an invalid result request fingerprint")
+        if not hmac.compare_digest(plan.request_fingerprint, self.result_request_fingerprint):
+            raise ArtifactError("execution result does not reference the supplied request artifact")
+        if self.result.plan_fingerprint is None:
+            raise ArtifactError("execution result does not record a reviewed execution plan")
+        if not hmac.compare_digest(plan.fingerprint, self.result.plan_fingerprint):
+            raise ArtifactError("execution result does not reference the supplied execution plan")
+        if plan.model != self.result.model:
+            raise ArtifactError(
+                "execution result requested model does not match the execution plan"
+            )
+        if (
+            self.result.completion_tokens is not None
+            and self.result.completion_tokens > plan.max_output_tokens
+        ):
+            raise ArtifactError(
+                "execution result completion usage exceeds the execution-plan output limit"
+            )
+
+    @property
+    def remaining_reported_output_tokens(self) -> int | None:
+        """Return remaining output headroom when the provider reported completion usage."""
+
+        if self.result.completion_tokens is None:
+            return None
+        return self.plan_verification.plan.max_output_tokens - self.result.completion_tokens
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return portable linkage evidence without prompt or response contents."""
+
+        plan = self.plan_verification.plan
+        result_payload = self.result.to_payload()
+        return {
+            "schema_version": EXECUTION_EVIDENCE_SCHEMA_VERSION,
+            "plan_fingerprint": plan.fingerprint,
+            "request": {
+                "fingerprint": plan.request_fingerprint,
+                "messages": self.plan_verification.request_messages,
+                "context_items": self.plan_verification.request_context_items,
+                "context_bytes": self.plan_verification.request_context_bytes,
+                "estimated_input_tokens": (self.plan_verification.request_estimated_input_tokens),
+            },
+            "provider": {
+                "endpoint": plan.endpoint,
+                "requested_model": plan.model,
+                "response_model": self.result.response_model,
+                "timeout_seconds": plan.timeout_seconds,
+                "max_output_tokens": plan.max_output_tokens,
+            },
+            "budgets": {
+                "max_estimated_input_tokens": plan.max_estimated_input_tokens,
+                "remaining_estimated_input_tokens": (
+                    self.plan_verification.remaining_estimated_input_tokens
+                ),
+                "reported_completion_tokens": self.result.completion_tokens,
+                "remaining_reported_output_tokens": self.remaining_reported_output_tokens,
+            },
+            "result": {
+                "response": result_payload["response"],
+                "usage": result_payload["usage"],
+            },
+        }
+
+
+def verify_execution_evidence(
+    artifact: RequestArtifact,
+    plan: ExecutionPlan,
+    result: ExecutionResult,
+    *,
+    expected_plan_fingerprint: str | None = None,
+) -> ExecutionEvidenceVerification:
+    """Validate every local linkage in one request-plan-result evidence chain."""
+
+    plan_verification = verify_execution_plan(
+        artifact,
+        plan,
+        expected_plan_fingerprint=expected_plan_fingerprint,
+    )
+    verify_execution_result(artifact, result)
+    return ExecutionEvidenceVerification(
+        plan_verification=plan_verification,
+        result=inspect_execution_result(result).summary,
+        result_request_fingerprint=result.request_fingerprint,
+    )
+
+
+def render_execution_evidence_verification(
+    verification: ExecutionEvidenceVerification,
+    *,
+    output_format: str = "text",
+) -> str:
+    """Render content-omitting execution-chain evidence as text or JSON."""
+
+    if not isinstance(verification, ExecutionEvidenceVerification):
+        raise ArtifactError("execution evidence rendering requires validated evidence")
+    if output_format == "json":
+        return json.dumps(verification.to_payload(), ensure_ascii=False, indent=2) + "\n"
+    if output_format != "text":
+        raise ArtifactError("execution evidence format must be text or json")
+
+    plan = verification.plan_verification.plan
+    result = verification.result
+    lines = [
+        "Request, execution plan, and result form a consistent local evidence chain.",
+        f"Plan: {plan.fingerprint}",
+        f"Request: {plan.request_fingerprint}",
+        (
+            "Request context: "
+            f"{verification.plan_verification.request_context_items:,} item(s), "
+            f"{verification.plan_verification.request_context_bytes:,} bytes"
+        ),
+        (
+            "Estimated input: "
+            f"~{verification.plan_verification.request_estimated_input_tokens:,} / "
+            f"{plan.max_estimated_input_tokens:,} tokens"
+        ),
+        f"Endpoint: {plan.endpoint}",
+        f"Requested model: {plan.model}",
+        f"Response model: {result.response_model or 'not reported'}",
+        f"Timeout: {plan.timeout_seconds:,} seconds",
+        (
+            "Reported completion: "
+            f"{_format_optional(result.completion_tokens)} / "
+            f"{plan.max_output_tokens:,} tokens"
+        ),
+        f"Response characters: {result.response_chars:,}",
+        f"Response bytes: {result.response_bytes:,}",
+        f"Response: {result.response_sha256}",
+        f"Prompt tokens: {_format_optional(result.prompt_tokens)}",
+        f"Total tokens: {_format_optional(result.total_tokens)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _format_optional(value: int | None) -> str:
+    return "not reported" if value is None else f"{value:,}"
+
+
+def _is_sha256(value: object) -> bool:
+    if not isinstance(value, str) or not value.startswith("sha256:") or len(value) != 71:
+        return False
+    return all(character in "0123456789abcdef" for character in value[7:])

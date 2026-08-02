@@ -14,7 +14,9 @@ same-request result comparison, and deterministic post-result policy gates are i
 milestones. A versioned, checked-in result-policy contract makes those gates repeatable across local
 and CI workflows without implicit discovery. Versioned execution plans now bind a reviewed request
 to exact non-secret provider settings and budgets across an offline-to-credentialed handoff without
-execution-time override precedence.
+execution-time override precedence. Plan-backed result schema version 2 now carries that reviewed
+plan fingerprint, and offline execution verification validates the full request/plan/result chain
+plus requested-model and reported-output-budget consistency without content disclosure.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
 pilot validation, and flagship adoption remain separate decisions.
 
@@ -40,6 +42,9 @@ Current hardening backlog:
 - Credential-free execution plans, offline request/plan verification, exact plan-backed execution,
   and standalone plan/verification schemas are implemented; live endpoints remain optional owner
   evidence rather than a hidden release dependency.
+- Plan-bound result schema version 2, legacy result parsing, separate requested/response model
+  labels, and offline request/plan/result evidence verification are implemented and locally tested;
+  the evidence is intentionally not a provider signature or attestation.
 - Exact stored-prompt rendering and content-safe artifact comparison are implemented and locally
   package-verified for the review-tools follow-up.
 - Strict execution-result parsing and content-omitting same-request comparison are implemented for

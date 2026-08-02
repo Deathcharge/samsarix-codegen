@@ -74,6 +74,7 @@ def chat_server(
 
 def test_client_sends_bounded_request_and_normalizes_usage() -> None:
     response = {
+        "model": "served-model-2026-08",
         "choices": [{"message": {"content": "Model answer"}}],
         "usage": {"prompt_tokens": 12, "completion_tokens": 3, "total_tokens": 15},
     }
@@ -85,6 +86,7 @@ def test_client_sends_bounded_request_and_normalizes_usage() -> None:
 
     assert result.text == "Model answer"
     assert result.total_tokens == 15
+    assert result.response_model == "served-model-2026-08"
     assert captured["path"] == "/v1/chat/completions"
     assert captured["authorization"] == "Bearer test-key"
     assert captured["user_agent"] == "samsarix-codegen/0.2.0"

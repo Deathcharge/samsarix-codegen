@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "plan_fingerprint": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "request": {
+    "fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "messages": 2,
+    "context_items": 0,
+    "context_bytes": 0,
+    "estimated_input_tokens": 100
+  },
+  "provider": {
+    "endpoint": "https://models.example.com/v1",
+    "requested_model": "reviewed-model",
+    "response_model": "served-model-2026-08",
+    "timeout_seconds": 60,
+    "max_output_tokens": 64
+  },
+  "budgets": {
+    "max_estimated_input_tokens": 1000,
+    "remaining_estimated_input_tokens": 900,
+    "reported_completion_tokens": 2,
+    "remaining_reported_output_tokens": 62
+  },
+  "result": {
+    "response": {
+      "chars": 16,
+      "bytes": 16,
+      "sha256": "sha256:5ca582488caf093309a23ba63304e784a0c73d334b1b03da248d8b04cb255efe"
+    },
+    "usage": {
+      "prompt_tokens": 10,
+      "completion_tokens": 2,
+      "total_tokens": 12
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Competitive strategy
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 ## Positioning
 
@@ -30,6 +30,9 @@ Its product promise is narrower and testable:
 13. Bind one reviewed request to an exact endpoint, model, timeout, input ceiling, and output
     ceiling in a second credential-free approval object that cannot be changed by execution-time
     provider overrides.
+14. Carry that reviewed plan fingerprint into the stored result and verify the complete
+    request/plan/result chain offline, while distinguishing the requested model from the model
+    label reported by the provider.
 
 ## Evidence from adjacent products
 
@@ -82,6 +85,14 @@ The evaluation category validates demand for repeatable model comparisons:
   trace metadata while hiding inputs and outputs, validating demand for content-omitting evidence.
 - [Braintrust trace inspection](https://www.braintrust.dev/docs/observe/examine-traces) treats a
   trace as one end-to-end execution and supports navigation back to its prompt or dataset origin.
+- [Braintrust tracing](https://www.braintrust.dev/docs/tracing-quickstart) records complete input and
+  output, model configuration, token counts, and request/response metadata for each AI call.
+- [LangSmith custom LLM tracing](https://docs.langchain.com/langsmith/log-llm-trace) identifies a
+  useful trace with structured inputs/outputs, provider and model metadata, and token counts.
+- [OpenTelemetry GenAI attributes](https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/)
+  distinguish requested and response model labels and server address, and warn that recorded
+  instructions can be sensitive. The GenAI conventions are still evolving, so Samsarix does not
+  claim wire-level OpenTelemetry compatibility.
 - [Promptfoo assertions and metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs/)
   support deterministic checks plus token, cost, and latency thresholds, while its
   [CI/CD guidance](https://www.promptfoo.dev/docs/integrations/ci-cd/) frames them as quality and
@@ -117,10 +128,12 @@ inference from the adjacent workflows, not a claim that they offer or lack an id
 primitive.
 
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
-dependency-free offline check that both bounded result envelopes reference the same reviewed
-request, then emits only model labels, response hashes/sizes, and reported usage deltas. For one
-result, it can also enforce a narrow deterministic envelope policy without datasets, scorers,
-hosted traces, or another model call.
+portable, dependency-free approval chain: a deterministic request, a credential-free plan, a
+plan-bound result, and an offline verifier that emits only operational metadata and a response
+hash/size. It also compares two bounded same-request results and enforces a narrow deterministic
+envelope policy without datasets, scorers, hosted traces, or another model call. This is an
+inference from adjacent tracing practices, not a claim that local hashes provide authenticated
+telemetry.
 
 These products validate demand for automation and broad context. They also leave a useful boundary
 for teams that want a smaller approval object without granting repository discovery, shell access,
@@ -178,6 +191,12 @@ keeps only bounded request metrics and result metadata. Unlike hosted observabil
 path is local and dependency-free; unlike signatures or attestations, it does not establish
 authorship or protect files from an actor who can rewrite both.
 
+For plan-backed runs, retain all three artifacts and run `verify-execution`. The result records the
+reviewed plan fingerprint, requested model, and provider-reported response model separately. The
+offline evidence record verifies every local linkage plus the plan's input and reported-output
+budgets without reproducing the prompt or response. It remains forgeable by an actor who can
+rewrite the whole chain and does not prove which provider infrastructure served the request.
+
 ### Fail-closed CI result policy
 
 After a credential-bearing job writes a result envelope, require the approved model label and hard
@@ -203,11 +222,13 @@ shell history or repository discovery.
 - No implicit execution-plan lookup, remote resolution, stdin loading, or provider/budget override
   precedence.
 - No file writes, patch application, shell execution, or tool loop.
-- No implicit network request from `build`, `inspect`, `inspect-result`, or `verify-result`.
+- No implicit network request from `build`, `inspect`, `inspect-result`, `verify-result`, or
+  `verify-execution`.
 - No automatic retry or provider fallback.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.
 - No claim that result hashes, length, or provider-reported usage evaluate response quality.
+- No claim that a consistent request/plan/result chain is a signed provider receipt or attestation.
 - No claim that a token ceiling proves a monetary budget unless the operator separately maps the
   selected model's authenticated usage to current pricing.
 

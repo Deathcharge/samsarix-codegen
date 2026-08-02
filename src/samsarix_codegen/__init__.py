@@ -39,6 +39,11 @@ from samsarix_codegen.context import (
     parse_context_manifest,
     render_context_manifest,
 )
+from samsarix_codegen.execution_evidence import (
+    ExecutionEvidenceVerification,
+    render_execution_evidence_verification,
+    verify_execution_evidence,
+)
 from samsarix_codegen.execution_plan import (
     ExecutionPlan,
     ExecutionPlanVerification,
@@ -83,6 +88,7 @@ __all__ = [
     "ExecutionResultPolicy",
     "ExecutionResultSummary",
     "ExecutionResultVerification",
+    "ExecutionEvidenceVerification",
     "ExecutionPlan",
     "ExecutionPlanVerification",
     "OpenAIChatClient",
@@ -121,6 +127,7 @@ __all__ = [
     "render_execution_result_verification",
     "render_execution_plan",
     "render_execution_plan_verification",
+    "render_execution_evidence_verification",
     "render_markdown",
     "render_provider_check",
     "render_request_artifact",
@@ -128,5 +135,6 @@ __all__ = [
     "require_fingerprint",
     "provider_config_from_execution_plan",
     "verify_execution_plan",
+    "verify_execution_evidence",
     "verify_execution_result",
 ]

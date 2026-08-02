@@ -159,12 +159,21 @@ def test_summary_does_not_expose_prompt_content() -> None:
 
 def test_execution_result_is_machine_readable_and_omits_endpoint() -> None:
     artifact = make_artifact()
-    result = ChatResult("Looks good", prompt_tokens=10, completion_tokens=2, total_tokens=12)
+    result = ChatResult(
+        "Looks good",
+        prompt_tokens=10,
+        completion_tokens=2,
+        total_tokens=12,
+        response_model="served-model",
+    )
 
     payload = json.loads(render_execution_result(artifact, result, model="local-model"))
 
+    assert payload["schema_version"] == 2
     assert payload["request_fingerprint"] == artifact.fingerprint
+    assert payload["plan_fingerprint"] is None
     assert payload["model"] == "local-model"
+    assert payload["response_model"] == "served-model"
     assert payload["response"]["text"] == "Looks good"
     assert payload["usage"]["total_tokens"] == 12
     assert "endpoint" not in payload
@@ -191,10 +200,18 @@ def test_execution_result_rejects_values_outside_its_public_contract(
 
 def test_execution_result_round_trips_as_a_strict_envelope() -> None:
     artifact = make_artifact()
+    plan_fingerprint = "sha256:" + "a" * 64
     rendered = render_execution_result(
         artifact,
-        ChatResult("Reviewed response", prompt_tokens=10, completion_tokens=3, total_tokens=13),
+        ChatResult(
+            "Reviewed response",
+            prompt_tokens=10,
+            completion_tokens=3,
+            total_tokens=13,
+            response_model="served-model",
+        ),
         model="local-model",
+        plan_fingerprint=plan_fingerprint,
     )
 
     parsed = parse_execution_result(b"\xef\xbb\xbf" + rendered.encode("utf-8"))
@@ -205,6 +222,8 @@ def test_execution_result_round_trips_as_a_strict_envelope() -> None:
     assert parsed.prompt_tokens == 10
     assert parsed.completion_tokens == 3
     assert parsed.total_tokens == 13
+    assert parsed.plan_fingerprint == plan_fingerprint
+    assert parsed.response_model == "served-model"
     assert parsed.to_payload() == json.loads(rendered)
     assert public_render_execution_result is render_execution_result
 
@@ -215,6 +234,8 @@ def test_execution_result_round_trips_as_a_strict_envelope() -> None:
         (lambda payload: payload.update(schema_version=True), "unsupported.*schema"),
         (lambda payload: payload.update(unexpected=True), "fields do not match"),
         (lambda payload: payload.update(model=" local "), "surrounding whitespace"),
+        (lambda payload: payload.update(response_model=" served "), "surrounding whitespace"),
+        (lambda payload: payload.update(plan_fingerprint="invalid"), "plan fingerprint"),
         (lambda payload: payload["usage"].update(total_tokens=True), "non-negative integer"),
         (lambda payload: payload["response"].update(text="\ud800"), "not valid UTF-8"),
     ],
@@ -236,10 +257,38 @@ def test_execution_result_enforces_bounded_utf8_and_safe_model_labels() -> None:
 
     with pytest.raises(ArtifactError, match="control character"):
         render_execution_result(make_artifact(), ChatResult("ok"), model="unsafe\nmodel")
+    with pytest.raises(ArtifactError, match="control character"):
+        render_execution_result(
+            make_artifact(), ChatResult("ok", response_model="unsafe\nmodel"), model="model"
+        )
 
     fingerprint = make_artifact().fingerprint
     with pytest.raises(ArtifactError, match="response exceeds"):
         ExecutionResult(fingerprint, "model", "x" * (MAX_RESULT_BYTES + 1), None, None, None)
+    with pytest.raises(ArtifactError, match="invalid plan fingerprint"):
+        ExecutionResult(fingerprint, "model", "ok", None, None, None, "invalid")
+
+
+def test_execution_result_parser_preserves_legacy_v1_compatibility() -> None:
+    artifact = make_artifact()
+    legacy = {
+        "schema_version": 1,
+        "request_fingerprint": artifact.fingerprint,
+        "model": "legacy-model",
+        "response": {"text": "Legacy response"},
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 2,
+            "total_tokens": 12,
+        },
+    }
+
+    parsed = parse_execution_result(json.dumps(legacy))
+
+    assert parsed.plan_fingerprint is None
+    assert parsed.response_model is None
+    assert parsed.model == "legacy-model"
+    assert parsed.to_payload()["schema_version"] == 2
 
 
 def test_execution_result_comparison_public_values_fail_closed() -> None:
@@ -274,6 +323,8 @@ def test_execution_result_inspection_is_typed_content_omitting_metadata() -> Non
     assert inspection == public_inspect_execution_result(result)
     assert payload["request_fingerprint"] == artifact.fingerprint
     assert payload["summary"]["model"] == "model-a"
+    assert payload["summary"]["plan_fingerprint"] is None
+    assert payload["summary"]["response_model"] is None
     assert payload["summary"]["response"]["chars"] == len("secret α")
     assert payload["summary"]["response"]["bytes"] == len("secret α".encode())
     assert payload["summary"]["response"]["sha256"].startswith("sha256:")
@@ -308,6 +359,14 @@ def test_execution_result_policy_accepts_exact_limits_and_public_api() -> None:
 
     assert enforce_execution_result_policy(result, policy) is None
     assert public_enforce_execution_result_policy(result, policy) is None
+
+    unicode_result = ExecutionResult(artifact.fingerprint, "mødel-α", "ok", None, None, None)
+    assert (
+        enforce_execution_result_policy(
+            unicode_result, ExecutionResultPolicy(expected_model="mødel-α")
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -381,6 +440,7 @@ def test_execution_result_verification_links_request_without_contents() -> None:
     assert payload["request"]["context_bytes"] == 15
     assert payload["request"]["estimated_input_tokens"] == artifact.estimated_input_tokens
     assert payload["result"]["model"] == "model-a"
+    assert payload["result"]["plan_fingerprint"] is None
     assert payload["result"]["response"]["bytes"] == len("private result α".encode())
     assert "references the supplied validated request" in text
     for private_content in ("Review this", "print('hello')", "private result α"):
@@ -408,8 +468,15 @@ def test_execution_result_comparison_is_same_request_and_content_omitting() -> N
     base = parse_execution_result(
         render_execution_result(
             artifact,
-            ChatResult("secret α", prompt_tokens=10, completion_tokens=2, total_tokens=12),
+            ChatResult(
+                "secret α",
+                prompt_tokens=10,
+                completion_tokens=2,
+                total_tokens=12,
+                response_model="served-a",
+            ),
             model="model-a",
+            plan_fingerprint="sha256:" + "a" * 64,
         )
     )
     target = parse_execution_result(
@@ -419,6 +486,7 @@ def test_execution_result_comparison_is_same_request_and_content_omitting() -> N
                 "different secret", prompt_tokens=11, completion_tokens=None, total_tokens=15
             ),
             model="model-b",
+            plan_fingerprint="sha256:" + "b" * 64,
         )
     )
 
@@ -427,6 +495,8 @@ def test_execution_result_comparison_is_same_request_and_content_omitting() -> N
     payload = json.loads(render_execution_result_comparison(comparison, output_format="json"))
 
     assert comparison.model_changed
+    assert comparison.plan_changed
+    assert comparison.response_model_changed
     assert not comparison.response_identical
     assert payload["request_fingerprint"] == artifact.fingerprint
     assert payload["base"]["response"]["chars"] == len("secret α")
@@ -434,6 +504,8 @@ def test_execution_result_comparison_is_same_request_and_content_omitting() -> N
     assert payload["delta"]["prompt_tokens"] == 1
     assert payload["delta"]["completion_tokens"] is None
     assert payload["base"]["response"]["sha256"].startswith("sha256:")
+    assert payload["plan_changed"] is True
+    assert payload["response_model_changed"] is True
     assert "secret α" not in text
     assert "different secret" not in text
     assert "secret α" not in json.dumps(payload, ensure_ascii=False)

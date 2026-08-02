@@ -38,6 +38,12 @@ approves a first public release.
   override precedence, typed public APIs, independent plan/verification schemas, and an example.
 - An installed-wheel smoke harness that proves the exact plan-backed journey against one local
   provider request and proves tamper/override failures make no additional request.
+- Execution-result schema version 2 with an optional reviewed-plan fingerprint and separate
+  requested/provider-reported model labels, while retaining legacy version-1 parsing.
+- Offline `verify-execution` validation for a concrete request, execution plan, and plan-bound
+  result, with content-omitting linkage, budget, usage, response-size, and response-hash evidence.
+- A standalone Draft 2020-12 execution-evidence contract and typed public verification/rendering
+  API.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.
@@ -53,6 +59,8 @@ approves a first public release.
 - JSON `build` output is now executable request-artifact schema version 2.
 - Redirected and piped CLI output is emitted as UTF-8 consistently across platforms.
 - Execution-result rendering now rejects values outside its documented schema.
+- Result inspection, verification, and comparison records advance to schema version 2 so plan and
+  response-model metadata remain visible in content-omitting workflows.
 - Provider requests reject HTTP redirects so bearer credentials cannot be forwarded to a redirect
   target.
 - Provider configuration now rejects malformed public types, control characters, overlong values,

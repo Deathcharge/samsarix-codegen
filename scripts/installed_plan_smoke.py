@@ -34,6 +34,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
         )
         response = json.dumps(
             {
+                "model": "fixture-model-2026-08",
                 "choices": [{"message": {"content": "Fixture response"}}],
                 "usage": {
                     "prompt_tokens": 23,
@@ -94,6 +95,7 @@ def main() -> int:
             root = Path(directory)
             request_path = root / "request.json"
             plan_path = root / "execution-plan.json"
+            result_path = root / "result.json"
             environment = os.environ.copy()
             environment.pop("PYTHONPATH", None)
             environment["PYTHONNOUSERSITE"] = "1"
@@ -203,11 +205,21 @@ def main() -> int:
                 environment=execution_environment,
             )
             result = json.loads(executed.stdout)
+            result_path.write_bytes(executed.stdout)
+            require(result["schema_version"] == 2, "result did not use schema version 2")
             require(
                 result["request_fingerprint"] == request_fingerprint,
                 "result does not reference the exact request",
             )
+            require(
+                result["plan_fingerprint"] == plan_fingerprint,
+                "result does not reference the exact execution plan",
+            )
             require(result["model"] == "fixture-model", "result model does not match the plan")
+            require(
+                result["response_model"] == "fixture-model-2026-08",
+                "result omitted the provider-reported model",
+            )
             require(
                 result["response"]["text"] == "Fixture response",
                 "provider response was not normalized",
@@ -218,6 +230,38 @@ def main() -> int:
                 "API key appeared in CLI output",
             )
             require(len(FixtureHandler.requests) == 1, "expected exactly one provider request")
+
+            evidence = run_cli(
+                [
+                    "verify-execution",
+                    str(request_path),
+                    str(plan_path),
+                    str(result_path),
+                    "--expect-plan-fingerprint",
+                    plan_fingerprint,
+                    "--format",
+                    "json",
+                ],
+                cwd=root,
+                environment=environment,
+            )
+            evidence_payload = json.loads(evidence.stdout)
+            require(
+                evidence_payload["plan_fingerprint"] == plan_fingerprint,
+                "execution evidence does not reference the exact plan",
+            )
+            require(
+                evidence_payload["provider"]["response_model"] == "fixture-model-2026-08",
+                "execution evidence omitted the provider-reported model",
+            )
+            require(
+                b"Private fixture instruction" not in evidence.stdout,
+                "execution evidence disclosed the private instruction",
+            )
+            require(
+                b"Fixture response" not in evidence.stdout,
+                "execution evidence disclosed the provider response",
+            )
 
             received = FixtureHandler.requests[0]
             require(
@@ -285,7 +329,7 @@ def main() -> int:
         server.server_close()
         thread.join(timeout=5)
 
-    print("installed execution-plan smoke passed (1 provider request)")
+    print("installed execution-evidence smoke passed (1 provider request)")
     return 0
 
 

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samsarix.com/schemas/codegen/execution-result-v2.schema.json",
+  "title": "Samsarix Codegen execution result",
+  "description": "A provider response linked to a request and, when used, its reviewed execution plan.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_fingerprint",
+    "plan_fingerprint",
+    "model",
+    "response_model",
+    "response",
+    "usage"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "request_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "plan_fingerprint": {"$ref": "#/$defs/optional_fingerprint"},
+    "model": {"$ref": "#/$defs/model"},
+    "response_model": {"$ref": "#/$defs/optional_model"},
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1, "maxLength": 12582912}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+      "properties": {
+        "prompt_tokens": {"$ref": "#/$defs/usage_value"},
+        "completion_tokens": {"$ref": "#/$defs/usage_value"},
+        "total_tokens": {"$ref": "#/$defs/usage_value"}
+      }
+    }
+  },
+  "$defs": {
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "optional_fingerprint": {
+      "anyOf": [{"$ref": "#/$defs/fingerprint"}, {"type": "null"}]
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f](?:[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f])?$"
+    },
+    "optional_model": {
+      "anyOf": [{"$ref": "#/$defs/model"}, {"type": "null"}]
+    },
+    "usage_value": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    }
+  }
+}

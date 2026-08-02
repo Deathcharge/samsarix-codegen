@@ -45,6 +45,10 @@ from samsarix_codegen.context import (
     load_stream_context,
 )
 from samsarix_codegen.errors import ArtifactError, ConfigurationError, ContextError, SamsarixError
+from samsarix_codegen.execution_evidence import (
+    render_execution_evidence_verification,
+    verify_execution_evidence,
+)
 from samsarix_codegen.execution_plan import (
     ExecutionPlan,
     create_execution_plan,
@@ -205,6 +209,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="verification record or plan fingerprint (default: text)",
     )
 
+    verify_execution_command = subparsers.add_parser(
+        "verify-execution",
+        help="verify a request, reviewed plan, and result as one offline evidence chain",
+    )
+    verify_execution_command.add_argument(
+        "artifact", metavar="REQUEST", help="request-artifact path, or - for stdin"
+    )
+    verify_execution_command.add_argument(
+        "plan", metavar="PLAN", help="explicit execution-plan file path"
+    )
+    verify_execution_command.add_argument(
+        "result", metavar="RESULT", help="execution-result path, or - for stdin"
+    )
+    verify_execution_command.add_argument(
+        "--expect-plan-fingerprint",
+        help="fail unless the plan matches this previously approved sha256 fingerprint",
+    )
+    verify_execution_command.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="content-omitting evidence output format (default: text)",
+    )
+
     compare_command = subparsers.add_parser(
         "compare", help="compare two validated request artifacts without showing prompt contents"
     )
@@ -318,6 +346,22 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                 render_execution_plan_verification(plan_verification, output_format=args.format)
             )
             return 0
+        if args.command == "verify-execution":
+            if args.artifact == "-" and args.result == "-":
+                raise ArtifactError("REQUEST and RESULT cannot both read from stdin")
+            plan = _load_execution_plan(args.plan)
+            artifact = _read_artifact(args.artifact, input_stream)
+            result = _read_execution_result(args.result, input_stream)
+            evidence = verify_execution_evidence(
+                artifact,
+                plan,
+                result,
+                expected_plan_fingerprint=args.expect_plan_fingerprint,
+            )
+            _write_stdout(
+                render_execution_evidence_verification(evidence, output_format=args.format)
+            )
+            return 0
         if args.command == "compare":
             if args.base == "-" and args.target == "-":
                 raise ArtifactError("BASE and TARGET cannot both read from stdin")
@@ -338,6 +382,7 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             return 0
         if args.command == "execute":
             artifact = _read_artifact(args.artifact, input_stream)
+            plan_fingerprint: str | None = None
             if args.plan is not None:
                 _reject_execution_plan_overrides(args)
                 plan = _load_execution_plan(args.plan)
@@ -354,6 +399,7 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                     plan,
                     api_key=os.environ.get("SAMSARIX_API_KEY"),
                 )
+                plan_fingerprint = plan.fingerprint
             else:
                 if args.expect_plan_fingerprint is not None:
                     raise ConfigurationError("--expect-plan-fingerprint requires --plan")
@@ -363,7 +409,12 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                     _resolve_estimated_input_budget(args.max_estimated_input_tokens),
                 )
                 config = _provider_config_from_args(args)
-            return _execute_artifact(artifact, config, output_format=args.format)
+            return _execute_artifact(
+                artifact,
+                config,
+                output_format=args.format,
+                plan_fingerprint=plan_fingerprint,
+            )
         raise AssertionError(f"unhandled command: {args.command}")
     except KeyboardInterrupt:
         print("Cancelled.", file=sys.stderr)
@@ -398,6 +449,7 @@ def _execute_artifact(
     config: ProviderConfig,
     *,
     output_format: str,
+    plan_fingerprint: str | None = None,
 ) -> int:
     print(
         f"Request {artifact.fingerprint}: ~{artifact.estimated_input_tokens:,} input tokens, "
@@ -407,7 +459,14 @@ def _execute_artifact(
     )
     result = OpenAIChatClient(config).complete(artifact.messages)
     if output_format == "json":
-        _write_stdout(render_execution_result(artifact, result, model=config.model))
+        _write_stdout(
+            render_execution_result(
+                artifact,
+                result,
+                model=config.model,
+                plan_fingerprint=plan_fingerprint,
+            )
+        )
     else:
         _write_stdout(result.text.rstrip() + "\n")
     if result.total_tokens is not None:

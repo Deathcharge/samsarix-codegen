@@ -46,8 +46,11 @@ without granting file-write or shell access. The primary journey is:
    binds it to an endpoint, model, timeout, input ceiling, and output ceiling.
 5. Record the plan fingerprint as the complete non-secret execution approval, then use
    `execute --plan --expect-plan-fingerprint` in the credential-bearing boundary.
-6. Review text output or retain the structured result envelope and provider-reported usage.
-7. Optionally apply deterministic model, response-byte, and reported-token policy gates before CI
+6. Review text output or retain the plan-bound structured result envelope, requested and
+   provider-reported model labels, and provider-reported usage.
+7. Verify the request, plan, and result together offline, retaining content-omitting linkage and
+   budget evidence.
+8. Optionally apply deterministic model, response-byte, and reported-token policy gates before CI
    retains a content-omitting inspection or request/result verification record.
 
 ### Independent reason to exist
@@ -68,6 +71,9 @@ Research references:
 - <https://aider.chat/docs/config/options.html>
 - <https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions>
 - <https://docs.ollama.com/api/openai-compatibility>
+- <https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/>
+- <https://www.braintrust.dev/docs/tracing-quickstart>
+- <https://docs.langchain.com/langsmith/log-llm-trace>
 - <https://packaging.python.org/en/latest/guides/writing-pyproject-toml/>
 - <https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/>
 
@@ -139,6 +145,12 @@ Research references:
     The plan is credential-free, explicit, bounded, internally fingerprinted, and independently
     schema-validatable. Plan-backed execution reads only `SAMSARIX_API_KEY` at runtime and refuses
     request/provider/budget overrides rather than merging configuration layers.
+20. **Portable execution evidence.** Execution-result schema version 2 carries a nullable reviewed
+    plan fingerprint and distinguishes the requested model from the provider-reported response
+    model. Plan-backed execution populates the link automatically. `verify-execution` validates the
+    full request/plan/result chain, requested model, input budget, and any reported completion usage
+    offline, emitting response hash/size rather than content. Legacy result version 1 remains
+    parseable. This is local integrity evidence, not signed provider attestation.
 
 ## Assumptions
 
@@ -214,14 +226,17 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add a versioned, checked-in execution-result policy contract for repeatable team CI rules.
 - [x] Add a versioned execution-plan contract so approval covers the request and exact non-secret
   provider/budget intent across the credential boundary.
+- [x] Bind plan-backed results to that approval and verify the complete request/plan/result chain
+  offline without reproducing prompt or response contents.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build`, `inspect`, `create-plan`, `verify-plan`, `inspect-result`, `verify-result`, `compare`,
-  `compare-results`, `execute`, `run`, `schema`, and `provider-check` commands with useful help and
+- [x] `build`, `inspect`, `create-plan`, `verify-plan`, `verify-execution`, `inspect-result`,
+  `verify-result`, `compare`, `compare-results`, `execute`, `run`, `schema`, and `provider-check`
+  commands with useful help and
   version behavior.
 - [x] Fail-closed post-result policy flags and a typed public enforcement API.
 - [x] Strict result-policy parsing/rendering/loading, bundled schema, example, and installed-wheel
@@ -241,6 +256,8 @@ Final command evidence is recorded in the **Final verification** section after e
   pinned before execution.
 - Execution plans are deterministic, fail on plan/request drift, preserve exact provider/budget
   intent, omit credentials/prompt contents, and refuse execution-time overrides.
+- Plan-backed results record their reviewed plan; offline execution verification rejects linkage,
+  requested-model, input-budget, or reported-output drift without disclosing either content body.
 - `run` succeeds against a deterministic local HTTP fixture and fails clearly for missing model,
   unsafe endpoint, HTTP rejection, malformed response, and unavailable provider.
 - Context traversal, binary input, invalid UTF-8, file-count, and byte-limit cases fail closed.
@@ -276,6 +293,9 @@ Final command evidence is recorded in the **Final verification** section after e
   parse/render/load API, checked-in example, and explicit no-override CLI behavior.
 - Added versioned execution plans, offline plan creation/verification, a typed public API, standalone
   plan and verification schemas, a checked-in example, and exact no-override plan-backed execution.
+- Added result schema version 2 with plan linkage and separate requested/response model labels,
+  legacy version-1 parsing, offline three-artifact verification, a typed public API, standalone
+  evidence schema, and installed-wheel evidence-chain coverage.
 - Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
   installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
@@ -640,6 +660,24 @@ second request. The verification record omitted the private instruction and sele
 Exact final distribution digests are attached to the corresponding pull request because recording
 them inside the source distribution would change that distribution's digest.
 
+### Portable execution-evidence follow-up
+
+Python 3.14 source and extracted-sdist checks passed formatting, lint, strict typing across 15
+source files, the source release gate, and 293 tests. The sdist contained result schema version 2,
+all legacy/current result schemas, the execution-evidence implementation and schema, both new
+examples, documentation, tests, CI changes, and the installed smoke harness. Twine and the
+fail-closed distribution audit accepted the zero-runtime-dependency sdist/wheel pair.
+
+A fresh dependency-free virtual environment installed only the wheel, reported no broken
+requirements, and resolved `samsarix_codegen` from that environment outside the checkout. Under
+`PYTHONOPTIMIZE=1`, the installed smoke completed the full request/plan/execute/verify-execution
+journey against one deterministic local HTTP fixture. The one result carried the exact plan
+fingerprint plus separate requested and provider-reported model labels; the evidence output omitted
+both private instruction and response. The installed schemas validated the checked-in result and
+evidence examples, and the installed typed API retained legacy result-version-1 parsing. Exact final
+distribution digests are attached to the corresponding pull request because recording them inside
+the source distribution would change that distribution's digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -661,7 +699,8 @@ them inside the source distribution would change that distribution's digest.
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
 review-first artifact workflow, offline review/comparison, request/result linkage and deterministic
-versioned result-policy tools, credential-free reviewed execution plans,
+versioned result-policy tools, credential-free reviewed execution plans, portable
+request/plan/result evidence,
 reusable explicit context manifests, independent JSON contracts, and an operator-run provider
 conformance check; each has local clean-package evidence recorded above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release

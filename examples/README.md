@@ -31,6 +31,15 @@ samsarix-codegen create-plan request.json \
 samsarix-codegen verify-plan request.json execution-plan.json
 ```
 
+`execution-result-v2.json` and `execution-evidence-v1.json` are mutually consistent illustrative
+outputs for the plan-bound result and content-omitting three-artifact verification contracts. Their
+request and plan fingerprints are placeholders; validate their portable shapes with:
+
+```bash
+samsarix-codegen schema result > result.schema.json
+samsarix-codegen schema execution-evidence > execution-evidence.schema.json
+```
+
 `review-staged.sh` and `review-staged.ps1` compile the current repository's staged diff into
 `samsarix-review-request.json` (or a path passed as the first argument), validate it, and print its
 fingerprint. They stop when no changes are staged and never contact a model endpoint.
@@ -54,7 +63,10 @@ samsarix-codegen create-plan review-request.json \
 plan_fingerprint="$(samsarix-codegen verify-plan review-request.json execution-plan.json \
   --format fingerprint)"
 samsarix-codegen execute review-request.json \
-  --plan execution-plan.json --expect-plan-fingerprint "$plan_fingerprint"
+  --plan execution-plan.json --expect-plan-fingerprint "$plan_fingerprint" \
+  --format json > result.json
+samsarix-codegen verify-execution review-request.json execution-plan.json result.json \
+  --expect-plan-fingerprint "$plan_fingerprint"
 ```
 
 Artifacts contain the complete staged diff. Do not commit them unless that disclosure and retention

@@ -42,11 +42,18 @@ samsarix-codegen execute request.json \
   --plan execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --format json > result.json
+
+samsarix-codegen verify-execution request.json execution-plan.json result.json \
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --format json > execution-evidence.json
 ```
 
 `create-plan` and `verify-plan` never make a network request. `execute --plan` validates the request,
 the plan's internal fingerprint, request linkage, estimated-input budget, and optional separately
 approved plan fingerprint before constructing the client. It then makes one non-streaming request.
+The plan-backed JSON result records the exact plan fingerprint. `verify-execution` uses that field
+to validate the complete request/plan/result chain later without network access or content
+disclosure.
 
 ## Schema version 1
 
@@ -108,6 +115,8 @@ Export the portable contracts without a network request:
 samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
 samsarix-codegen schema execution-plan-verification \
   > execution-plan-verification-v1.schema.json
+samsarix-codegen schema execution-evidence \
+  > execution-evidence-verification-v1.schema.json
 ```
 
 JSON Schema validates the portable structure. The CLI or typed parser remains authoritative for
@@ -121,9 +130,14 @@ the approved value is held separately under stronger access control. An actor ab
 the plan and that expected value can still bypass the handoff.
 
 The plan does not authenticate the endpoint, provider, model label, TLS operator, provider-reported
-usage, or result. It does not establish monetary cost because current price schedules remain
-external. External access controls, signing/attestation, endpoint governance, and provider billing
-records remain the operator's responsibility when those properties matter.
+usage, or result. The result's plan fingerprint and `verify-execution` establish local structural
+linkage, not signed provider attestation: an actor who can rewrite every document can construct a
+new consistent chain. The requested model is recorded separately from the provider-reported
+response model because proxies and aliases can legitimately return a different label. Neither
+label proves which infrastructure served the request. The evidence does not establish monetary
+cost because current price schedules remain external. External access controls,
+signing/attestation, endpoint governance, provider logs, and billing records remain the operator's
+responsibility when those properties matter.
 
 The checked-in [example](../examples/execution-plan-v1.json) demonstrates the standalone schema and
 canonical plan fingerprint with a placeholder request fingerprint. Create a new plan for every real
