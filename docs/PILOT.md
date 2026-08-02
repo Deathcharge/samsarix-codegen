@@ -18,7 +18,45 @@ notes into that record.
 - Give each participant a random identifier matching `pilot-` plus 12 lowercase hexadecimal
   characters. Do not retain an identifier-to-person lookup in the pilot record.
 
-Record the wheel before the first session:
+Prefer the `evaluator-pilot-kit` artifact from one successful manual release-workflow run. It
+contains the exact wheel, this protocol, both record/decision schemas, the record checker, a
+prefilled record, and its own strict manifest and checksums. The coordinator should authenticate
+the outer ZIP before extraction, then run the bundled verifier:
+
+```powershell
+$run = 123456789 # successful release.yml workflow run on the chosen commit
+$download = Join-Path $PWD "pilot-kit-download"
+New-Item -ItemType Directory -Path $download -ErrorAction Stop | Out-Null
+gh run download $run --repo Deathcharge/samsarix-codegen `
+  --name evaluator-pilot-kit --dir $download
+$kits = @(Get-ChildItem -LiteralPath $download -Filter 'samsarix-codegen-pilot-kit-*.zip')
+if ($kits.Count -ne 1) { throw "Expected exactly one downloaded pilot-kit ZIP." }
+$kit = $kits[0]
+gh attestation verify $kit.FullName --repo Deathcharge/samsarix-codegen
+if ($LASTEXITCODE -ne 0) { throw "Pilot-kit provenance verification failed." }
+Expand-Archive -LiteralPath $kit.FullName -DestinationPath $download
+$roots = @(Get-ChildItem -LiteralPath $download -Directory `
+  | Where-Object Name -Like 'samsarix-codegen-pilot-kit-*')
+if ($roots.Count -ne 1) { throw "Expected exactly one extracted pilot-kit directory." }
+$root = $roots[0]
+Push-Location $root.FullName
+try {
+  python scripts/pilot_bundle.py verify-directory .
+  if ($LASTEXITCODE -ne 0) { throw "Extracted pilot-kit verification failed." }
+  Get-Content PILOT-START.md
+} finally {
+  Pop-Location
+}
+```
+
+Require both verification commands to exit `0`. GitHub's attestation links the ZIP to its source
+repository, commit, event, and build workflow; it is provenance evidence, not a guarantee that the
+software is safe. The bundled verifier independently checks the expected file set, strict
+manifest, checksums, wheel/commit linkage, and prefilled record. See GitHub's
+[attestation guidance](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
+
+If the release workflow is unavailable, the coordinator may instead build from a clean checkout
+and record the wheel before the first session:
 
 ```powershell
 $dirty = git status --porcelain
@@ -32,15 +70,18 @@ samsarix-codegen self-check --format json > self-check.json
 if ($LASTEXITCODE -ne 0) { throw "The installed package self-check failed." }
 ```
 
-The self-check must exit `0` and report `status: passed`, `network.attempted: false`, and
+For either route, the installed-wheel self-check must exit `0` and report `status: passed`,
+`network.attempted: false`, and
 `network.provider_called: false` before recruiting participants. It validates the installed
 package's bundled contracts and synthetic evidence chain; it does not validate a provider or the
 participant's project. Delete `self-check.json` after confirming it unless normal release evidence
 retention requires it.
 
-Copy the printed commit with the wheel digest. On macOS or Linux, require
-`test -z "$(git status --porcelain)"`, print `git rev-parse HEAD`, and use
-`sha256sum dist/samsarix_codegen-0.2.0-py3-none-any.whl`.
+The kit's `PILOT-START.md` supplies the exact install command and has already placed the commit and
+wheel digest in `pilot-record.json`. For a source build on macOS or Linux, require
+`test -z "$(git status --porcelain)"` and print `git rev-parse HEAD`. Use
+`shasum -a 256 dist/samsarix_codegen-0.2.0-py3-none-any.whl` on macOS or
+`sha256sum dist/samsarix_codegen-0.2.0-py3-none-any.whl` on Linux.
 
 ## Choose the reviewed provider settings
 
@@ -192,20 +233,27 @@ single provider request, produces no normal stdout, and is never retried.
 
 ## Results record
 
-Copy [`examples/pilot-record-v1.json`](../examples/pilot-record-v1.json) to an untracked
-`pilot-record.json`, replace its placeholder wheel and commit, and add one session object per
-workflow attempt. The example is intentionally incomplete and cannot pass the pilot gate. Its
-enumerated `friction_codes` replace free-form notes; collect qualitative follow-up separately only
-if the participant approves its retention and it has been manually scrubbed.
+With the evaluator kit, edit its prefilled `pilot-record.json`. With a source checkout, copy
+[`examples/pilot-record-v1.json`](../examples/pilot-record-v1.json) to an untracked
+`pilot-record.json` and replace its placeholder wheel and commit. Add one session object per
+workflow attempt. Both initial records are intentionally incomplete and cannot pass the pilot gate.
+Their enumerated `friction_codes` replace free-form notes; collect qualitative follow-up separately
+only if the participant approves its retention and it has been manually scrubbed.
 
 Validate the portable shape with [`pilot-record-v1.schema.json`](pilot-record-v1.schema.json), then
-run the authoritative cross-session decision check from a repository checkout. Its output follows
-the separate [`pilot-decision-v1.schema.json`](pilot-decision-v1.schema.json) contract:
+run the authoritative cross-session decision check from the kit or a repository checkout. Its
+output follows the separate [`pilot-decision-v1.schema.json`](pilot-decision-v1.schema.json)
+contract:
 
 ```powershell
 python scripts/pilot_check.py pilot-record.json > pilot-decision.json
-if ($LASTEXITCODE -eq 2) { throw "The pilot record is invalid." }
-if ($LASTEXITCODE -eq 1) { Write-Host "The pilot is valid but not ready to pass." }
+$pilotExitCode = $LASTEXITCODE
+switch ($pilotExitCode) {
+  0 { }
+  1 { Write-Host "The pilot is valid but not ready to pass." }
+  2 { throw "The pilot record is invalid." }
+  default { throw "pilot_check.py failed with exit code $pilotExitCode." }
+}
 ```
 
 Exit `0` means every decision gate passed, `1` means the record is valid but the adoption gate is

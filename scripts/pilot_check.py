@@ -191,6 +191,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except PilotRecordError as exc:
         print(f"pilot check failed: {exc}", file=sys.stderr, flush=True)
         return 2
+    except Exception as exc:
+        print(
+            f"pilot check failed: unexpected {type(exc).__name__}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 2
     print(json.dumps(evidence, ensure_ascii=False, indent=2))
     return 0 if evidence["decision"] == "passed" else 1
 

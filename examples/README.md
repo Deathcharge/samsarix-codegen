@@ -67,6 +67,9 @@ python scripts/pilot_check.py examples/pilot-record-v1.json
 # exit 1: valid example, but fewer than three participants and only one workflow
 ```
 
+The preferred participant handoff is the workflow-built `evaluator-pilot-kit`, which supplies an
+exact wheel and source commit plus a prefilled copy of this record. See `docs/PILOT.md`.
+
 `review-staged.sh` and `review-staged.ps1` compile the current repository's staged diff into
 `samsarix-review-request.json` (or a path passed as the first argument), validate it, and print its
 fingerprint. They stop when no changes are staged and never contact a model endpoint.

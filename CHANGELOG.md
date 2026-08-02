@@ -23,6 +23,11 @@ approves a first public release.
 - A privacy-preserving three-developer pilot protocol with explicit evidence and decision gates.
 - A strict privacy-minimal pilot record, portable JSON Schemas, and zero-dependency maintainer
   checker that validates cross-session adoption gates without collecting prompts or responses.
+- A deterministic evaluator pilot kit with the exact wheel, source commit, quick-start, prefilled
+  record, schemas, license notices, strict content manifest, SHA-256 checksums, and standalone
+  archive/extracted-directory verification.
+- Release-workflow upload and GitHub provenance attestation for the evaluator kit without widening
+  the PyPI publication payload or claiming real-user pilot results.
 - Strict execution-result parsing plus offline, same-request response hash/size and usage comparison
   without response-body disclosure.
 - A bundled Draft 2020-12 contract for execution-result comparisons.

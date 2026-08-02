@@ -70,6 +70,7 @@ REQUIRED_SDIST_PATHS = (
     "docs/EXECUTION_PLAN.md",
     "docs/PILOT.md",
     "docs/pilot-decision-v1.schema.json",
+    "docs/pilot-kit-v1.schema.json",
     "docs/pilot-record-v1.schema.json",
     "docs/PRODUCTIZATION.md",
     "docs/RELEASING.md",
@@ -92,6 +93,7 @@ REQUIRED_SDIST_PATHS = (
     "pyproject.toml",
     "scripts/release_check.py",
     "scripts/installed_plan_smoke.py",
+    "scripts/pilot_bundle.py",
     "scripts/pilot_check.py",
     "src/samsarix_codegen/__init__.py",
     "src/samsarix_codegen/execution_plan.py",
@@ -102,6 +104,7 @@ REQUIRED_SDIST_PATHS = (
     "tests/test_release.py",
     "tests/test_self_check.py",
     "tests/test_pilot_check.py",
+    "tests/test_pilot_bundle.py",
 )
 REQUIRED_WHEEL_PATHS = (
     "samsarix_codegen/__init__.py",

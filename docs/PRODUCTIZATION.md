@@ -163,6 +163,12 @@ Research references:
     fingerprint before constructing the provider client, make exactly one request, and enforce the
     normalized response before normal stdout. A rejected response is never retried or disclosed by
     the policy error, but its completed provider request may still be billable.
+23. **Verifiable pilot distribution.** One deterministic evaluator ZIP binds the exact universal
+    wheel and source commit to a prefilled privacy-minimal record, quick-start, protocol, schemas,
+    checker, license notices, strict content manifest, and checksums. A standard-library verifier
+    rejects ambiguous archive/directory shapes and works after extraction. The release workflow
+    uploads and attests the ZIP separately, while PyPI still receives only Python distributions.
+    Provenance and internal consistency reduce setup variance; neither claims safety or adoption.
 
 ## Assumptions
 
@@ -231,6 +237,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - [ ] Consider ignore-file-based discovery only if manifests and direct inputs prove insufficient;
   retain visible budgets and path boundaries.
 - [x] Add dry-runnable release verification, provenance, and gated Trusted Publishing automation.
+- [x] Add a deterministic, attested evaluator kit so the exact-wheel pilot does not require a
+  repository checkout or manual release-identity transcription.
 - [x] Add strict same-request execution-result comparison without reproducing response contents.
 - [x] Add strict single-result inspection without reproducing response contents.
 - [x] Add offline request/result linkage verification without reproducing either content body.
@@ -304,6 +312,9 @@ Final command evidence is recorded in the **Final verification** section after e
   standalone CI and cross-repository consumers.
 - Added one-request provider conformance evidence and a bounded three-developer pilot protocol that
   collects usability signals without collecting prompts, source, logs, responses, or credentials.
+- Added a deterministic evaluator kit that binds the exact wheel and commit to a prefilled pilot
+  record, quick-start, strict manifest, checksums, standalone verifier, workflow artifact, and
+  provenance attestation without making adoption claims.
 - Added strict execution-result parsing, same-request content-omitting comparison, and a standalone
   versioned schema for downstream CI consumers.
 - Added content-omitting single-result inspection and an independent versioned schema for CI run
@@ -789,6 +800,22 @@ boundary: one reviewed request, no retry, no second model, and deterministic out
 without claiming recursive schema or semantic validation. Links and the explicit inference are in
 `docs/COMPETITIVE_STRATEGY.md`.
 
+### Verifiable evaluator-kit follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing across 17 source files, the
+unreleased source gate, and all 391 tests. Pilot-kit coverage proves byte-identical creation,
+strict manifest schema conformance, archive and extracted-directory verification,
+valid-but-not-ready prefilled pilot evidence, and fail-closed handling for content tampering,
+duplicate members, traversal/absolute/drive paths, non-regular entries, unexpected extracted
+files, ambiguous inputs, and overwrite attempts.
+
+A source-built sdist and wheel passed Twine and the fail-closed distribution audit. The kit builder
+packaged that real wheel twice into separate directories; the resulting ZIP bytes and SHA-256
+digests were identical. The archive verifier and its extracted standalone copy both reported the
+same wheel digest and source commit, and the bundled pilot checker returned the expected exit `1`
+for the prefilled record. Exact reviewed distribution and kit digests belong in the pull-request or
+workflow evidence because the source commit is an input to the kit itself.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -796,8 +823,9 @@ without claiming recursive schema or semantic validation. Links and the explicit
   smoke cover request shape, auth header behavior, exact plan-backed execution, one-request provider
   conformance, text/usage normalization, HTTP rejection, redirect blocking, invalid JSON, timeouts,
   unavailable endpoints, response limits, and secret redaction.
-- The three-developer pilot protocol is ready but has not been represented as completed; it requires
-  three real participants using the same exact wheel.
+- The three-developer pilot protocol and workflow-built evaluator kit are ready but have not been
+  represented as completed; the gate still requires three real participants using the same exact
+  wheel.
 - Package publication, signed release-tag creation, and installation from PyPI were not attempted;
   they remain owner-controlled actions.
 - The optional Codex Security workspace scan was skipped at the owner's request due its cost. The
@@ -813,9 +841,9 @@ review-first artifact workflow, offline review/comparison, request/result linkag
 versioned result-policy tools, credential-free reviewed execution plans, portable
 request/plan/result evidence,
 reusable explicit context manifests, independent JSON contracts, and an operator-run provider
-conformance check. Version 2 structured-result policies and version 3 privacy-minimal evidence now
-cover machine-consumable CI handoffs; each capability has local clean-package evidence recorded
-above.
+conformance check. Version 2 structured-result policies, version 3 privacy-minimal evidence, and a
+deterministic attested evaluator kit now cover machine-consumable CI handoffs and exact-wheel pilot
+onboarding; each implemented capability has local clean-package evidence recorded above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release
 tag, and approval of the publishing environment. The usefulness claim remains gated on the
 three-developer pilot, and live provider certification remains optional unless the owner advertises
