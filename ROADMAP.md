@@ -29,7 +29,8 @@ pilot validation, and flagship adoption remain separate decisions.
 
 ## Release candidate
 
-- Run the documented three-developer pilot against one exact packaged artifact.
+- Run the documented three-developer pilot against one exact packaged artifact; its plan-backed
+  workflow, privacy-minimal record, and deterministic decision checker are ready for participants.
 - Instrument only truthful, privacy-respecting product signals and define support ownership.
 - Promote from prerelease only after recovery, upgrade, and failure paths are demonstrated.
 

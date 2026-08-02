@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "wheel_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "commit": "0000000000000000000000000000000000000000",
+  "sessions": [
+    {
+      "pilot_id": "pilot-0123456789ab",
+      "platform": {
+        "os_family": "windows",
+        "python_version": "3.12.8"
+      },
+      "workflow": "staged-review",
+      "provider_mode": "offline-only",
+      "provider_check": {
+        "status": "not-run",
+        "attempts": 0,
+        "exit_code": null
+      },
+      "context": {
+        "items": 1,
+        "bytes": 2048,
+        "estimated_input_tokens": 900
+      },
+      "review_checks": {
+        "exact_prompt_inspected": true,
+        "request_fingerprint_captured": true,
+        "plan_settings_reviewed": true,
+        "plan_fingerprint_captured": true
+      },
+      "execution": {
+        "status": "not-run",
+        "attempts": 0,
+        "exit_code": null,
+        "evidence_status": "not-run"
+      },
+      "completion_stage": "plan-verified",
+      "review_minutes": 8,
+      "clarity_score": 4,
+      "usefulness_score": 4,
+      "reuse": "maybe",
+      "friction_codes": ["none"],
+      "safety": {
+        "unintended_file_access": false,
+        "unreviewed_context_sent": false,
+        "credential_exposure": false,
+        "samsarix_content_collection": false
+      }
+    }
+  ]
+}

@@ -21,6 +21,8 @@ approves a first public release.
 - A one-request `provider-check` preflight with a content-safe JSON evidence envelope, a 256-token
   hard ceiling, and a bundled Draft 2020-12 contract.
 - A privacy-preserving three-developer pilot protocol with explicit evidence and decision gates.
+- A strict privacy-minimal pilot record, portable JSON Schemas, and zero-dependency maintainer
+  checker that validates cross-session adoption gates without collecting prompts or responses.
 - Strict execution-result parsing plus offline, same-request response hash/size and usage comparison
   without response-body disclosure.
 - A bundled Draft 2020-12 contract for execution-result comparisons.

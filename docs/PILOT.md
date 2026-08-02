@@ -1,8 +1,10 @@
 # Three-developer pilot
 
 This protocol tests whether Samsarix Codegen's review-first workflow is useful to people other than
-its author. Run it against one exact wheel. Do not copy prompts, source, logs, model responses,
-credentials, endpoint URLs, or request artifacts into the pilot record.
+its author. Run it against one exact wheel. The coordinator keeps one strict JSON record containing
+only bounded counts, enumerated observations, and safety outcomes. Do not copy prompts, source,
+logs, model responses, credentials, endpoint URLs, request artifacts, names, emails, or free-form
+notes into that record.
 
 ## Entry criteria
 
@@ -13,6 +15,8 @@ credentials, endpoint URLs, or request artifacts into the pilot record.
 - Tell participants that request artifacts contain the complete selected context and must receive
   the same access and retention controls as that context.
 - Do not enable screen recording, telemetry, shell-history collection, or automatic artifact upload.
+- Give each participant a random identifier matching `pilot-` plus 12 lowercase hexadecimal
+  characters. Do not retain an identifier-to-person lookup in the pilot record.
 
 Record the wheel before the first session:
 
@@ -30,14 +34,29 @@ Copy the printed commit with the wheel digest. On macOS or Linux, require
 `test -z "$(git status --porcelain)"`, print `git rev-parse HEAD`, and use
 `sha256sum dist/samsarix_codegen-0.2.0-py3-none-any.whl`.
 
+## Choose the reviewed provider settings
+
+Before either workflow, choose the credential-free settings that will be reviewed in its execution
+plan. An offline-only participant can use the non-routable intent of this local placeholder and must
+stop before execution:
+
+```powershell
+$pilotEndpoint = "http://127.0.0.1:11434/v1"
+$pilotModel = "offline-pilot-model"
+```
+
+A participant approved to use a local or hosted provider substitutes that exact endpoint and model.
+Do not put either value in the pilot results record. Creating and verifying a plan is offline; the
+endpoint is contacted only by `provider-check` or `execute`.
+
 ## Optional provider preflight
 
 Participants who intend to execute an artifact should first check the exact endpoint/model pair they
 will use:
 
 ```powershell
-$env:SAMSARIX_API_BASE = "https://provider.example/v1"
-$env:SAMSARIX_MODEL = "provider-model"
+$env:SAMSARIX_API_BASE = $pilotEndpoint
+$env:SAMSARIX_MODEL = $pilotModel
 $env:SAMSARIX_API_KEY = "provider-key"
 samsarix-codegen provider-check --format json > provider-check.json
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
@@ -63,19 +82,42 @@ git diff --staged | samsarix-codegen build "Review these staged changes" `
   --format json > request.json
 
 samsarix-codegen inspect request.json
-samsarix-codegen inspect request.json --format markdown > exact-prompt.md
+samsarix-codegen inspect request.json --format markdown
 $fingerprint = samsarix-codegen inspect request.json --format fingerprint
+
+samsarix-codegen create-plan request.json `
+  --expect-fingerprint $fingerprint `
+  --endpoint $pilotEndpoint `
+  --model $pilotModel `
+  --max-output-tokens 1200 `
+  --max-estimated-input-tokens 50000 > execution-plan.json
+
+$planFingerprint = samsarix-codegen verify-plan request.json execution-plan.json `
+  --format fingerprint
+samsarix-codegen verify-plan request.json execution-plan.json `
+  --expect-plan-fingerprint $planFingerprint `
+  --format json > plan-verification.json
+Get-Content execution-plan.json
 ```
 
-The participant confirms that the exact prompt contains only the intended diff. If provider access
-is approved, they may run:
+The participant confirms that the exact prompt contains only the intended diff and separately
+reviews the plan's endpoint, model, timeout, input ceiling, and output ceiling. If provider access
+is approved, they may run one execution attempt:
 
 ```powershell
-samsarix-codegen execute request.json --expect-fingerprint $fingerprint --format json > result.json
+samsarix-codegen execute request.json `
+  --plan execution-plan.json `
+  --expect-plan-fingerprint $planFingerprint `
+  --format json > result.json
+
+samsarix-codegen verify-execution request.json execution-plan.json result.json `
+  --expect-plan-fingerprint $planFingerprint `
+  --format json > execution-evidence.json
 ```
 
 If the participant changes the instruction or diff, rebuild to `revised-request.json` and use
 `samsarix-codegen compare request.json revised-request.json` before approving the new fingerprint.
+A revised request requires a new plan; do not edit fingerprints in either artifact.
 
 ## Session B: selected-log triage
 
@@ -91,49 +133,70 @@ Get-Content .\app.log -Tail 300 | samsarix-codegen build `
   --format json > incident-request.json
 
 samsarix-codegen inspect incident-request.json
-samsarix-codegen inspect incident-request.json --format markdown > exact-incident-prompt.md
+samsarix-codegen inspect incident-request.json --format markdown
+$incidentFingerprint = samsarix-codegen inspect incident-request.json --format fingerprint
+
+samsarix-codegen create-plan incident-request.json `
+  --expect-fingerprint $incidentFingerprint `
+  --endpoint $pilotEndpoint `
+  --model $pilotModel `
+  --max-output-tokens 1200 `
+  --max-estimated-input-tokens 60000 > incident-plan.json
+
+$incidentPlanFingerprint = samsarix-codegen verify-plan `
+  incident-request.json incident-plan.json --format fingerprint
+samsarix-codegen verify-plan incident-request.json incident-plan.json `
+  --expect-plan-fingerprint $incidentPlanFingerprint `
+  --format json > incident-plan-verification.json
+Get-Content incident-plan.json
 ```
 
 Stop before execution if the exact prompt contains a secret, personal data, or context that the
-selected provider is not authorized to receive.
+selected provider is not authorized to receive. If execution is approved, use the same
+plan-backed `execute` and `verify-execution` sequence as Session A, substituting the incident file
+names and incident plan fingerprint.
 
 ## Results record
 
-Store one row per session using only these fields:
+Copy [`examples/pilot-record-v1.json`](../examples/pilot-record-v1.json) to an untracked
+`pilot-record.json`, replace its placeholder wheel and commit, and add one session object per
+workflow attempt. The example is intentionally incomplete and cannot pass the pilot gate. Its
+enumerated `friction_codes` replace free-form notes; collect qualitative follow-up separately only
+if the participant approves its retention and it has been manually scrubbed.
 
-| Field | Allowed value |
-| --- | --- |
-| `pilot_id` | Random participant label; no name or email |
-| `wheel_sha256` | Exact wheel digest |
-| `commit` | Exact source commit |
-| `platform` | OS family and Python version |
-| `workflow` | `staged-review` or `log-triage` |
-| `provider_mode` | `offline-only`, `local`, or `hosted`; no endpoint or account name |
-| `provider_check` | `not-run`, `passed`, or failure exit code |
-| `context_items` | Count from offline inspection |
-| `context_bytes` | Total from offline inspection |
-| `estimated_input_tokens` | Estimate from offline inspection |
-| `completion_stage` | Last successful command |
-| `exit_code` | First unexpected exit code, or `0` |
-| `review_minutes` | Participant's rounded estimate |
-| `clarity_score` | 1–5 after viewing the exact prompt |
-| `usefulness_score` | 1–5 after the workflow |
-| `reuse` | `yes`, `maybe`, or `no` |
-| `friction` | Short scrubbed note with no code, logs, paths, response text, or secrets |
+Validate the portable shape with [`pilot-record-v1.schema.json`](pilot-record-v1.schema.json), then
+run the authoritative cross-session decision check from a repository checkout. Its output follows
+the separate [`pilot-decision-v1.schema.json`](pilot-decision-v1.schema.json) contract:
 
-Delete local request/result files after the participant's normal retention period. A result row must
-never contain prompt text, content hashes copied from private repositories, model output, API usage
-account identifiers, credentials, or exact endpoint URLs.
+```powershell
+python scripts/pilot_check.py pilot-record.json > pilot-decision.json
+if ($LASTEXITCODE -eq 2) { throw "The pilot record is invalid." }
+if ($LASTEXITCODE -eq 1) { Write-Host "The pilot is valid but not ready to pass." }
+```
+
+Exit `0` means every decision gate passed, `1` means the record is valid but the adoption gate is
+not ready, and `2` means the input is invalid. The decision output contains only the exact release
+identifiers, a canonical record hash, counts, workflow names, and requirement booleans. The checker
+rejects duplicate JSON fields, unknown fields, repeated participant/workflow pairs, a file over 256
+KiB, more than one provider-check or execution attempt per session, and inconsistent status/exit
+code combinations. It intentionally does not claim that recorded observations are truthful.
+
+Delete local request, plan, result, and evidence files after the participant's normal retention
+period. Neither the record nor its decision output may contain request/context fingerprints, model
+output, provider usage account identifiers, credentials, exact endpoints, names, emails, paths, or
+free-form text. Keep `pilot-record.json` untracked unless its disclosure has been reviewed.
 
 ## Decision gate
 
 Call the pilot complete only when all of these are true:
 
-1. Three developers complete artifact build, exact-prompt inspection, and fingerprint capture from
-   the same wheel digest.
+1. At least three developers complete staged-review artifact build, exact-prompt inspection,
+   request fingerprint capture, plan-settings review, and plan fingerprint capture from the same
+   wheel digest and commit.
 2. Both workflows are exercised, including at least one selected-log session.
-3. Every executed session uses fingerprint-pinned `execute`; provider failures are retained as
-   failures rather than rerun until a pass appears.
+3. Every provider check and execution is attempted at most once. Every successful execution uses a
+   plan fingerprint and passes `verify-execution`; failures remain failures rather than being rerun
+   until a pass appears.
 4. At least two participants score clarity and usefulness at 4 or higher and answer `yes` or `maybe`
    to reuse.
 5. No session reads an unintended file, sends unreviewed context, exposes a credential, or requires

@@ -40,6 +40,16 @@ samsarix-codegen schema result > result.schema.json
 samsarix-codegen schema execution-evidence > execution-evidence.schema.json
 ```
 
+`pilot-record-v1.json` is an intentionally incomplete, privacy-minimal pilot record. It uses only
+bounded counts, enumerated observations, and safety booleans; it contains no prompt, response,
+endpoint, person, path, or free-form field. The maintainer-side checker validates both its strict
+shape and the cross-session decision gate:
+
+```bash
+python scripts/pilot_check.py examples/pilot-record-v1.json
+# exit 1: valid example, but fewer than three participants and only one workflow
+```
+
 `review-staged.sh` and `review-staged.ps1` compile the current repository's staged diff into
 `samsarix-review-request.json` (or a path passed as the first argument), validate it, and print its
 fingerprint. They stop when no changes are staged and never contact a model endpoint.
