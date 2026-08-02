@@ -12,18 +12,23 @@ explicit files / bounded stdin
          build --format json
             |
             v
-schema validation + offline inspect + fingerprint approval
+schema validation + offline inspect + request fingerprint approval
             |
             v
-execute --expect-fingerprint
+create-plan + offline plan verification/approval
             |
             v
-one bounded provider request -> result JSON -> offline verify-result / inspect-result / compare-results
+execute --plan -> one bounded provider request
+            |
+            v
+result JSON -> offline verify-result / inspect-result / compare-results
 ```
 
-`build`, `inspect`, `inspect-result`, `verify-result`, `compare`, and `compare-results` never make a
-network request. `execute` does not read source files; it sends the validated `messages` stored in
-the artifact.
+`build`, `inspect`, `create-plan`, `verify-plan`, `inspect-result`, `verify-result`, `compare`, and
+`compare-results` never make a network request. `execute` does not read source files; it sends the
+validated `messages` stored in the artifact. The [execution-plan contract](EXECUTION_PLAN.md)
+defines how endpoint, model, timeout, input ceiling, and output ceiling can join the same approval
+handoff without storing a credential or prompt contents in the plan.
 
 `inspect --format markdown` renders those exact stored messages for human review after validation;
 it does not rebuild them from files. Because that view contains the full prompt, handle it with the
@@ -81,6 +86,8 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
   validation commands.
 - Context remains subject to the file-count and byte caps applied by `build`.
 - `--max-estimated-input-tokens` can fail `build`, `run`, or `execute` before a network request.
+- An execution plan persists the reviewed estimated-input ceiling alongside provider settings;
+  plan-backed execution refuses request/provider/budget overrides.
 - The estimate is deliberately approximate and is not provider billing data.
 - Output tokens and request time remain independently bounded by provider options.
 
@@ -199,6 +206,8 @@ The package bundles self-contained
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
 | `context-manifest` | Explicit context manifest schema version 1 | `src/samsarix_codegen/schemas/context-manifest-v1.schema.json` |
 | `result-policy` | Execution-result policy schema version 1 | `src/samsarix_codegen/schemas/execution-result-policy-v1.schema.json` |
+| `execution-plan` | Credential-free execution plan schema version 1 | `src/samsarix_codegen/schemas/execution-plan-v1.schema.json` |
+| `execution-plan-verification` | Request/plan verification schema version 1 | `src/samsarix_codegen/schemas/execution-plan-verification-v1.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
 `load_contract_schema()` from Python. The files are package data in both the sdist and wheel.
@@ -210,4 +219,6 @@ bytes sum correctly, estimates match messages, or deltas match their base/target
 Python parser for those semantic checks. Context manifests are input contracts rather than
 request/result envelopes; their [separate contract](CONTEXT_MANIFEST.md) defines the additional
 runtime path and containment rules. Result policies are explicitly selected input contracts; their
-[separate contract](RESULT_POLICY.md) defines rule enforcement and trust limits.
+[separate contract](RESULT_POLICY.md) defines rule enforcement and trust limits. Execution plans
+are explicitly selected input contracts; their [separate contract](EXECUTION_PLAN.md) defines
+authority, precedence, linkage, and trust limits.

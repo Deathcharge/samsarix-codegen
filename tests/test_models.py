@@ -4,7 +4,7 @@
 import pytest
 
 from samsarix_codegen.errors import ConfigurationError
-from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
+from samsarix_codegen.models import MAX_ENDPOINT_CHARS, PromptRequest, ProviderConfig, Task
 
 
 def test_prompt_request_normalizes_instruction_and_language() -> None:
@@ -49,3 +49,31 @@ def test_provider_config_accepts_explicit_full_endpoint() -> None:
     )
 
     assert config.chat_completions_url == config.endpoint
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"endpoint": 1, "model": "model"}, "endpoint must be text"),
+        ({"endpoint": "https://example.com/v1", "model": 1}, "model name must be text"),
+        ({"endpoint": "https://example.com\n/v1", "model": "model"}, "control"),
+        ({"endpoint": "https://example.com/v1", "model": "bad\nmodel"}, "control"),
+        ({"endpoint": "https://example.com/v1", "model": "\ud800"}, "valid Unicode"),
+        ({"endpoint": "https://[broken/v1", "model": "model"}, "URL is invalid"),
+        (
+            {"endpoint": "https://example.com/" + "x" * MAX_ENDPOINT_CHARS, "model": "model"},
+            "exceeds",
+        ),
+        (
+            {"endpoint": "https://example.com/v1", "model": "model", "timeout_seconds": True},
+            "timeout",
+        ),
+        (
+            {"endpoint": "https://example.com/v1", "model": "model", "max_output_tokens": True},
+            "output tokens",
+        ),
+    ],
+)
+def test_provider_config_public_values_fail_closed(kwargs: dict[str, object], match: str) -> None:
+    with pytest.raises(ConfigurationError, match=match):
+        ProviderConfig(**kwargs)  # type: ignore[arg-type]

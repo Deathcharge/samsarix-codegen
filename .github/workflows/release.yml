@@ -103,6 +103,10 @@ jobs:
             > "${RUNNER_TEMP}/context-manifest.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema result-policy \
             > "${RUNNER_TEMP}/result-policy.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema execution-plan \
+            > "${RUNNER_TEMP}/execution-plan.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema execution-plan-verification \
+            > "${RUNNER_TEMP}/execution-plan-verification.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
             "from samsarix_codegen import ProviderCheckReport; assert ProviderCheckReport('fixture', 64, 1).status == 'passed'"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
@@ -113,6 +117,9 @@ jobs:
             "from samsarix_codegen import ChatResult, PromptRequest, Task, build_messages, create_request_artifact, ExecutionResult, verify_execution_result; request=PromptRequest(Task.REVIEW, 'fixture'); artifact=create_request_artifact(build_messages(request), request.files); result=ExecutionResult(artifact.fingerprint, 'fixture', 'private response', 1, 2, 3); verification=verify_execution_result(artifact, result); assert verification.request_fingerprint == artifact.fingerprint and verification.result.response_chars == 16"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
             "from samsarix_codegen import ContextManifest, parse_context_manifest, render_context_manifest; value=ContextManifest(('src/app.py',)); assert parse_context_manifest(render_context_manifest(value)) == value"
+          "${RUNNER_TEMP}/release-venv/bin/python" -c \
+            "from samsarix_codegen import PromptRequest, ProviderConfig, Task, build_messages, create_execution_plan, create_request_artifact, parse_execution_plan, provider_config_from_execution_plan, render_execution_plan, verify_execution_plan; request=PromptRequest(Task.REVIEW, 'fixture'); artifact=create_request_artifact(build_messages(request), request.files); plan=create_execution_plan(artifact, ProviderConfig('http://127.0.0.1:11434/v1', 'fixture')); assert parse_execution_plan(render_execution_plan(plan)) == plan; verify_execution_plan(artifact, plan, expected_plan_fingerprint=plan.fingerprint); exact=provider_config_from_execution_plan(plan, api_key='external'); assert exact.model == 'fixture' and exact.api_key == 'external'"
+          "${RUNNER_TEMP}/release-venv/bin/python" scripts/installed_plan_smoke.py
       - name: Upload Python distributions
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

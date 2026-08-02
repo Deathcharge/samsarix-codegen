@@ -8,9 +8,10 @@ It is for developers and CI maintainers who want reproducible AI requests withou
 repository-discovery, file-write, shell, or retry authority. Samsarix Codegen never edits files,
 executes generated code, scans a repository automatically, or retries a paid request.
 
-> **Status:** `0.2.0` release candidate. The offline review workflow, one-request execution path,
-> and content-free provider conformance check are implemented and tested. The package has not been
-> published to PyPI or run through the documented three-developer pilot.
+> **Status:** `0.2.0` release candidate. The offline review workflow, versioned execution-plan
+> handoff, one-request execution path, and content-free provider conformance check are implemented
+> and tested. The package has not been published to PyPI or run through the documented
+> three-developer pilot.
 
 ## What makes it useful
 
@@ -21,8 +22,10 @@ The core workflow separates request construction from credential-bearing executi
 2. Compile a schema-versioned artifact containing the exact messages, context provenance, content
    hashes, and an approximate input-token estimate.
 3. Validate and summarize it offline with `inspect`.
-4. Record its canonical SHA-256 fingerprint as the approval object.
-5. Send exactly those reviewed messages once with `execute --expect-fingerprint`.
+4. Bind the request fingerprint to an exact endpoint, model, timeout, input ceiling, and output
+   ceiling in a credential-free execution plan.
+5. Validate and pin the plan fingerprint offline.
+6. Send exactly that reviewed request with those reviewed settings once using `execute --plan`.
 
 This makes staged-change review, CI approval handoffs, selected-log triage, and reproducible
 provider comparisons practical without a private Samsarix service or another repository.
@@ -84,10 +87,17 @@ git diff --staged | samsarix-codegen build "Review these staged changes" `
 
 samsarix-codegen inspect request.json
 samsarix-codegen inspect request.json --format markdown > exact-prompt.md
-$fingerprint = samsarix-codegen inspect request.json --format fingerprint
-
-$env:SAMSARIX_MODEL = "your-local-model"
-samsarix-codegen execute request.json --expect-fingerprint $fingerprint
+$requestFingerprint = samsarix-codegen inspect request.json --format fingerprint
+samsarix-codegen create-plan request.json `
+  --expect-fingerprint $requestFingerprint `
+  --model your-local-model `
+  --max-output-tokens 1200 `
+  --max-estimated-input-tokens 50000 > execution-plan.json
+$planFingerprint = samsarix-codegen verify-plan request.json execution-plan.json `
+  --format fingerprint
+samsarix-codegen execute request.json `
+  --plan execution-plan.json `
+  --expect-plan-fingerprint $planFingerprint
 ```
 
 POSIX shell:
@@ -101,17 +111,26 @@ git diff --staged | samsarix-codegen build "Review these staged changes" \
 
 samsarix-codegen inspect request.json
 samsarix-codegen inspect request.json --format markdown > exact-prompt.md
-fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
-
-export SAMSARIX_MODEL="your-local-model"
-samsarix-codegen execute request.json --expect-fingerprint "$fingerprint"
+request_fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
+samsarix-codegen create-plan request.json \
+  --expect-fingerprint "$request_fingerprint" \
+  --model your-local-model \
+  --max-output-tokens 1200 \
+  --max-estimated-input-tokens 50000 > execution-plan.json
+plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json \
+  --format fingerprint)"
+samsarix-codegen execute request.json \
+  --plan execution-plan.json \
+  --expect-plan-fingerprint "$plan_fingerprint"
 ```
 
 The Markdown view is rendered from the validated artifact's exact stored messages; it does not
 re-read the source files. The supplied [PowerShell](examples/review-staged.ps1) and
 [POSIX](examples/review-staged.sh) scripts package this staged-diff workflow. `build` and `inspect`
-are offline. `execute` validates the artifact and fingerprint before constructing a provider
-client, then makes one non-streaming request.
+are offline. So are `create-plan` and `verify-plan`. Plan-backed `execute` validates the artifact,
+plan integrity, request linkage, input budget, and optional separately approved plan fingerprint
+before constructing a provider client, then makes one non-streaming request. The
+[execution-plan contract](docs/EXECUTION_PLAN.md) defines its no-override behavior and trust limits.
 
 The fingerprint detects drift; it is not a signature. Anyone able to replace an artifact can also
 recompute its unkeyed hash. See the [request artifact contract](docs/REQUEST_ARTIFACT.md) before
@@ -181,6 +200,8 @@ resource comparison, not a quality score or proof that a provider authored an en
 | --- | --- | --- |
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
+| `create-plan` | Never | Bind one request to credential-free provider settings and budgets |
+| `verify-plan` | Never | Validate request/plan linkage and emit a content-omitting record |
 | `inspect-result` | Never | Validate, policy-check, and summarize one result without its response contents |
 | `verify-result` | Never | Link and policy-check one result against a validated request without contents |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
@@ -209,6 +230,8 @@ samsarix-codegen schema result-comparison > execution-result-comparison-v1.schem
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
 samsarix-codegen schema context-manifest > context-manifest-v1.schema.json
 samsarix-codegen schema result-policy > execution-result-policy-v1.schema.json
+samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
+samsarix-codegen schema execution-plan-verification > execution-plan-verification-v1.schema.json
 ```
 
 The same files ship inside the typed Python package and are available through
@@ -277,6 +300,11 @@ Command-line values override environment-backed defaults. Samsarix Codegen does 
 files, persist credentials, or log request content. There is intentionally no `--api-key` option,
 reducing accidental exposure in shell history and process listings.
 
+Plan-backed execution is deliberately different: endpoint, model, timeout, input ceiling, and
+output ceiling come only from the explicit plan; corresponding environment variables and override
+flags cannot change them. Only `SAMSARIX_API_KEY` is read at execution time. This gives a reviewer
+one fingerprint covering the complete non-secret execution intent.
+
 ## Input, reliability, and cost limits
 
 - Only repeated `--file` paths, entries from explicitly named context manifests, and an explicitly
@@ -291,6 +319,9 @@ reducing accidental exposure in shell history and process listings.
   read by offline commands are limited to 12 MiB each.
 - Explicit result-policy files are strict UTF-8 JSON no larger than 64 KiB. At least one rule is
   required; unknown, duplicate, null, or file-plus-inline rules fail closed.
+- Execution plans are strict UTF-8 JSON no larger than 64 KiB and bind one request fingerprint to
+  canonical provider settings and budgets. Unknown, duplicate, noncanonical, tampered, or
+  request-mismatched plans fail closed.
 - `--max-estimated-input-tokens` rejects a request before network access. The estimate is
   `ceil(total UTF-8 message bytes / 4)`, not provider billing data.
 - Provider output defaults to 1,024 tokens and is capped at 32,768. Network timeouts range from 1
@@ -350,6 +381,10 @@ deterministic post-result gates used by the CLI. `load_execution_result_policy()
 `parse_execution_result_policy()`, and `render_execution_result_policy()` expose the versioned file
 contract. Unstable implementation helpers are not exported from `samsarix_codegen`.
 
+`ExecutionPlan`, `create_execution_plan()`, `parse_execution_plan()`,
+`verify_execution_plan()`, and `provider_config_from_execution_plan()` expose the same
+credential-free planning and exact runtime-configuration boundary to typed consumers.
+
 ## Development and package verification
 
 ```bash
@@ -361,9 +396,10 @@ python -m pytest -ra
 python -m build
 ```
 
-CI runs these checks plus built-wheel request/result inspection, linkage verification, checked-in
-policy enforcement and schema validation, comparison, provider-check contract, and schema smoke
-tests on Python 3.10 and 3.14 across Ubuntu and Windows. See
+CI runs these checks plus a built-wheel request/plan handoff, one exact local-fixture plan execution,
+plan and result linkage verification, checked-in policy enforcement and schema validation,
+comparison, provider-check contract, and schema smoke tests on Python 3.10 and 3.14 across Ubuntu
+and Windows. See
 [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
@@ -388,10 +424,10 @@ instruction + explicit files / explicit manifests / named stdin
  readable Markdown          deterministic JSON artifact
                                        |
                                        v
-                           offline validation + approval
+                     offline request + plan approval
                                        |
                                        v
-                         one bounded provider request
+                 one plan-bound provider request
                                        |
                                        v
                            text or JSON result envelope
@@ -412,6 +448,9 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
   response text is omitted; protect comparison files according to the result sensitivity.
 - Result-policy files contain no prompt or response, but an expected model can reveal deployment
   choices. Their limits do not authenticate provider-reported usage or prove monetary cost.
+- Execution plans contain no prompt or credential, but endpoints, model names, and limits can
+  reveal deployment topology. Their unkeyed fingerprints detect drift but do not authenticate a
+  reviewer, provider, or endpoint.
 - File contents are untrusted prompt data. Prompt injection cannot be eliminated; review every
   response.
 - Model output may be incorrect or unsafe. Samsarix Codegen never executes, applies, or persists it.

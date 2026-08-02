@@ -6,6 +6,8 @@ import sys
 from io import BytesIO, TextIOWrapper
 from pathlib import Path
 
+import pytest
+
 from samsarix_codegen.artifact import (
     ExecutionResultPolicy,
     create_request_artifact,
@@ -13,7 +15,12 @@ from samsarix_codegen.artifact import (
     render_request_artifact,
 )
 from samsarix_codegen.cli import main
-from samsarix_codegen.models import ChatResult, PromptRequest, Task
+from samsarix_codegen.execution_plan import (
+    create_execution_plan,
+    parse_execution_plan,
+    render_execution_plan,
+)
+from samsarix_codegen.models import ChatResult, PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages
 from samsarix_codegen.result_policy import render_execution_result_policy
 
@@ -418,6 +425,217 @@ def test_execute_rejects_unapproved_or_tampered_artifact(tmp_path: Path, capsys)
     captured = capsys.readouterr()
     assert exit_code == 5
     assert "fingerprint does not match" in captured.err
+
+
+def test_create_and_verify_execution_plan_without_network_or_credentials(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    request = PromptRequest(Task.REVIEW, "Private plan instruction")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    artifact_path = tmp_path / "request.json"
+    plan_path = tmp_path / "execution-plan.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    monkeypatch.setenv("SAMSARIX_API_KEY", "must-not-appear")
+
+    def fail_if_called(self, messages):
+        raise AssertionError("plan creation and verification must not call the provider")
+
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fail_if_called)
+
+    create_exit = main(
+        [
+            "create-plan",
+            str(artifact_path),
+            "--expect-fingerprint",
+            artifact.fingerprint,
+            "--endpoint",
+            "https://models.example.com/v1/",
+            "--model",
+            "model-a",
+            "--timeout",
+            "45",
+            "--max-output-tokens",
+            "512",
+        ]
+    )
+    created = capsys.readouterr()
+    plan_path.write_text(created.out, encoding="utf-8")
+    plan = parse_execution_plan(created.out)
+
+    assert create_exit == 0
+    assert created.err == ""
+    assert plan.request_fingerprint == artifact.fingerprint
+    assert plan.endpoint == "https://models.example.com/v1"
+    assert plan.model == "model-a"
+    assert plan.timeout_seconds == 45
+    assert plan.max_output_tokens == 512
+    assert plan.max_estimated_input_tokens == artifact.estimated_input_tokens
+    assert "must-not-appear" not in created.out
+    assert "Private plan instruction" not in created.out
+
+    verify_exit = main(
+        [
+            "verify-plan",
+            str(artifact_path),
+            str(plan_path),
+            "--expect-plan-fingerprint",
+            plan.fingerprint,
+            "--format",
+            "json",
+        ]
+    )
+    verified = capsys.readouterr()
+    payload = json.loads(verified.out)
+
+    assert verify_exit == 0
+    assert verified.err == ""
+    assert payload["plan_fingerprint"] == plan.fingerprint
+    assert payload["request"]["fingerprint"] == artifact.fingerprint
+    assert payload["provider"]["endpoint"] == "https://models.example.com/v1"
+    assert "Private plan instruction" not in verified.out
+
+
+def test_execute_with_plan_uses_exact_settings_and_only_external_api_key(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    request = PromptRequest(Task.EXPLAIN, "Private execution instruction")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    artifact_path = tmp_path / "request.json"
+    plan_path = tmp_path / "execution-plan.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan = create_execution_plan(
+        artifact,
+        ProviderConfig(
+            "http://127.0.0.1:11434/v1",
+            "planned-model",
+            timeout_seconds=17,
+            max_output_tokens=321,
+        ),
+    )
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+
+    monkeypatch.setenv("SAMSARIX_API_KEY", "external-key")
+    monkeypatch.setenv("SAMSARIX_API_BASE", "http://remote.example.com/unsafe")
+    monkeypatch.setenv("SAMSARIX_MODEL", "environment-model")
+    monkeypatch.setenv("SAMSARIX_TIMEOUT", "not-an-integer")
+    monkeypatch.setenv("SAMSARIX_MAX_OUTPUT_TOKENS", "not-an-integer")
+    monkeypatch.setenv("SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS", "not-an-integer")
+
+    def fake_complete(self, messages):
+        assert tuple(messages) == artifact.messages
+        assert self.config.endpoint == plan.endpoint
+        assert self.config.model == plan.model
+        assert self.config.timeout_seconds == plan.timeout_seconds
+        assert self.config.max_output_tokens == plan.max_output_tokens
+        assert self.config.api_key == "external-key"
+        return ChatResult("Planned response", 10, 3, 13)
+
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fake_complete)
+
+    exit_code = main(
+        [
+            "execute",
+            str(artifact_path),
+            "--plan",
+            str(plan_path),
+            "--expect-plan-fingerprint",
+            plan.fingerprint,
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["request_fingerprint"] == artifact.fingerprint
+    assert payload["model"] == "planned-model"
+    assert payload["response"]["text"] == "Planned response"
+    assert f"Execution plan {plan.fingerprint} matches" in captured.err
+    assert "external-key" not in captured.out + captured.err
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        ["--model", "override"],
+        ["--endpoint", "http://localhost:1234/v1"],
+        ["--timeout", "12"],
+        ["--max-output-tokens", "12"],
+        ["--max-estimated-input-tokens", "12"],
+        ["--expect-fingerprint", "sha256:" + "0" * 64],
+    ],
+)
+def test_execute_plan_rejects_every_inline_authority(
+    override: list[str], tmp_path: Path, capsys, monkeypatch
+) -> None:
+    artifact = create_request_artifact(build_messages(PromptRequest(Task.REVIEW, "Review")), ())
+    plan = create_execution_plan(artifact, ProviderConfig("http://localhost:11434/v1", "planned"))
+    artifact_path = tmp_path / "request.json"
+    plan_path = tmp_path / "plan.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+
+    def fail_if_called(self, messages):
+        raise AssertionError("conflicting authority must fail before provider access")
+
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fail_if_called)
+
+    exit_code = main(["execute", str(artifact_path), "--plan", str(plan_path), *override])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "cannot be combined" in captured.err
+
+
+def test_execution_plan_cli_rejects_stdin_and_orphaned_approval(tmp_path: Path, capsys) -> None:
+    artifact = create_request_artifact(build_messages(PromptRequest(Task.REVIEW, "Review")), ())
+    artifact_path = tmp_path / "request.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+
+    verify_exit = main(["verify-plan", str(artifact_path), "-"])
+    verified = capsys.readouterr()
+    assert verify_exit == 2
+    assert verified.out == ""
+    assert "require a file path" in verified.err
+
+    execute_exit = main(["execute", str(artifact_path), "--plan", "-"])
+    executed = capsys.readouterr()
+    assert execute_exit == 2
+    assert executed.out == ""
+    assert "requires a file path" in executed.err
+
+    orphan_exit = main(
+        [
+            "execute",
+            str(artifact_path),
+            "--expect-plan-fingerprint",
+            "sha256:" + "0" * 64,
+            "--model",
+            "local",
+        ]
+    )
+    orphaned = capsys.readouterr()
+    assert orphan_exit == 2
+    assert orphaned.out == ""
+    assert "requires --plan" in orphaned.err
+
+
+def test_inline_execute_reports_invalid_deferred_environment(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    artifact = create_request_artifact(build_messages(PromptRequest(Task.REVIEW, "Review")), ())
+    artifact_path = tmp_path / "request.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    monkeypatch.setenv("SAMSARIX_TIMEOUT", "not-an-integer")
+
+    exit_code = main(["execute", str(artifact_path), "--model", "local"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "SAMSARIX_TIMEOUT timeout must be an integer" in captured.err
 
 
 def test_inspect_reads_artifact_from_stdin(capsys) -> None:

@@ -12,7 +12,9 @@ Versioned machine-readable contracts, explicitly invoked context manifests, an o
 provider conformance check, offline single-result inspection, request/result linkage verification,
 same-request result comparison, and deterministic post-result policy gates are implemented
 milestones. A versioned, checked-in result-policy contract makes those gates repeatable across local
-and CI workflows without implicit discovery.
+and CI workflows without implicit discovery. Versioned execution plans now bind a reviewed request
+to exact non-secret provider settings and budgets across an offline-to-credentialed handoff without
+execution-time override precedence.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
 pilot validation, and flagship adoption remain separate decisions.
 
@@ -35,6 +37,9 @@ Current hardening backlog:
   copy/paste for its intended users.
 - Deterministic artifacts, offline inspection, pinned execution, stdin context, and hard estimated
   input budgets are implemented and locally package-verified for `0.2.0`.
+- Credential-free execution plans, offline request/plan verification, exact plan-backed execution,
+  and standalone plan/verification schemas are implemented; live endpoints remain optional owner
+  evidence rather than a hidden release dependency.
 - Exact stored-prompt rendering and content-safe artifact comparison are implemented and locally
   package-verified for the review-tools follow-up.
 - Strict execution-result parsing and content-omitting same-request comparison are implemented for
