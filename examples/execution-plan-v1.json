@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "plan_fingerprint": "sha256:2e3a14db03ca7f15a1dd562404a89a3c0d8a353050301c2e246d1c5f0115c55a",
+  "request_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "provider": {
+    "endpoint": "http://127.0.0.1:11434/v1",
+    "model": "model-a",
+    "timeout_seconds": 60,
+    "max_output_tokens": 1024
+  },
+  "budgets": {
+    "max_estimated_input_tokens": 12000
+  }
+}

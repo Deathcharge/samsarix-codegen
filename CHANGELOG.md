@@ -32,6 +32,12 @@ approves a first public release.
   UTF-8 response bytes, and provider-reported prompt, completion, or total token ceilings.
 - A strict versioned execution-result policy file, bundled Draft 2020-12 schema, typed
   parse/render/load API, checked-in example, and explicit `--policy` application in local/CI runs.
+- A strict versioned execution-plan contract that binds one request fingerprint to an endpoint,
+  model, whole-second timeout, estimated-input ceiling, and output ceiling without credentials.
+- Offline `create-plan` and `verify-plan` commands, plan-backed `execute` with no provider/budget
+  override precedence, typed public APIs, independent plan/verification schemas, and an example.
+- An installed-wheel smoke harness that proves the exact plan-backed journey against one local
+  provider request and proves tamper/override failures make no additional request.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.
@@ -49,6 +55,8 @@ approves a first public release.
 - Execution-result rendering now rejects values outside its documented schema.
 - Provider requests reject HTTP redirects so bearer credentials cannot be forwarded to a redirect
   target.
+- Provider configuration now rejects malformed public types, control characters, overlong values,
+  and non-loopback plaintext endpoints consistently across inline and planned execution.
 - GitHub Actions dependencies are pinned to verified full commit SHAs.
 - The version advances to `0.2.0` to mark the first post-productization workflow milestone.
 

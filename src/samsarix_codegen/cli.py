@@ -45,7 +45,23 @@ from samsarix_codegen.context import (
     load_stream_context,
 )
 from samsarix_codegen.errors import ArtifactError, ConfigurationError, ContextError, SamsarixError
-from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
+from samsarix_codegen.execution_plan import (
+    ExecutionPlan,
+    create_execution_plan,
+    load_execution_plan,
+    provider_config_from_execution_plan,
+    render_execution_plan,
+    render_execution_plan_verification,
+    verify_execution_plan,
+)
+from samsarix_codegen.models import (
+    MAX_ESTIMATED_INPUT_TOKENS,
+    MAX_PROVIDER_OUTPUT_TOKENS,
+    MAX_PROVIDER_TIMEOUT_SECONDS,
+    PromptRequest,
+    ProviderConfig,
+    Task,
+)
 from samsarix_codegen.prompt import build_messages, render_markdown
 from samsarix_codegen.provider import OpenAIChatClient
 from samsarix_codegen.provider_check import (
@@ -60,7 +76,6 @@ from samsarix_codegen.schema import ContractSchema, render_contract_schema
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1"
 DEFAULT_MAX_CONTEXT_BYTES = 200_000
-MAX_ESTIMATED_INPUT_TOKENS = 2_000_000
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -96,6 +111,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="send one small, content-free request to verify provider compatibility",
     )
     _add_provider_arguments(provider_check_command, provider_check=True)
+
+    create_plan_command = subparsers.add_parser(
+        "create-plan",
+        help="bind a validated request to credential-free provider settings without network access",
+    )
+    create_plan_command.add_argument(
+        "artifact", metavar="PATH", help="request-artifact path, or - for stdin"
+    )
+    create_plan_command.add_argument(
+        "--expect-fingerprint",
+        help="fail unless the artifact matches this previously approved sha256 fingerprint",
+    )
+    create_plan_command.add_argument(
+        "--max-estimated-input-tokens",
+        type=_bounded_int(1, MAX_ESTIMATED_INPUT_TOKENS, "max estimated input tokens"),
+        metavar="TOKENS",
+        help="plan input ceiling (default: the supplied artifact's exact estimate)",
+    )
+    _add_provider_arguments(create_plan_command, include_format=False)
 
     schema_command = subparsers.add_parser(
         "schema", help="print a bundled versioned JSON Schema without network access"
@@ -150,6 +184,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_result_policy_arguments(verify_result_command)
 
+    verify_plan_command = subparsers.add_parser(
+        "verify-plan",
+        help="verify an execution plan against a request without showing prompt contents",
+    )
+    verify_plan_command.add_argument(
+        "artifact", metavar="REQUEST", help="request-artifact path, or - for stdin"
+    )
+    verify_plan_command.add_argument(
+        "plan", metavar="PLAN", help="explicit execution-plan file path"
+    )
+    verify_plan_command.add_argument(
+        "--expect-plan-fingerprint",
+        help="fail unless the plan matches this previously approved sha256 fingerprint",
+    )
+    verify_plan_command.add_argument(
+        "--format",
+        choices=("text", "json", "fingerprint"),
+        default="text",
+        help="verification record or plan fingerprint (default: text)",
+    )
+
     compare_command = subparsers.add_parser(
         "compare", help="compare two validated request artifacts without showing prompt contents"
     )
@@ -189,8 +244,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--expect-fingerprint",
         help="fail unless the artifact matches this previously approved sha256 fingerprint",
     )
-    _add_estimated_input_budget(execute_command)
-    _add_provider_arguments(execute_command)
+    execute_command.add_argument(
+        "--plan",
+        metavar="PATH",
+        help="use one explicit versioned execution plan; provider overrides are refused",
+    )
+    execute_command.add_argument(
+        "--expect-plan-fingerprint",
+        help="fail unless --plan matches this previously approved sha256 fingerprint",
+    )
+    _add_estimated_input_budget(execute_command, defer_default=True)
+    _add_provider_arguments(execute_command, defer_defaults=True)
 
     return parser
 
@@ -204,6 +268,17 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             return _handle_request_command(args, input_stream)
         if args.command == "provider-check":
             return _handle_provider_check(args)
+        if args.command == "create-plan":
+            artifact = _read_artifact(args.artifact, input_stream)
+            require_fingerprint(artifact, args.expect_fingerprint)
+            config = _provider_config_from_args(args, include_api_key=False)
+            plan = create_execution_plan(
+                artifact,
+                config,
+                max_estimated_input_tokens=args.max_estimated_input_tokens,
+            )
+            _write_stdout(render_execution_plan(plan))
+            return 0
         if args.command == "schema":
             _write_stdout(render_contract_schema(args.contract))
             return 0
@@ -231,6 +306,18 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                 render_execution_result_verification(verification, output_format=args.format)
             )
             return 0
+        if args.command == "verify-plan":
+            plan = _load_execution_plan(args.plan)
+            artifact = _read_artifact(args.artifact, input_stream)
+            plan_verification = verify_execution_plan(
+                artifact,
+                plan,
+                expected_plan_fingerprint=args.expect_plan_fingerprint,
+            )
+            _write_stdout(
+                render_execution_plan_verification(plan_verification, output_format=args.format)
+            )
+            return 0
         if args.command == "compare":
             if args.base == "-" and args.target == "-":
                 raise ArtifactError("BASE and TARGET cannot both read from stdin")
@@ -251,9 +338,32 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             return 0
         if args.command == "execute":
             artifact = _read_artifact(args.artifact, input_stream)
-            require_fingerprint(artifact, args.expect_fingerprint)
-            _enforce_estimated_input_budget(artifact, args.max_estimated_input_tokens)
-            return _execute_artifact(artifact, args)
+            if args.plan is not None:
+                _reject_execution_plan_overrides(args)
+                plan = _load_execution_plan(args.plan)
+                plan_verification = verify_execution_plan(
+                    artifact,
+                    plan,
+                    expected_plan_fingerprint=args.expect_plan_fingerprint,
+                )
+                print(
+                    f"Execution plan {plan_verification.plan.fingerprint} matches the request.",
+                    file=sys.stderr,
+                )
+                config = provider_config_from_execution_plan(
+                    plan,
+                    api_key=os.environ.get("SAMSARIX_API_KEY"),
+                )
+            else:
+                if args.expect_plan_fingerprint is not None:
+                    raise ConfigurationError("--expect-plan-fingerprint requires --plan")
+                require_fingerprint(artifact, args.expect_fingerprint)
+                _enforce_estimated_input_budget(
+                    artifact,
+                    _resolve_estimated_input_budget(args.max_estimated_input_tokens),
+                )
+                config = _provider_config_from_args(args)
+            return _execute_artifact(artifact, config, output_format=args.format)
         raise AssertionError(f"unhandled command: {args.command}")
     except KeyboardInterrupt:
         print("Cancelled.", file=sys.stderr)
@@ -276,17 +386,19 @@ def _handle_request_command(args: argparse.Namespace, stdin: BinaryIO) -> int:
             output = render_markdown(messages)
         _write_stdout(output)
         return 0
-    return _execute_artifact(artifact, args)
-
-
-def _execute_artifact(artifact: RequestArtifact, args: argparse.Namespace) -> int:
-    config = ProviderConfig(
-        endpoint=args.endpoint,
-        model=args.model or "",
-        api_key=os.environ.get("SAMSARIX_API_KEY"),
-        timeout_seconds=float(args.timeout),
-        max_output_tokens=args.max_output_tokens,
+    return _execute_artifact(
+        artifact,
+        _provider_config_from_args(args),
+        output_format=args.format,
     )
+
+
+def _execute_artifact(
+    artifact: RequestArtifact,
+    config: ProviderConfig,
+    *,
+    output_format: str,
+) -> int:
     print(
         f"Request {artifact.fingerprint}: ~{artifact.estimated_input_tokens:,} input tokens, "
         f"up to {config.max_output_tokens:,} output tokens, "
@@ -294,7 +406,7 @@ def _execute_artifact(artifact: RequestArtifact, args: argparse.Namespace) -> in
         file=sys.stderr,
     )
     result = OpenAIChatClient(config).complete(artifact.messages)
-    if args.format == "json":
+    if output_format == "json":
         _write_stdout(render_execution_result(artifact, result, model=config.model))
     else:
         _write_stdout(result.text.rstrip() + "\n")
@@ -304,13 +416,7 @@ def _execute_artifact(artifact: RequestArtifact, args: argparse.Namespace) -> in
 
 
 def _handle_provider_check(args: argparse.Namespace) -> int:
-    config = ProviderConfig(
-        endpoint=args.endpoint,
-        model=args.model or "",
-        api_key=os.environ.get("SAMSARIX_API_KEY"),
-        timeout_seconds=float(args.timeout),
-        max_output_tokens=args.max_output_tokens,
-    )
+    config = _provider_config_from_args(args)
     print(
         f"Provider check will send one request containing {len(PROVIDER_CHECK_MESSAGES)} fixed "
         f"messages, no source context, and at most {config.max_output_tokens:,} output tokens. "
@@ -368,11 +474,16 @@ def _add_request_arguments(parser: argparse.ArgumentParser) -> None:
     _add_estimated_input_budget(parser)
 
 
-def _add_estimated_input_budget(parser: argparse.ArgumentParser) -> None:
+def _add_estimated_input_budget(
+    parser: argparse.ArgumentParser,
+    *,
+    defer_default: bool = False,
+) -> None:
+    default = None if defer_default else os.environ.get("SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS")
     parser.add_argument(
         "--max-estimated-input-tokens",
         type=_bounded_int(1, MAX_ESTIMATED_INPUT_TOKENS, "max estimated input tokens"),
-        default=os.environ.get("SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS"),
+        default=default,
         metavar="TOKENS",
         help=(
             "fail before a network request when the transparent estimate exceeds this budget "
@@ -385,29 +496,38 @@ def _add_provider_arguments(
     parser: argparse.ArgumentParser,
     *,
     provider_check: bool = False,
+    defer_defaults: bool = False,
+    include_format: bool = True,
 ) -> None:
+    endpoint_default = (
+        None if defer_defaults else os.environ.get("SAMSARIX_API_BASE", DEFAULT_ENDPOINT)
+    )
     parser.add_argument(
         "--endpoint",
-        default=os.environ.get("SAMSARIX_API_BASE", DEFAULT_ENDPOINT),
+        default=endpoint_default,
         help=(f"API base URL (default: SAMSARIX_API_BASE or local endpoint {DEFAULT_ENDPOINT})"),
     )
+    model_default = None if defer_defaults else os.environ.get("SAMSARIX_MODEL")
     parser.add_argument(
         "--model",
-        default=os.environ.get("SAMSARIX_MODEL"),
+        default=model_default,
         help="model name (default: SAMSARIX_MODEL; required)",
     )
+    timeout_default = None if defer_defaults else os.environ.get("SAMSARIX_TIMEOUT", "60")
     parser.add_argument(
         "--timeout",
         type=_bounded_int(1, 300, "timeout"),
-        default=os.environ.get("SAMSARIX_TIMEOUT", "60"),
+        default=timeout_default,
         metavar="SECONDS",
         help="network timeout from 1 to 300 seconds (default: 60)",
     )
-    maximum_output_tokens = MAX_PROVIDER_CHECK_OUTPUT_TOKENS if provider_check else 32_768
+    maximum_output_tokens = (
+        MAX_PROVIDER_CHECK_OUTPUT_TOKENS if provider_check else MAX_PROVIDER_OUTPUT_TOKENS
+    )
     default_output_tokens = (
         str(DEFAULT_PROVIDER_CHECK_OUTPUT_TOKENS)
         if provider_check
-        else os.environ.get("SAMSARIX_MAX_OUTPUT_TOKENS", "1024")
+        else (None if defer_defaults else os.environ.get("SAMSARIX_MAX_OUTPUT_TOKENS", "1024"))
     )
     parser.add_argument(
         "--max-output-tokens",
@@ -416,15 +536,16 @@ def _add_provider_arguments(
         metavar="TOKENS",
         help=(
             f"provider output cap from 1 to {maximum_output_tokens:,} tokens "
-            f"(default: {default_output_tokens})"
+            f"(default: {'environment or 1,024' if defer_defaults else default_output_tokens})"
         ),
     )
-    parser.add_argument(
-        "--format",
-        choices=("text", "json"),
-        default="text",
-        help="response output format (default: text)",
-    )
+    if include_format:
+        parser.add_argument(
+            "--format",
+            choices=("text", "json"),
+            default="text",
+            help="response output format (default: text)",
+        )
 
 
 def _add_result_policy_arguments(parser: argparse.ArgumentParser) -> None:
@@ -486,6 +607,120 @@ def _enforce_result_policy(result: ExecutionResult, args: argparse.Namespace) ->
             max_total_tokens=args.max_total_tokens,
         )
     enforce_execution_result_policy(result, policy)
+
+
+def _provider_config_from_args(
+    args: argparse.Namespace,
+    *,
+    include_api_key: bool = True,
+) -> ProviderConfig:
+    endpoint = (
+        args.endpoint
+        if args.endpoint is not None
+        else os.environ.get("SAMSARIX_API_BASE", DEFAULT_ENDPOINT)
+    )
+    model = args.model if args.model is not None else os.environ.get("SAMSARIX_MODEL", "")
+    timeout = (
+        args.timeout
+        if args.timeout is not None
+        else _environment_bounded_int(
+            "SAMSARIX_TIMEOUT",
+            default=60,
+            minimum=1,
+            maximum=MAX_PROVIDER_TIMEOUT_SECONDS,
+            label="timeout",
+        )
+    )
+    max_output_tokens = (
+        args.max_output_tokens
+        if args.max_output_tokens is not None
+        else _environment_bounded_int(
+            "SAMSARIX_MAX_OUTPUT_TOKENS",
+            default=1_024,
+            minimum=1,
+            maximum=MAX_PROVIDER_OUTPUT_TOKENS,
+            label="max output tokens",
+        )
+    )
+    return ProviderConfig(
+        endpoint=endpoint,
+        model=model,
+        api_key=os.environ.get("SAMSARIX_API_KEY") if include_api_key else None,
+        timeout_seconds=timeout,
+        max_output_tokens=max_output_tokens,
+    )
+
+
+def _resolve_estimated_input_budget(value: int | None) -> int | None:
+    if value is not None:
+        return value
+    raw = os.environ.get("SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS")
+    if raw is None:
+        return None
+    return _parse_configuration_int(
+        raw,
+        minimum=1,
+        maximum=MAX_ESTIMATED_INPUT_TOKENS,
+        label="max estimated input tokens",
+        source="SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS",
+    )
+
+
+def _reject_execution_plan_overrides(args: argparse.Namespace) -> None:
+    if args.plan == "-":
+        raise ConfigurationError("--plan requires a file path and cannot read from stdin")
+    overrides = (
+        args.expect_fingerprint,
+        args.max_estimated_input_tokens,
+        args.endpoint,
+        args.model,
+        args.timeout,
+        args.max_output_tokens,
+    )
+    if any(value is not None for value in overrides):
+        raise ConfigurationError(
+            "--plan cannot be combined with request, provider, or budget override flags"
+        )
+
+
+def _load_execution_plan(path: str) -> ExecutionPlan:
+    if path == "-":
+        raise ConfigurationError("execution plans require a file path and cannot read from stdin")
+    return load_execution_plan(path)
+
+
+def _environment_bounded_int(
+    name: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+    label: str,
+) -> int:
+    return _parse_configuration_int(
+        os.environ.get(name, str(default)),
+        minimum=minimum,
+        maximum=maximum,
+        label=label,
+        source=name,
+    )
+
+
+def _parse_configuration_int(
+    value: str,
+    *,
+    minimum: int,
+    maximum: int,
+    label: str,
+    source: str,
+) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ConfigurationError(f"{source} {label} must be an integer") from exc
+    if not minimum <= parsed <= maximum:
+        raise ConfigurationError(f"{source} {label} must be between {minimum:,} and {maximum:,}")
+    return parsed
 
 
 def _request_from_args(args: argparse.Namespace, stdin: BinaryIO) -> PromptRequest:

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -29,7 +30,24 @@ from samsarix_codegen.artifact import (
 from samsarix_codegen.cli import main
 from samsarix_codegen.context import ContextManifest
 from samsarix_codegen.errors import ConfigurationError
-from samsarix_codegen.models import ChatResult, ContextFile, PromptRequest, Task
+from samsarix_codegen.execution_plan import (
+    create_execution_plan,
+    parse_execution_plan,
+    render_execution_plan,
+    render_execution_plan_verification,
+    verify_execution_plan,
+)
+from samsarix_codegen.models import (
+    MAX_ENDPOINT_CHARS,
+    MAX_ESTIMATED_INPUT_TOKENS,
+    MAX_PROVIDER_OUTPUT_TOKENS,
+    MAX_PROVIDER_TIMEOUT_SECONDS,
+    ChatResult,
+    ContextFile,
+    PromptRequest,
+    ProviderConfig,
+    Task,
+)
 from samsarix_codegen.prompt import build_messages
 from samsarix_codegen.provider_check import ProviderCheckReport, render_provider_check
 from samsarix_codegen.result_policy import render_execution_result_policy
@@ -117,6 +135,22 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
             )
         )
     )
+    execution_plan = create_execution_plan(
+        base,
+        ProviderConfig(
+            "https://models.example.com/v1",
+            "local-model",
+            timeout_seconds=45,
+            max_output_tokens=512,
+        ),
+        max_estimated_input_tokens=1_000,
+    )
+    execution_plan_payload = json.loads(render_execution_plan(execution_plan))
+    execution_plan_verification_payload = json.loads(
+        render_execution_plan_verification(
+            verify_execution_plan(base, execution_plan), output_format="json"
+        )
+    )
 
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
@@ -135,6 +169,10 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
         context_manifest_payload
     )
     Draft202012Validator(load_contract_schema("result-policy")).validate(result_policy_payload)
+    Draft202012Validator(load_contract_schema("execution-plan")).validate(execution_plan_payload)
+    Draft202012Validator(load_contract_schema("execution-plan-verification")).validate(
+        execution_plan_verification_payload
+    )
 
 
 @pytest.mark.parametrize(
@@ -180,6 +218,50 @@ def test_result_policy_schema_limits_match_runtime() -> None:
     assert schema["properties"]["max_response_bytes"]["maximum"] == MAX_RESULT_BYTES
     for field in ("max_prompt_tokens", "max_completion_tokens", "max_total_tokens"):
         assert schema["properties"][field]["maximum"] == MAX_RESULT_POLICY_TOKENS
+
+
+@pytest.mark.parametrize("contract", ["execution-plan", "execution-plan-verification"])
+def test_execution_plan_schema_limits_match_runtime(contract: str) -> None:
+    schema = load_contract_schema(contract)
+    provider = schema["$defs"]["provider"]["properties"]
+    budgets = schema["properties"]["budgets"]["properties"]
+
+    assert provider["endpoint"]["maxLength"] == MAX_ENDPOINT_CHARS
+    assert provider["timeout_seconds"]["maximum"] == MAX_PROVIDER_TIMEOUT_SECONDS
+    assert provider["max_output_tokens"]["maximum"] == MAX_PROVIDER_OUTPUT_TOKENS
+    assert budgets["max_estimated_input_tokens"]["maximum"] == MAX_ESTIMATED_INPUT_TOKENS
+
+
+def test_execution_plan_example_is_schema_valid_and_internally_consistent() -> None:
+    example = Path(__file__).resolve().parents[1] / "examples" / "execution-plan-v1.json"
+    payload = json.loads(example.read_text(encoding="utf-8"))
+
+    Draft202012Validator(load_contract_schema("execution-plan")).validate(payload)
+    plan = parse_execution_plan(example.read_bytes())
+    assert plan.fingerprint == payload["plan_fingerprint"]
+
+
+@pytest.mark.parametrize(
+    "mutator",
+    [
+        lambda payload: payload.update(unexpected=True),
+        lambda payload: payload["provider"].update(model=" model-a"),
+        lambda payload: payload["provider"].update(endpoint="http://remote.example.com/v1"),
+        lambda payload: payload["provider"].update(timeout_seconds=0),
+        lambda payload: payload["provider"].update(max_output_tokens=32_769),
+        lambda payload: payload["budgets"].update(max_estimated_input_tokens=2_000_001),
+    ],
+)
+def test_execution_plan_schema_rejects_contract_drift(mutator) -> None:
+    artifact = make_artifact("Review")
+    plan = create_execution_plan(
+        artifact, ProviderConfig("https://models.example.com/v1", "model-a")
+    )
+    payload = json.loads(render_execution_plan(plan))
+    mutator(payload)
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(load_contract_schema("execution-plan")).validate(payload)
 
 
 @pytest.mark.parametrize(

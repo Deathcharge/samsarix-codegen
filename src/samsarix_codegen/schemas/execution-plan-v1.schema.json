@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samsarix.com/schemas/codegen/execution-plan-v1.schema.json",
+  "title": "Samsarix Codegen execution plan",
+  "description": "Credential-free provider settings and budgets bound to one reviewed request fingerprint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_fingerprint",
+    "request_fingerprint",
+    "provider",
+    "budgets"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "request_fingerprint": {"$ref": "#/$defs/fingerprint"},
+    "provider": {"$ref": "#/$defs/provider"},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_estimated_input_tokens"],
+      "properties": {
+        "max_estimated_input_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000000
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "model", "timeout_seconds", "max_output_tokens"],
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^https?://[^\\s]+$",
+          "anyOf": [
+            {"pattern": "^https://"},
+            {"pattern": "^http://(?:localhost(?:[:/]|$)|127\\.|\\[::1\\](?:[:/]|$))"}
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300},
+        "max_output_tokens": {"type": "integer", "minimum": 1, "maximum": 32768}
+      }
+    }
+  }
+}

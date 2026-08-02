@@ -27,6 +27,9 @@ Its product promise is narrower and testable:
     excessive/missing reported usage without sending another provider request.
 12. Let teams commit one strict, versioned result policy and apply the same reviewed limits locally
     and in CI without implicit configuration discovery or override precedence.
+13. Bind one reviewed request to an exact endpoint, model, timeout, input ceiling, and output
+    ceiling in a second credential-free approval object that cannot be changed by execution-time
+    provider overrides.
 
 ## Evidence from adjacent products
 
@@ -93,6 +96,26 @@ The evaluation category validates demand for repeatable model comparisons:
   reusable and versioned across evaluations and environments, validating demand for stable team
   configuration independently of evaluation code.
 
+Provider/model configuration is itself a repeatability concern in adjacent products:
+
+- [Promptfoo providers](https://www.promptfoo.dev/docs/providers/) can be defined in configuration
+  files with provider identifiers and request parameters such as temperature or maximum tokens.
+- [Braintrust prompts](https://www.braintrust.dev/docs/deploy/prompts) are versioned objects that
+  combine a prompt with a model and parameters; its
+  [prompt-building API](https://www.braintrust.dev/docs/evaluate/write-prompts) returns compiled
+  messages plus the selected model and parameters.
+- [LangSmith model configurations](https://docs.langchain.com/langsmith/managing-model-configurations)
+  store a provider, model, and parameters for reuse in Playground and evaluation workflows.
+- [GitHub Copilot CLI configuration](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference)
+  documents model configuration and precedence across invocation and configuration sources.
+
+These sources support the need to make model/runtime parameters repeatable. Samsarix takes a
+narrower approval-oriented approach: one local plan binds the request fingerprint to canonical
+non-secret settings, has no remote “latest” resolution or implicit file discovery, and refuses
+execution-time provider/budget overrides instead of merging configuration layers. This is an
+inference from the adjacent workflows, not a claim that they offer or lack an identical approval
+primitive.
+
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
 dependency-free offline check that both bounded result envelopes reference the same reviewed
 request, then emits only model labels, response hashes/sizes, and reported usage deltas. For one
@@ -112,9 +135,11 @@ label, bytes, estimate, and fingerprint before choosing a provider.
 
 ### CI approval handoff
 
-Build an artifact in an unprivileged job, record its fingerprint as the approval object, and execute
-it later in a credential-bearing job with `--expect-fingerprint`. The artifact contains the model
-messages, so the execution job does not need source-tree access.
+Build an artifact and execution plan in an unprivileged job, record the plan fingerprint as the
+complete non-secret approval object, and execute later in a credential-bearing job with
+`--plan --expect-plan-fingerprint`. The artifact contains the model messages and the plan contains
+the provider/budget intent, so the execution job does not need source-tree access or configuration
+precedence.
 
 ### Incident and log triage
 
@@ -127,6 +152,18 @@ Execute the same artifact against two operator-chosen OpenAI-compatible endpoint
 `compare-results` on their JSON envelopes. The common fingerprint links both envelopes to the same
 reviewed message payload; the comparison omits response bodies and does not claim provider
 authenticity, quality, tokenizer equivalence, or authorship.
+
+### Reviewed execution intent
+
+An unprivileged build/review job can create a request artifact, then create an execution plan that
+names the exact endpoint, model, timeout, output ceiling, and estimated-input ceiling. A reviewer
+can validate both offline and approve the plan fingerprint separately. The credential-bearing job
+receives only the two explicit files, that approved digest, and an environment-only API key;
+provider and budget environment settings cannot silently redirect or resize the approved run.
+
+This is useful when approval should cover both disclosed prompt content and non-secret execution
+intent. It is not endpoint or provider authentication: access control, TLS governance, signing, and
+billing reconciliation remain external.
 
 ### Content-omitting run evidence
 
@@ -163,6 +200,8 @@ shell history or repository discovery.
 - No automatic repository crawl in the core path.
 - No implicit manifest lookup, glob expansion, ignore-file interpretation, or conditional include.
 - No implicit result-policy lookup, remote configuration, or file/flag override precedence.
+- No implicit execution-plan lookup, remote resolution, stdin loading, or provider/budget override
+  precedence.
 - No file writes, patch application, shell execution, or tool loop.
 - No implicit network request from `build`, `inspect`, `inspect-result`, or `verify-result`.
 - No automatic retry or provider fallback.

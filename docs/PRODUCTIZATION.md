@@ -42,10 +42,12 @@ without granting file-write or shell access. The primary journey is:
 2. Run `samsarix-codegen build` with a task, instruction, explicit files, explicitly invoked
    context manifests, or bounded stdin.
 3. Inspect the generated Markdown or schema-versioned JSON artifact without a network call.
-4. Record the artifact fingerprint as an approval object, then use `execute --expect-fingerprint`
-   against a local or hosted OpenAI-compatible endpoint.
-5. Review text output or retain the structured result envelope and provider-reported usage.
-6. Optionally apply deterministic model, response-byte, and reported-token policy gates before CI
+4. Record the artifact fingerprint, then create and validate a credential-free execution plan that
+   binds it to an endpoint, model, timeout, input ceiling, and output ceiling.
+5. Record the plan fingerprint as the complete non-secret execution approval, then use
+   `execute --plan --expect-plan-fingerprint` in the credential-bearing boundary.
+6. Review text output or retain the structured result envelope and provider-reported usage.
+7. Optionally apply deterministic model, response-byte, and reported-token policy gates before CI
    retains a content-omitting inspection or request/result verification record.
 
 ### Independent reason to exist
@@ -132,6 +134,11 @@ Research references:
     bounded, strict set of deterministic result rules. Operators must pass its path explicitly;
     file rules cannot mix with flags, and no remote lookup, code execution, or hidden precedence is
     introduced.
+19. **Reviewed execution intent.** Execution-plan schema version 1 binds one request fingerprint to
+    canonical endpoint, model, whole-second timeout, estimated-input ceiling, and output ceiling.
+    The plan is credential-free, explicit, bounded, internally fingerprinted, and independently
+    schema-validatable. Plan-backed execution reads only `SAMSARIX_API_KEY` at runtime and refuses
+    request/provider/budget overrides rather than merging configuration layers.
 
 ## Assumptions
 
@@ -205,14 +212,17 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add offline request/result linkage verification without reproducing either content body.
 - [x] Add deterministic post-result model, size, and reported-usage gates for CI.
 - [x] Add a versioned, checked-in execution-result policy contract for repeatable team CI rules.
+- [x] Add a versioned execution-plan contract so approval covers the request and exact non-secret
+  provider/budget intent across the credential boundary.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build`, `inspect`, `inspect-result`, `verify-result`, `compare`, `compare-results`, `execute`,
-  `run`, `schema`, and `provider-check` commands with useful help and version behavior.
+- [x] `build`, `inspect`, `create-plan`, `verify-plan`, `inspect-result`, `verify-result`, `compare`,
+  `compare-results`, `execute`, `run`, `schema`, and `provider-check` commands with useful help and
+  version behavior.
 - [x] Fail-closed post-result policy flags and a typed public enforcement API.
 - [x] Strict result-policy parsing/rendering/loading, bundled schema, example, and installed-wheel
   CI journey.
@@ -229,6 +239,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - `build` works without network access or secrets and includes the selected source content.
 - JSON artifacts are deterministic, fail on schema/content drift, summarize offline, and can be
   pinned before execution.
+- Execution plans are deterministic, fail on plan/request drift, preserve exact provider/budget
+  intent, omit credentials/prompt contents, and refuse execution-time overrides.
 - `run` succeeds against a deterministic local HTTP fixture and fails clearly for missing model,
   unsafe endpoint, HTTP rejection, malformed response, and unavailable provider.
 - Context traversal, binary input, invalid UTF-8, file-count, and byte-limit cases fail closed.
@@ -262,6 +274,8 @@ Final command evidence is recorded in the **Final verification** section after e
   single-result paths, with missing usage rejected whenever its limit is configured.
 - Added a versioned execution-result policy document, standalone Draft 2020-12 schema, typed
   parse/render/load API, checked-in example, and explicit no-override CLI behavior.
+- Added versioned execution plans, offline plan creation/verification, a typed public API, standalone
+  plan and verification schemas, a checked-in example, and exact no-override plan-backed execution.
 - Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
   installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
@@ -300,7 +314,7 @@ required for local evaluation and none was performed.
 ### Trust boundaries
 
 - CLI arguments, environment configuration, context manifests, selected file/stdin contents,
-  request artifacts, endpoint responses, and model output are untrusted inputs.
+  request artifacts, execution plans, endpoint responses, and model output are untrusted inputs.
 - The invoking developer is trusted to choose a project root, files, model, and endpoint.
 - The model receives only explicit context, but embedded prompt injection can still influence output.
 - Generated output is never executed or written by Samsarix Codegen.
@@ -319,6 +333,10 @@ required for local evaluation and none was performed.
   reported usage, or missing usage needed by a configured token rule before emitting normal output.
 - Policy documents are explicitly selected, bounded to 64 KiB, require an active rule, reject
   duplicate/unknown/null fields, and keep JSON integers within the cross-language safe range.
+- Execution plans are explicitly selected files bounded to 64 KiB. They reject duplicate/unknown
+  fields, noncanonical values, invalid endpoint settings, plan/request fingerprint drift, and input
+  budget excess before client construction. Provider/budget flags cannot override them, and only
+  the environment-only API key is resolved at plan-backed execution time.
 - Remote plaintext transport and URL credentials are rejected; Python's default TLS verification is
   retained.
 - HTTP redirects are rejected so bearer credentials cannot be forwarded to a provider-selected
@@ -342,6 +360,9 @@ required for local evaluation and none was performed.
   prove authorship, normalize tokenization, or establish monetary cost or response quality.
 - A committed policy can reveal approved model labels and becomes part of repository governance;
   Samsarix does not discover, fetch, merge, or remotely update it.
+- A plan can reveal endpoint topology, model names, and capacity choices. Its unkeyed fingerprint is
+  not a signature; the expected digest protects the handoff only when retained separately under
+  stronger access control.
 - Python build frontends can reuse a local `build/` cache. The release audit rejects unexpected wheel
   roots, but local releasers should still build from a clean checkout or remove generated caches.
 
@@ -360,6 +381,8 @@ if adoption exists. A subscription is not justified without demand and cost evid
 - Model quality and output safety vary and are outside this package's control.
 - Request artifacts can retain sensitive source or log content outside the original repository;
   users must apply equivalent access and retention controls.
+- Execution plans omit prompt contents and credentials but can disclose deployment metadata;
+  operators must govern them accordingly.
 
 ## Pre-rebrand verification
 
@@ -597,13 +620,33 @@ response disclosure. Combining a policy file with an inline rule failed as a con
 with exit `2`. Exact final distribution digests are attached to the corresponding pull request
 because recording them inside the sdist would change the sdist digest.
 
+### Reviewed execution-plan follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing across 14 source files, workflow
+parsing, the source release check, and 275 tests. A source-built sdist contained the execution-plan
+implementation, standalone guide, example, smoke harness, and both bundled schemas. Its extracted
+tree passed the same formatting, lint, typing, workflow, release-source, and 275-test gates before
+building the wheel. Twine and the fail-closed release audit accepted the zero-runtime-dependency
+sdist/wheel pair.
+
+A fresh virtual environment installed only the wheel and resolved the public package from that
+environment outside the checkout. The installed CLI exported both plan schemas and completed the
+full build, inspect, create-plan, verify-plan, and plan-backed execute journey against a deterministic
+local HTTP fixture. The fixture received exactly one request with the approved model, output limit,
+messages, path, and environment-only bearer credential. Invalid provider/budget environment values
+did not override the plan. A tampered plan and an explicit model override both failed before any
+second request. The verification record omitted the private instruction and selected diff content.
+
+Exact final distribution digests are attached to the corresponding pull request because recording
+them inside the source distribution would change that distribution's digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
-  required or authorized. Deterministic local HTTP integration tests cover request shape, auth
-  header behavior, one-request provider conformance, text/usage normalization, HTTP rejection,
-  redirect blocking, invalid JSON, timeouts, unavailable endpoints, response limits, and secret
-  redaction.
+  required or authorized. Deterministic local HTTP integration tests and the installed-wheel plan
+  smoke cover request shape, auth header behavior, exact plan-backed execution, one-request provider
+  conformance, text/usage normalization, HTTP rejection, redirect blocking, invalid JSON, timeouts,
+  unavailable endpoints, response limits, and secret redaction.
 - The three-developer pilot protocol is ready but has not been represented as completed; it requires
   three real participants using the same exact wheel.
 - Package publication, signed release-tag creation, and installation from PyPI were not attempted;
@@ -618,7 +661,7 @@ because recording them inside the sdist would change the sdist digest.
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
 review-first artifact workflow, offline review/comparison, request/result linkage and deterministic
-versioned result-policy tools,
+versioned result-policy tools, credential-free reviewed execution plans,
 reusable explicit context manifests, independent JSON contracts, and an operator-run provider
 conformance check; each has local clean-package evidence recorded above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release
