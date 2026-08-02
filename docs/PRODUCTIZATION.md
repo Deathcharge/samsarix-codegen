@@ -228,6 +228,8 @@ Final command evidence is recorded in the **Final verification** section after e
   provider/budget intent across the credential boundary.
 - [x] Bind plan-backed results to that approval and verify the complete request/plan/result chain
   offline without reproducing prompt or response contents.
+- [x] Add a fully linked offline request/plan/synthetic-result fixture whose evidence is reproduced
+  through both the public API and installed CLI in CI.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 

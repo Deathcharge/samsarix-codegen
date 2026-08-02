@@ -20,6 +20,7 @@ from samsarix_codegen.artifact import (
     create_request_artifact,
     inspect_execution_result,
     parse_execution_result,
+    parse_request_artifact,
     render_artifact_comparison,
     render_execution_result,
     render_execution_result_comparison,
@@ -270,21 +271,75 @@ def test_execution_plan_example_is_schema_valid_and_internally_consistent() -> N
     assert plan.fingerprint == payload["plan_fingerprint"]
 
 
-def test_execution_result_and_evidence_examples_are_schema_valid_and_consistent() -> None:
-    examples = Path(__file__).resolve().parents[1] / "examples"
-    result = json.loads((examples / "execution-result-v2.json").read_text(encoding="utf-8"))
+def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> None:
+    repository = Path(__file__).resolve().parents[1]
+    examples = repository / "examples"
+    request_path = examples / "execution-request-v2.json"
+    plan_path = examples / "execution-plan-v1.json"
+    result_path = examples / "execution-result-v2.json"
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
     evidence = json.loads((examples / "execution-evidence-v1.json").read_text(encoding="utf-8"))
 
+    Draft202012Validator(load_contract_schema("request")).validate(request)
+    Draft202012Validator(load_contract_schema("execution-plan")).validate(plan)
     Draft202012Validator(load_contract_schema("result")).validate(result)
     Draft202012Validator(load_contract_schema("execution-evidence")).validate(evidence)
-    assert evidence["plan_fingerprint"] == result["plan_fingerprint"]
-    assert evidence["request"]["fingerprint"] == result["request_fingerprint"]
-    assert evidence["provider"]["requested_model"] == result["model"]
-    assert evidence["provider"]["response_model"] == result["response_model"]
-    assert evidence["result"]["usage"] == result["usage"]
+
+    build_exit_code = main(
+        [
+            "build",
+            "Review greet for correctness, edge cases, and maintainability. "
+            "Return concise findings.",
+            "--task",
+            "review",
+            "--root",
+            str(repository),
+            "--file",
+            "examples/sample.py",
+            "--max-estimated-input-tokens",
+            "5000",
+            "--format",
+            "json",
+        ]
+    )
+    build_output = capsys.readouterr()
+    assert build_exit_code == 0
+    assert build_output.err == ""
+    assert json.loads(build_output.out) == request
+
+    artifact = parse_request_artifact(request_path.read_bytes())
+    parsed_plan = parse_execution_plan(plan_path.read_bytes())
+    parsed_result = parse_execution_result(result_path.read_bytes())
+    verification = verify_execution_evidence(
+        artifact,
+        parsed_plan,
+        parsed_result,
+        expected_plan_fingerprint=plan["plan_fingerprint"],
+    )
+    assert verification.to_payload() == evidence
+
+    exit_code = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--expect-plan-fingerprint",
+            plan["plan_fingerprint"],
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert json.loads(captured.out) == evidence
     response = result["response"]["text"]
     assert evidence["result"]["response"]["sha256"] == (
-        "sha256:" + hashlib.sha256(response.encode()).hexdigest()
+        "sha256:" + hashlib.sha256(response.encode("utf-8")).hexdigest()
     )
 
 

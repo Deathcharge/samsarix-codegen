@@ -21,24 +21,30 @@ samsarix-codegen verify-result request.json result.json \
   --format json
 ```
 
-`execution-plan-v1.json` is a credential-free example of the versioned provider-settings approval
-contract. Its request fingerprint is a placeholder; generate a linked plan for a real artifact:
+`execution-request-v2.json`, `execution-plan-v1.json`, `execution-result-v2.json`, and
+`execution-evidence-v1.json` form one fully linked offline example. The request deterministically
+captures `sample.py`; the plan uses a localhost placeholder; the explicitly labeled synthetic
+result reports no provider model or usage. The repository pins that input to LF in
+`.gitattributes` so the artifact is reproducible on Windows and POSIX checkouts. No command below
+contacts that endpoint:
 
 ```bash
-samsarix-codegen create-plan request.json \
-  --model local-model \
-  --max-estimated-input-tokens 50000 > execution-plan.json
-samsarix-codegen verify-plan request.json execution-plan.json
+plan_fingerprint="$(samsarix-codegen verify-plan \
+  examples/execution-request-v2.json examples/execution-plan-v1.json \
+  --format fingerprint)"
+samsarix-codegen verify-execution \
+  examples/execution-request-v2.json \
+  examples/execution-plan-v1.json \
+  examples/execution-result-v2.json \
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --format json > checked-evidence.json
+python -c "import json; assert json.load(open('checked-evidence.json')) == json.load(open('examples/execution-evidence-v1.json'))"
 ```
 
-`execution-result-v2.json` and `execution-evidence-v1.json` are mutually consistent illustrative
-outputs for the plan-bound result and content-omitting three-artifact verification contracts. Their
-request and plan fingerprints are placeholders; validate their portable shapes with:
-
-```bash
-samsarix-codegen schema result > result.schema.json
-samsarix-codegen schema execution-evidence > execution-evidence.schema.json
-```
+This proves local structural integrity, canonical request/plan fingerprints, linkage, model and
+budget consistency, response hashing, and deterministic evidence rendering. It is not a provider
+attestation or a claim that the synthetic result came from a model. Rebuild every artifact for real
+work instead of reusing the fixture's fingerprints.
 
 `pilot-record-v1.json` is an intentionally incomplete, privacy-minimal pilot record. It uses only
 bounded counts, enumerated observations, and safety booleans; it contains no prompt, response,

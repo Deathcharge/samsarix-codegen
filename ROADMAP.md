@@ -17,6 +17,8 @@ to exact non-secret provider settings and budgets across an offline-to-credentia
 execution-time override precedence. Plan-backed result schema version 2 now carries that reviewed
 plan fingerprint, and offline execution verification validates the full request/plan/result chain
 plus requested-model and reported-output-budget consistency without content disclosure.
+A checked-in offline request/plan/synthetic-result chain now makes that verifier runnable from a
+clone without credentials, a provider process, or network access.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
 pilot validation, and flagship adoption remain separate decisions.
 

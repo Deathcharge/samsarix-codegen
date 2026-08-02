@@ -214,6 +214,14 @@ tests. Developers and CI can invoke the same allowlist, add an explicit task-spe
 the effective content hashes and budget, and compare rebuilt artifacts without relying on local
 shell history or repository discovery.
 
+### Zero-account evaluation
+
+Run the checked-in request, plan, synthetic result, and evidence fixture through
+`verify-execution` from a clean clone. The same command is exercised through an installed wheel on
+every supported CI platform. This gives evaluators one complete artifact-linkage journey without a
+provider account, local model download, network request, or ambiguous fake-provider claim; live
+quality and compatibility remain separate operator evidence.
+
 ## Defensible product constraints
 
 - No automatic repository crawl in the core path.

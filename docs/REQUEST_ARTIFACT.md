@@ -249,7 +249,10 @@ runtime path and containment rules. Result policies are explicitly selected inpu
 are explicitly selected input contracts; their [separate contract](EXECUTION_PLAN.md) defines
 authority, precedence, linkage, and trust limits.
 
-The checked-in [result](../examples/execution-result-v2.json) and
-[execution-evidence](../examples/execution-evidence-v1.json) examples are mutually consistent and
-validated against the bundled schemas in the test suite. They use placeholder fingerprints and
-must not be treated as approval records for a real request.
+The checked-in [request](../examples/execution-request-v2.json),
+[plan](../examples/execution-plan-v1.json), [synthetic result](../examples/execution-result-v2.json),
+and [execution evidence](../examples/execution-evidence-v1.json) are a fully linked offline fixture.
+Tests rebuild the request from `examples/sample.py`, validate every portable schema and canonical
+fingerprint, run the complete verifier, and require its content-omitting evidence to equal the
+checked-in record. The synthetic response is not a provider claim or an approval record for real
+work.

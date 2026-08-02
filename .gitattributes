@@ -1,0 +1,2 @@
+# Keep the reproducible request fixture byte-identical on Windows and POSIX checkouts.
+examples/sample.py text eol=lf
