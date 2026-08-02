@@ -582,10 +582,10 @@ request because recording them inside the sdist would change the sdist digest.
 
 ### Versioned result-policy contract follow-up
 
-Python 3.14.6 source checks passed formatting, lint, strict typing, workflow parsing, and 224 tests.
+Python 3.14.6 source checks passed formatting, lint, strict typing, workflow parsing, and 225 tests.
 The source-built sdist contained the result-policy documentation, example, implementation, and
 bundled schema. Its extracted tree passed the same formatting, lint, strict typing, workflow, and
-224-test gates before producing a zero-runtime-dependency wheel. Both distributions passed Twine
+225-test gates before producing a zero-runtime-dependency wheel. Both distributions passed Twine
 and the fail-closed release audit.
 
 A fresh virtual environment installed only that wheel and resolved Samsarix Codegen from the

@@ -146,3 +146,20 @@ def test_policy_loader_rejects_a_missing_or_oversized_file(tmp_path: Path) -> No
     oversized.write_bytes(b" " * (MAX_RESULT_POLICY_BYTES + 1))
     with pytest.raises(ArtifactError, match="byte safety limit"):
         load_execution_result_policy(oversized)
+
+
+def test_policy_loader_converts_invalid_path_value_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "invalid.json"
+    original_is_file = Path.is_file
+
+    def invalid_is_file(self: Path) -> bool:
+        if self == policy_path:
+            raise ValueError("embedded null character in path")
+        return original_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", invalid_is_file)
+
+    with pytest.raises(ArtifactError, match="cannot read execution result policy"):
+        load_execution_result_policy(policy_path)

@@ -103,8 +103,8 @@ def render_execution_result_policy(policy: ExecutionResultPolicy) -> str:
 def load_execution_result_policy(path: str | Path) -> ExecutionResultPolicy:
     """Load one explicitly selected, bounded result-policy JSON file."""
 
-    policy_path = Path(path)
     try:
+        policy_path = Path(path)
         if not policy_path.is_file():
             raise ArtifactError(f"execution result policy is not a regular file: {path}")
         if policy_path.stat().st_size > MAX_RESULT_POLICY_BYTES:
@@ -115,7 +115,7 @@ def load_execution_result_policy(path: str | Path) -> ExecutionResultPolicy:
             raw = handle.read(MAX_RESULT_POLICY_BYTES + 1)
     except ArtifactError:
         raise
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         raise ArtifactError(f"cannot read execution result policy {path}: {exc}") from exc
     return parse_execution_result_policy(raw)
 
