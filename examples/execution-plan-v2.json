@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "plan_fingerprint": "sha256:cbcaf0102a11fc20d056d9a3fdb1ab5e40822ed53852cbf181cb90c80a68a1d9",
+  "request_fingerprint": "sha256:4c04cb6a6352ef10b09403b8f5b7da03e71dbfd278606fc25edb5274c3399d59",
+  "provider": {
+    "endpoint": "http://127.0.0.1:11434/v1",
+    "model": "example-review-model",
+    "timeout_seconds": 45,
+    "max_output_tokens": 256
+  },
+  "budgets": {
+    "max_estimated_input_tokens": 5000
+  },
+  "result_policy_fingerprint": "sha256:56f31e83efb5caa3e806b0eba3735009ac1387003fa5888b9a78e774a6218578"
+}

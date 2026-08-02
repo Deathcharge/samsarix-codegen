@@ -12,15 +12,17 @@ Versioned machine-readable contracts, explicitly invoked context manifests, an o
 provider conformance check, offline single-result inspection, request/result linkage verification,
 same-request result comparison, and deterministic post-result policy gates are implemented
 milestones. A versioned, checked-in result-policy contract makes those gates repeatable across local
-and CI workflows without implicit discovery. Versioned execution plans now bind a reviewed request
-to exact non-secret provider settings and budgets across an offline-to-credentialed handoff without
-execution-time override precedence. Plan-backed result schema version 2 now carries that reviewed
+and CI workflows without implicit discovery. Execution-plan version 2 now binds a reviewed request
+to exact non-secret provider settings, budgets, and an optional result-policy fingerprint across an
+offline-to-credentialed handoff without execution-time override precedence. Plan-backed result
+schema version 2 now carries that reviewed
 plan fingerprint, and offline execution verification validates the full request/plan/result chain
 plus requested-model and reported-output-budget consistency without content disclosure. Evidence
-schema version 3 can also bind and enforce one separately approved result-policy fingerprint in the
-same fail-closed command. Result-policy schema version 2 optionally requires a bounded JSON object
+schema version 3 requires and enforces the policy fingerprint already approved inside the plan in
+the same fail-closed command. Result-policy schema version 2 optionally requires a bounded JSON object
 with reviewed top-level keys and types, while response-structure evidence exposes only its format
-and key count. The credentialed `execute` boundary can now preflight that exact policy approval,
+and key count. The credentialed `execute` boundary now requires that exact plan-bound policy before
+provider setup,
 make one request, and suppress normal output without retry when the normalized response fails. A
 checked-in offline request/plan/synthetic-result/policy chain now makes
 that verifier runnable from a clone without credentials, a provider process, or network access.
@@ -53,8 +55,9 @@ Current hardening backlog:
 - Deterministic artifacts, offline inspection, pinned execution, stdin context, and hard estimated
   input budgets are implemented and locally package-verified for `0.2.0`.
 - Credential-free execution plans, offline request/plan verification, exact plan-backed execution,
-  and standalone plan/verification schemas are implemented; live endpoints remain optional owner
-  evidence rather than a hidden release dependency.
+  optional exact policy binding, legacy version 1 parsing, and standalone plan/verification schemas
+  are implemented; live endpoints remain optional owner evidence rather than a hidden release
+  dependency.
 - Plan-bound result schema version 2, legacy result parsing, separate requested/response model
   labels, and policy-capable offline request/plan/result evidence verification are implemented and
   locally tested; the evidence is intentionally not a provider signature or attestation.
@@ -72,8 +75,8 @@ Current hardening backlog:
 - Result-policy version 2 can additionally reject invalid, duplicate-keyed, non-object, over-wide,
   or top-level shape-incompatible JSON offline. This is a bounded machine-consumability gate, not
   recursive JSON Schema validation or a semantic correctness score.
-- Exact policy approval and enforcement now run directly inside `execute`: preflight failures make
-  no request, while post-response failures make no retry and emit no normal output. The completed
+- Exact plan-bound policy approval and enforcement now run directly inside `execute`: preflight
+  failures make no request, while post-response failures make no retry and emit no normal output. The completed
   request may still be billable, so this is an output-admission gate rather than cost prevention.
 - Strict versioned context manifests make repeated component reviews portable without automatic
   repository discovery, glob expansion, or a second path-loading boundary.

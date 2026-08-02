@@ -54,7 +54,6 @@ from samsarix_codegen.models import (
 from samsarix_codegen.prompt import build_messages
 from samsarix_codegen.provider_check import ProviderCheckReport, render_provider_check
 from samsarix_codegen.result_policy import (
-    fingerprint_execution_result_policy,
     load_execution_result_policy,
     render_execution_result_policy,
 )
@@ -271,19 +270,35 @@ def test_execution_plan_schemas_share_the_same_provider_contract() -> None:
 
 
 def test_execution_plan_example_is_schema_valid_and_internally_consistent() -> None:
-    example = Path(__file__).resolve().parents[1] / "examples" / "execution-plan-v1.json"
+    repository = Path(__file__).resolve().parents[1]
+    example = repository / "examples" / "execution-plan-v2.json"
     payload = json.loads(example.read_text(encoding="utf-8"))
 
     Draft202012Validator(load_contract_schema("execution-plan")).validate(payload)
     plan = parse_execution_plan(example.read_bytes())
     assert plan.fingerprint == payload["plan_fingerprint"]
+    assert plan.result_policy_fingerprint == payload["result_policy_fingerprint"]
+
+    v1_schema = json.loads(
+        (repository / "src/samsarix_codegen/schemas/execution-plan-v1.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    v1_payload = json.loads(
+        (repository / "examples/execution-plan-v1.json").read_text(encoding="utf-8")
+    )
+    Draft202012Validator.check_schema(v1_schema)
+    Draft202012Validator(v1_schema).validate(v1_payload)
+    parsed_v1 = parse_execution_plan(json.dumps(v1_payload))
+    assert parsed_v1.schema_version == 1
+    assert parsed_v1.fingerprint == v1_payload["plan_fingerprint"]
 
 
 def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> None:
     repository = Path(__file__).resolve().parents[1]
     examples = repository / "examples"
     request_path = examples / "execution-request-v2.json"
-    plan_path = examples / "execution-plan-v1.json"
+    plan_path = examples / "execution-plan-v2.json"
     result_path = examples / "structured-execution-result-v2.json"
     policy_path = examples / "structured-result-policy-v2.json"
     request = json.loads(request_path.read_text(encoding="utf-8"))
@@ -328,7 +343,6 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
         parsed_result,
         expected_plan_fingerprint=plan["plan_fingerprint"],
         result_policy=policy,
-        expected_policy_fingerprint=fingerprint_execution_result_policy(policy),
     )
     assert verification.to_payload() == evidence
 
@@ -342,8 +356,6 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
             plan["plan_fingerprint"],
             "--policy",
             str(policy_path),
-            "--expect-policy-fingerprint",
-            fingerprint_execution_result_policy(policy),
             "--format",
             "json",
         ]
@@ -401,6 +413,7 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
         lambda payload: payload["provider"].update(timeout_seconds=0),
         lambda payload: payload["provider"].update(max_output_tokens=32_769),
         lambda payload: payload["budgets"].update(max_estimated_input_tokens=2_000_001),
+        lambda payload: payload.update(result_policy_fingerprint="invalid"),
     ],
 )
 def test_execution_plan_schema_rejects_contract_drift(mutator) -> None:

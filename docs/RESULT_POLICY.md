@@ -77,22 +77,28 @@ object encoded as UTF-8 with keys sorted, no insignificant whitespace, and unesc
 Input indentation and object field order therefore do not change the fingerprint. The schema
 version and every configured rule do change it.
 
-## Enforce during execution
+## Bind and enforce during execution
 
-Pass the explicit policy and its separately retained approval directly to `execute`:
+Bind the policy into execution-plan version 2, approve that single plan fingerprint, and pass the
+same explicit policy to `execute`:
 
 ```bash
+samsarix-codegen create-plan request.json \
+  --model provider-model \
+  --policy result-policy.json > execution-plan.json
+plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json \
+  --policy result-policy.json --format fingerprint)"
 samsarix-codegen execute request.json \
   --plan execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy result-policy.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > result.json
 ```
 
-The policy file, document shape, and optional expected fingerprint are validated before the
-provider client is constructed. An explicitly selected malformed, missing-file, stdin-selected, or
-fingerprint-mismatched policy therefore makes no provider request. After exactly one provider
+The policy file, document shape, and plan-bound fingerprint are validated before the provider
+client is constructed. A missing, malformed, stdin-selected, or substituted policy therefore makes
+no provider request. `--expect-policy-fingerprint` remains available as an additional external
+approval for unbound/legacy plans or defense in depth. After exactly one provider
 response, Samsarix creates
 the same normalized execution-result envelope, enforces every configured rule, and emits the
 normal text or JSON response only if all rules pass. A post-response failure returns artifact exit
@@ -111,16 +117,15 @@ Use that approval with the full offline evidence gate:
 samsarix-codegen verify-execution request.json execution-plan.json result.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy result-policy.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > execution-evidence.json
 ```
 
 Evidence schema version `3` includes the policy fingerprint and exact approved rules only after the
-request, plan, result, policy fingerprint, and every policy gate pass. When a structural rule
+request, plan, result, plan-bound policy fingerprint, and every policy gate pass. When a structural rule
 passes, evidence records only `json-object` and the top-level key count. Response-derived key names
-and values are not emitted. With no `--policy`, the same command remains valid and emits
-`"result_policy": null` and `"response_structure": null`. `--expect-policy-fingerprint` without
-`--policy` is a configuration error, so a caller cannot silently omit an approved gate.
+and values are not emitted. With an unbound plan and no `--policy`, the same command remains valid
+and emits `"result_policy": null` and `"response_structure": null`. A bound plan without
+`--policy`, or `--expect-policy-fingerprint` without `--policy`, fails closed.
 
 ## Apply one checked-in policy
 

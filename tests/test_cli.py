@@ -619,7 +619,11 @@ def test_create_and_verify_execution_plan_without_network_or_credentials(
     artifact = create_request_artifact(build_messages(request), request.files)
     artifact_path = tmp_path / "request.json"
     plan_path = tmp_path / "execution-plan.json"
+    policy_path = tmp_path / "result-policy.json"
     artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    policy = ExecutionResultPolicy(expected_model="model-a", max_response_bytes=1_000)
+    policy_fingerprint = fingerprint_execution_result_policy(policy)
+    policy_path.write_text(render_execution_result_policy(policy), encoding="utf-8")
     monkeypatch.setenv("SAMSARIX_API_KEY", "must-not-appear")
 
     def fail_if_called(self, messages):
@@ -641,6 +645,10 @@ def test_create_and_verify_execution_plan_without_network_or_credentials(
             "45",
             "--max-output-tokens",
             "512",
+            "--policy",
+            str(policy_path),
+            "--expect-policy-fingerprint",
+            policy_fingerprint,
         ]
     )
     created = capsys.readouterr()
@@ -655,8 +663,17 @@ def test_create_and_verify_execution_plan_without_network_or_credentials(
     assert plan.timeout_seconds == 45
     assert plan.max_output_tokens == 512
     assert plan.max_estimated_input_tokens == artifact.estimated_input_tokens
+    assert plan.result_policy_fingerprint == policy_fingerprint
     assert "must-not-appear" not in created.out
     assert "Private plan instruction" not in created.out
+
+    missing_policy_exit = main(
+        ["verify-plan", str(artifact_path), str(plan_path), "--format", "fingerprint"]
+    )
+    missing_policy = capsys.readouterr()
+    assert missing_policy_exit == 5
+    assert missing_policy.out == ""
+    assert "requires its bound result policy" in missing_policy.err
 
     verify_exit = main(
         [
@@ -665,6 +682,8 @@ def test_create_and_verify_execution_plan_without_network_or_credentials(
             str(plan_path),
             "--expect-plan-fingerprint",
             plan.fingerprint,
+            "--policy",
+            str(policy_path),
             "--format",
             "json",
         ]
@@ -675,6 +694,7 @@ def test_create_and_verify_execution_plan_without_network_or_credentials(
     assert verify_exit == 0
     assert verified.err == ""
     assert payload["plan_fingerprint"] == plan.fingerprint
+    assert payload["result_policy_fingerprint"] == policy_fingerprint
     assert payload["request"]["fingerprint"] == artifact.fingerprint
     assert payload["provider"]["endpoint"] == "https://models.example.com/v1"
     assert "Private plan instruction" not in verified.out
@@ -687,7 +707,10 @@ def test_execute_with_plan_uses_exact_settings_and_only_external_api_key(
     artifact = create_request_artifact(build_messages(request), request.files)
     artifact_path = tmp_path / "request.json"
     plan_path = tmp_path / "execution-plan.json"
+    policy_path = tmp_path / "result-policy.json"
     artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    policy = ExecutionResultPolicy(expected_model="planned-model", max_response_bytes=1_000)
+    policy_path.write_text(render_execution_result_policy(policy), encoding="utf-8")
     plan = create_execution_plan(
         artifact,
         ProviderConfig(
@@ -696,6 +719,7 @@ def test_execute_with_plan_uses_exact_settings_and_only_external_api_key(
             timeout_seconds=17,
             max_output_tokens=321,
         ),
+        result_policy_fingerprint=fingerprint_execution_result_policy(policy),
     )
     plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
 
@@ -725,6 +749,8 @@ def test_execute_with_plan_uses_exact_settings_and_only_external_api_key(
             str(plan_path),
             "--expect-plan-fingerprint",
             plan.fingerprint,
+            "--policy",
+            str(policy_path),
             "--format",
             "json",
         ]
@@ -741,6 +767,53 @@ def test_execute_with_plan_uses_exact_settings_and_only_external_api_key(
     assert payload["response"]["text"] == "Planned response"
     assert f"Execution plan {plan.fingerprint} matches" in captured.err
     assert "external-key" not in captured.out + captured.err
+
+
+def test_execute_with_bound_plan_rejects_missing_or_wrong_policy_before_provider_setup(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    artifact = create_request_artifact(build_messages(PromptRequest(Task.REVIEW, "Review")), ())
+    policy = ExecutionResultPolicy(expected_model="planned-model", max_response_bytes=100)
+    plan = create_execution_plan(
+        artifact,
+        ProviderConfig("https://models.example.com/v1", "planned-model"),
+        result_policy_fingerprint=fingerprint_execution_result_policy(policy),
+    )
+    request_path = tmp_path / "request.json"
+    plan_path = tmp_path / "plan.json"
+    wrong_policy_path = tmp_path / "wrong-policy.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+    wrong_policy_path.write_text(
+        render_execution_result_policy(ExecutionResultPolicy(expected_model="other-model")),
+        encoding="utf-8",
+    )
+
+    def fail_if_constructed(config):
+        raise AssertionError("bound-policy failures must happen before provider setup")
+
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient", fail_if_constructed)
+
+    missing_exit = main(["execute", str(request_path), "--plan", str(plan_path)])
+    missing = capsys.readouterr()
+    wrong_exit = main(
+        [
+            "execute",
+            str(request_path),
+            "--plan",
+            str(plan_path),
+            "--policy",
+            str(wrong_policy_path),
+        ]
+    )
+    wrong = capsys.readouterr()
+
+    assert missing_exit == 5
+    assert missing.out == ""
+    assert "requires its bound result policy" in missing.err
+    assert wrong_exit == 5
+    assert wrong.out == ""
+    assert "fingerprint bound" in wrong.err
 
 
 @pytest.mark.parametrize(
@@ -876,20 +949,22 @@ def test_verify_execution_cli_enforces_and_records_an_approved_policy(
     artifact = create_request_artifact(
         build_messages(PromptRequest(Task.REVIEW, "Private policy-bound evidence")), ()
     )
+    policy = ExecutionResultPolicy(
+        expected_model="model-a",
+        max_response_bytes=100,
+        max_total_tokens=13,
+    )
+    expected_policy_fingerprint = fingerprint_execution_result_policy(policy)
     plan = create_execution_plan(
         artifact,
         ProviderConfig("https://models.example.com/v1", "model-a", max_output_tokens=64),
+        result_policy_fingerprint=expected_policy_fingerprint,
     )
     result = render_execution_result(
         artifact,
         ChatResult("Private provider response", 10, 3, 13),
         model=plan.model,
         plan_fingerprint=plan.fingerprint,
-    )
-    policy = ExecutionResultPolicy(
-        expected_model="model-a",
-        max_response_bytes=100,
-        max_total_tokens=13,
     )
     request_path = tmp_path / "request.json"
     plan_path = tmp_path / "plan.json"
@@ -899,7 +974,6 @@ def test_verify_execution_cli_enforces_and_records_an_approved_policy(
     plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
     result_path.write_text(result, encoding="utf-8")
     policy_path.write_text(render_execution_result_policy(policy), encoding="utf-8")
-    expected_policy_fingerprint = fingerprint_execution_result_policy(policy)
 
     fingerprint_exit = main(["fingerprint-policy", str(policy_path)])
     fingerprint_output = capsys.readouterr()
@@ -915,8 +989,6 @@ def test_verify_execution_cli_enforces_and_records_an_approved_policy(
             str(result_path),
             "--policy",
             str(policy_path),
-            "--expect-policy-fingerprint",
-            expected_policy_fingerprint,
             "--format",
             "json",
         ]
@@ -930,6 +1002,7 @@ def test_verify_execution_cli_enforces_and_records_an_approved_policy(
         "fingerprint": expected_policy_fingerprint,
         "rules": json.loads(render_execution_result_policy(policy)),
     }
+    assert plan.result_policy_fingerprint == expected_policy_fingerprint
     assert "Private policy-bound evidence" not in captured.out
     assert "Private provider response" not in captured.out
 
@@ -1102,7 +1175,7 @@ def test_verify_execution_cli_rejects_policy_bypass_and_policy_failure(
     failed_policy = capsys.readouterr()
     assert failed_policy_exit == 5
     assert failed_policy.out == ""
-    assert "does not match the expected model" in failed_policy.err
+    assert "does not match the execution-plan model" in failed_policy.err
 
     policy_path.write_text(
         render_execution_result_policy(ExecutionResultPolicy(expected_model="model-a")),

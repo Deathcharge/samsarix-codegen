@@ -89,8 +89,9 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
   validation commands.
 - Context remains subject to the file-count and byte caps applied by `build`.
 - `--max-estimated-input-tokens` can fail `build`, `run`, or `execute` before a network request.
-- An execution plan persists the reviewed estimated-input ceiling alongside provider settings;
-  plan-backed execution refuses request/provider/budget overrides.
+- An execution plan persists the reviewed estimated-input ceiling alongside provider settings and
+  an optional exact result-policy fingerprint; plan-backed execution refuses
+  request/provider/budget overrides and policy substitution.
 - The estimate is deliberately approximate and is not provider billing data.
 - Output tokens and request time remain independently bounded by provider options.
 
@@ -147,6 +148,8 @@ provider-reported completion usage above the plan's output ceiling. Its text and
 prompt and response contents while retaining the endpoint, requested and response model labels,
 request metrics, budgets, usage, response size, and response SHA-256. The plan must be an explicit
 file, and at most one of request/result may be `-`.
+When the plan binds a result policy, the exact policy file is also mandatory and checked against the
+plan before evidence is produced.
 
 This verification shows that the three local documents are internally consistent. The result and
 hashes are not signed, and the requested endpoint/model are client configuration rather than
@@ -192,8 +195,10 @@ schema-exportable, and independently parseable. It requires at least one active 
 unknown, duplicate, or null fields. File rules cannot be mixed with inline policy flags, so there is
 no hidden override order.
 
-`execute` accepts the same explicit policy file plus `--expect-policy-fingerprint`, but not the
-ad hoc inline policy flags. It validates the file and approval before provider-client construction,
+`execute` accepts the same explicit policy file plus optional `--expect-policy-fingerprint`, but not
+the ad hoc inline policy flags. A version 2 plan can bind that policy fingerprint directly, so the
+single approved plan fingerprint covers the request, provider settings, budgets, and policy. It
+validates the file and approval before provider-client construction,
 makes one request, and admits the normal response to stdout only after the normalized result passes.
 Rejection after the response leaves stdout empty and never retries; it does not erase the provider
 request or its possible cost.
@@ -243,8 +248,8 @@ The package bundles self-contained
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
 | `context-manifest` | Explicit context manifest schema version 1 | `src/samsarix_codegen/schemas/context-manifest-v1.schema.json` |
 | `result-policy` | Execution-result policy schema version 2 | `src/samsarix_codegen/schemas/execution-result-policy-v2.schema.json` |
-| `execution-plan` | Credential-free execution plan schema version 1 | `src/samsarix_codegen/schemas/execution-plan-v1.schema.json` |
-| `execution-plan-verification` | Request/plan verification schema version 1 | `src/samsarix_codegen/schemas/execution-plan-verification-v1.schema.json` |
+| `execution-plan` | Policy-capable execution plan schema version 2 | `src/samsarix_codegen/schemas/execution-plan-v2.schema.json` |
+| `execution-plan-verification` | Request/plan verification schema version 2 | `src/samsarix_codegen/schemas/execution-plan-verification-v2.schema.json` |
 | `execution-evidence` | Structured-policy-capable execution evidence schema version 3 | `src/samsarix_codegen/schemas/execution-evidence-verification-v3.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
@@ -262,7 +267,7 @@ are explicitly selected input contracts; their [separate contract](EXECUTION_PLA
 authority, precedence, linkage, and trust limits.
 
 The checked-in [request](../examples/execution-request-v2.json),
-[plan](../examples/execution-plan-v1.json),
+[plan](../examples/execution-plan-v2.json),
 [synthetic result](../examples/structured-execution-result-v2.json),
 [result policy](../examples/structured-result-policy-v2.json), and
 [execution evidence](../examples/execution-evidence-v3.json) are a fully linked offline fixture.

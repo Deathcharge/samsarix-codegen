@@ -11,8 +11,11 @@ import pytest
 from samsarix_codegen import create_execution_plan as public_create_execution_plan
 from samsarix_codegen import parse_execution_plan as public_parse_execution_plan
 from samsarix_codegen import render_execution_plan as public_render_execution_plan
+from samsarix_codegen import (
+    require_execution_plan_result_policy as public_require_execution_plan_result_policy,
+)
 from samsarix_codegen import verify_execution_plan as public_verify_execution_plan
-from samsarix_codegen.artifact import create_request_artifact
+from samsarix_codegen.artifact import ExecutionResultPolicy, create_request_artifact
 from samsarix_codegen.errors import ArtifactError
 from samsarix_codegen.execution_plan import (
     MAX_EXECUTION_PLAN_BYTES,
@@ -24,10 +27,12 @@ from samsarix_codegen.execution_plan import (
     provider_config_from_execution_plan,
     render_execution_plan,
     render_execution_plan_verification,
+    require_execution_plan_result_policy,
     verify_execution_plan,
 )
 from samsarix_codegen.models import PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages
+from samsarix_codegen.result_policy import fingerprint_execution_result_policy
 
 
 def make_artifact(instruction: str = "Review the selected change"):
@@ -58,7 +63,7 @@ def test_execution_plan_round_trips_and_excludes_credentials() -> None:
 
     assert reparsed == plan
     assert payload == {
-        "schema_version": 1,
+        "schema_version": 2,
         "plan_fingerprint": plan.fingerprint,
         "request_fingerprint": plan.request_fingerprint,
         "provider": {
@@ -68,6 +73,7 @@ def test_execution_plan_round_trips_and_excludes_credentials() -> None:
             "max_output_tokens": 512,
         },
         "budgets": {"max_estimated_input_tokens": 10_000},
+        "result_policy_fingerprint": None,
     }
     assert "must-not-be-serialized" not in rendered
     assert (
@@ -123,9 +129,70 @@ def test_execution_plan_fingerprint_changes_with_every_executable_choice() -> No
             plan.max_output_tokens,
             10_001,
         ),
+        ExecutionPlan(
+            plan.request_fingerprint,
+            plan.endpoint,
+            plan.model,
+            plan.timeout_seconds,
+            plan.max_output_tokens,
+            plan.max_estimated_input_tokens,
+            "sha256:" + "b" * 64,
+        ),
     )
 
-    assert len({plan.fingerprint, *(variant.fingerprint for variant in variants)}) == 6
+    assert len({plan.fingerprint, *(variant.fingerprint for variant in variants)}) == 7
+
+
+def test_execution_plan_v1_remains_readable_with_its_original_fingerprint() -> None:
+    example = Path(__file__).resolve().parents[1] / "examples" / "execution-plan-v1.json"
+
+    plan = parse_execution_plan(example.read_bytes())
+
+    assert plan.schema_version == 1
+    assert plan.result_policy_fingerprint is None
+    assert (
+        plan.fingerprint
+        == "sha256:7d53d859b13986da8efcf8122fd060d07c34b91f34908d1ac4f89a1187c5df95"
+    )
+    assert json.loads(render_execution_plan(plan)) == json.loads(
+        example.read_text(encoding="utf-8")
+    )
+
+
+def test_execution_plan_binds_and_requires_the_exact_result_policy() -> None:
+    artifact = make_artifact()
+    policy = ExecutionResultPolicy(expected_model="model-a", max_response_bytes=1_000)
+    policy_fingerprint = fingerprint_execution_result_policy(policy)
+    plan = create_execution_plan(
+        artifact,
+        ProviderConfig("https://models.example.com/v1", "model-a"),
+        result_policy_fingerprint=policy_fingerprint,
+    )
+
+    assert plan.result_policy_fingerprint == policy_fingerprint
+    assert require_execution_plan_result_policy(plan, policy) == policy_fingerprint
+    assert public_require_execution_plan_result_policy(plan, policy) == policy_fingerprint
+    with pytest.raises(ArtifactError, match="requires its bound result policy"):
+        require_execution_plan_result_policy(plan, None)
+    with pytest.raises(ArtifactError, match="fingerprint bound"):
+        require_execution_plan_result_policy(
+            plan,
+            ExecutionResultPolicy(expected_model="model-b", max_response_bytes=1_000),
+        )
+    with pytest.raises(ArtifactError, match="invalid result policy fingerprint"):
+        create_execution_plan(
+            artifact,
+            ProviderConfig("https://models.example.com/v1", "model-a"),
+            result_policy_fingerprint="invalid",
+        )
+    incompatible_policy = ExecutionResultPolicy(expected_model="model-b")
+    incompatible_plan = create_execution_plan(
+        artifact,
+        ProviderConfig("https://models.example.com/v1", "model-a"),
+        result_policy_fingerprint=fingerprint_execution_result_policy(incompatible_policy),
+    )
+    with pytest.raises(ArtifactError, match="expected model does not match"):
+        require_execution_plan_result_policy(incompatible_plan, incompatible_policy)
 
 
 def test_execution_plan_verification_links_request_and_exposes_no_prompt() -> None:
@@ -146,6 +213,8 @@ def test_execution_plan_verification_links_request_and_exposes_no_prompt() -> No
 
     assert verification.remaining_estimated_input_tokens == 20
     assert payload["plan_fingerprint"] == plan.fingerprint
+    assert payload["schema_version"] == 2
+    assert payload["result_policy_fingerprint"] is None
     assert payload["request"]["fingerprint"] == artifact.fingerprint
     assert payload["request"]["estimated_input_tokens"] == artifact.estimated_input_tokens
     assert payload["provider"]["model"] == "local-model"
@@ -217,16 +286,22 @@ def test_execution_plan_parser_rejects_ambiguous_or_tampered_documents() -> None
     wrong_budgets = json.loads(rendered)
     wrong_budgets["budgets"]["unexpected"] = True
     wrong_version = json.loads(rendered)
-    wrong_version["schema_version"] = 2
+    wrong_version["schema_version"] = 3
+    missing_policy_fingerprint = json.loads(rendered)
+    del missing_policy_fingerprint["result_policy_fingerprint"]
+    bad_policy_fingerprint = json.loads(rendered)
+    bad_policy_fingerprint["result_policy_fingerprint"] = "invalid"
     bad_fingerprint = json.loads(rendered)
     bad_fingerprint["plan_fingerprint"] = "invalid"
 
     cases = (
-        ("[]", "fields do not match"),
+        ("[]", "JSON object"),
         (json.dumps(unknown), "fields do not match"),
         (json.dumps(wrong_provider), "provider fields"),
         (json.dumps(wrong_budgets), "budget fields"),
         (json.dumps(wrong_version), "unsupported"),
+        (json.dumps(missing_policy_fingerprint), "fields do not match"),
+        (json.dumps(bad_policy_fingerprint), "invalid result policy fingerprint"),
         (json.dumps(bad_fingerprint), "invalid plan fingerprint"),
         (json.dumps(tampered), "does not match its canonical content"),
         (
@@ -254,6 +329,8 @@ def test_execution_plan_parser_rejects_ambiguous_or_tampered_documents() -> None
         ("max_output_tokens", 32_769, "max_output_tokens"),
         ("max_estimated_input_tokens", 0, "max_estimated_input_tokens"),
         ("max_estimated_input_tokens", 2_000_001, "max_estimated_input_tokens"),
+        ("result_policy_fingerprint", "invalid", "result policy fingerprint"),
+        ("schema_version", 3, "unsupported execution plan schema"),
     ],
 )
 def test_execution_plan_values_fail_closed(field: str, value: object, match: str) -> None:
@@ -318,6 +395,7 @@ def test_execution_plan_text_verification_is_useful_and_content_omitting() -> No
     assert artifact.fingerprint in rendered
     assert plan.endpoint in rendered
     assert plan.model in rendered
+    assert "Result policy: unbound" in rendered
     assert "Private prompt content" not in rendered
 
 

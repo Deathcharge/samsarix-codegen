@@ -53,6 +53,7 @@ from samsarix_codegen.execution_plan import (
     provider_config_from_execution_plan,
     render_execution_plan,
     render_execution_plan_verification,
+    require_execution_plan_result_policy,
     verify_execution_plan,
 )
 from samsarix_codegen.models import (
@@ -140,6 +141,7 @@ __all__ = [
     "render_contract_schema",
     "require_fingerprint",
     "require_execution_result_policy_fingerprint",
+    "require_execution_plan_result_policy",
     "run_self_check",
     "provider_config_from_execution_plan",
     "verify_execution_plan",

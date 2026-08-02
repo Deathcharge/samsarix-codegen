@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "request_fingerprint": "sha256:4c04cb6a6352ef10b09403b8f5b7da03e71dbfd278606fc25edb5274c3399d59",
-  "plan_fingerprint": "sha256:7d53d859b13986da8efcf8122fd060d07c34b91f34908d1ac4f89a1187c5df95",
+  "plan_fingerprint": "sha256:cbcaf0102a11fc20d056d9a3fdb1ab5e40822ed53852cbf181cb90c80a68a1d9",
   "model": "example-review-model",
   "response_model": null,
   "response": {

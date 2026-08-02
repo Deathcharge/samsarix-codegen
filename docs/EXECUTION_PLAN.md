@@ -1,8 +1,9 @@
 # Execution plan contract
 
 An execution plan is a credential-free, versioned approval object that binds one validated request
-artifact to the provider settings and budgets that may be used when credentials become available.
-It closes the gap between approving prompt contents and approving where and how that prompt runs.
+artifact to the provider settings, budgets, and optional result-policy fingerprint that may be used
+when credentials become available. It closes the gap between approving prompt contents and
+approving where, how, and under which output rules that prompt runs.
 
 ## Reviewed execution journey
 
@@ -16,22 +17,9 @@ git diff --staged | samsarix-codegen build "Review these staged changes" \
 request_fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
 ```
 
-Bind the approved request to exact provider settings, still without credentials or network access:
+Create and review the policy that should gate the normalized result:
 
 ```bash
-samsarix-codegen create-plan request.json \
-  --expect-fingerprint "$request_fingerprint" \
-  --endpoint https://provider.example/v1 \
-  --model provider-model \
-  --timeout 60 \
-  --max-output-tokens 1200 \
-  --max-estimated-input-tokens 50000 > execution-plan.json
-
-plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json \
-  --format fingerprint)"
-samsarix-codegen verify-plan request.json execution-plan.json \
-  --expect-plan-fingerprint "$plan_fingerprint" --format json > plan-verification.json
-
 cat > result-policy.json <<'JSON'
 {
   "schema_version": 2,
@@ -47,15 +35,36 @@ cat > result-policy.json <<'JSON'
 }
 JSON
 cat result-policy.json
-policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
+```
+
+Bind the approved request, provider settings, budgets, and exact policy fingerprint, still without
+credentials or network access:
+
+```bash
+samsarix-codegen create-plan request.json \
+  --expect-fingerprint "$request_fingerprint" \
+  --endpoint https://provider.example/v1 \
+  --model provider-model \
+  --timeout 60 \
+  --max-output-tokens 1200 \
+  --max-estimated-input-tokens 50000 \
+  --policy result-policy.json > execution-plan.json
+
+plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json \
+  --policy result-policy.json \
+  --format fingerprint)"
+samsarix-codegen verify-plan request.json execution-plan.json \
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy result-policy.json \
+  --format json > plan-verification.json
 ```
 
 This example policy places a 256 KiB ceiling on the stored response and requires a stable
 machine-consumable top-level shape without requiring provider-reported usage. Review and tailor its explicit rules before approval; the
 [result-policy contract](RESULT_POLICY.md) documents every field and stricter checked-in examples.
 
-The credential-bearing job needs the two explicit files, separately approved plan and policy
-fingerprints, the explicit policy file, and an optional environment-only API key:
+The credential-bearing job needs the explicit request, plan, and policy files, the single approved
+plan fingerprint, and an optional environment-only API key:
 
 ```bash
 export SAMSARIX_API_KEY="your-provider-key"
@@ -63,34 +72,34 @@ samsarix-codegen execute request.json \
   --plan execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy result-policy.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > result.json
 
 samsarix-codegen verify-execution request.json execution-plan.json result.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --policy result-policy.json \
-  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > execution-evidence.json
 ```
 
-`create-plan` and `verify-plan` never make a network request. `execute --plan` validates the request,
+`create-plan` and `verify-plan` never make a network request. `verify-plan` requires the explicit
+policy file whenever the plan binds one, so its success covers that file as well as request linkage.
+`execute --plan` validates the request,
 the plan's internal fingerprint, request linkage, estimated-input budget, optional separately
-approved plan fingerprint, explicit result policy, and optional separately approved policy
-fingerprint before constructing the client. It then makes one non-streaming request, normalizes the
+approved plan fingerprint, and exact bound result policy before constructing the client. It then
+makes one non-streaming request, normalizes the
 result, and enforces the policy before emitting normal output. If the response fails, stdout stays
 empty and there is no retry, but the completed provider request may still be billable.
 The plan-backed JSON result records the exact plan fingerprint. `verify-execution` uses that field
 to validate the complete request/plan/result chain later without network access or content
-disclosure. When an explicit result policy is supplied, it also requires the exact separately
-approved policy fingerprint, enforces every rule, and records the fingerprint and rules in evidence
-schema version 3. Structured evidence adds only the response format and top-level key count, not
+disclosure. When the plan binds a result policy, verification requires the exact policy file,
+enforces every rule, and records the fingerprint and rules in evidence schema version 3. Structured
+evidence adds only the response format and top-level key count, not
 response-derived field names or values. The [result-policy contract](RESULT_POLICY.md) defines that final gate.
 
-## Schema version 1
+## Schema version 2
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "plan_fingerprint": "sha256:<64 lowercase hex characters>",
   "request_fingerprint": "sha256:<64 lowercase hex characters>",
   "provider": {
@@ -101,13 +110,17 @@ response-derived field names or values. The [result-policy contract](RESULT_POLI
   },
   "budgets": {
     "max_estimated_input_tokens": 50000
-  }
+  },
+  "result_policy_fingerprint": "sha256:<64 lowercase hex characters>"
 }
 ```
 
 The plan fingerprint is SHA-256 over canonical JSON containing every field above except
 `plan_fingerprint`. Canonical JSON uses sorted keys, UTF-8, and compact separators. The exact
 request fingerprint is included, so a plan cannot be reused for a rebuilt or different request.
+`result_policy_fingerprint` may be `null` for workflows that do not require an output gate. Parsers
+remain compatible with schema version 1 plans, whose fingerprint algorithm and payload are
+preserved exactly; version 1 cannot bind a result policy.
 
 The file contains no prompt messages, selected context contents, or API key. It can reveal internal
 endpoint topology, model names, and capacity choices, so it is still operational metadata.
@@ -119,6 +132,8 @@ Plan-backed execution deliberately has no configuration merge:
 - The request comes only from the explicitly supplied validated request artifact.
 - Endpoint, model, whole-second timeout, output ceiling, and estimated-input ceiling come only from
   the explicitly supplied validated plan.
+- When the plan binds a policy fingerprint, the policy comes only from the explicitly selected
+  file and must match before provider-client construction. A missing or substituted file fails.
 - `SAMSARIX_API_KEY` is the only provider environment variable read by `execute --plan`.
 - `SAMSARIX_API_BASE`, `SAMSARIX_MODEL`, `SAMSARIX_TIMEOUT`,
   `SAMSARIX_MAX_OUTPUT_TOKENS`, and `SAMSARIX_MAX_ESTIMATED_INPUT_TOKENS` are ignored.
@@ -138,14 +153,15 @@ environment precedence is unchanged.
 - The default plan input ceiling is the supplied request's exact transparent estimate. Passing a
   larger limit permits reviewed growth only after producing a new request and therefore a new plan.
 - `verify-plan --format json` emits a content-omitting linkage record with request counts, bytes,
-  estimate, remaining budget, and executable settings. Its independent schema is version 1.
+  estimate, remaining budget, executable settings, and the bound policy fingerprint. Its
+  independent schema is version 2.
 
 Export the portable contracts without a network request:
 
 ```bash
-samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
+samsarix-codegen schema execution-plan > execution-plan-v2.schema.json
 samsarix-codegen schema execution-plan-verification \
-  > execution-plan-verification-v1.schema.json
+  > execution-plan-verification-v2.schema.json
 samsarix-codegen schema execution-evidence \
   > execution-evidence-verification-v3.schema.json
 ```
@@ -161,7 +177,8 @@ the approved value is held separately under stronger access control. An actor ab
 the plan and that expected value can still bypass the handoff.
 
 The plan does not authenticate the endpoint, provider, model label, TLS operator, provider-reported
-usage, or result. The result's plan fingerprint, optional policy fingerprint, and
+usage, or result. Binding a policy proves only that its local rules were part of the hashed plan;
+it does not authenticate the reviewer. The result's plan fingerprint, policy fingerprint, and
 `verify-execution` establish local structural linkage and deterministic limits, not signed provider
 attestation: an actor who can rewrite every document can construct a new consistent chain. The
 requested model is recorded separately from the provider-reported response model because proxies
@@ -172,13 +189,13 @@ signing/attestation, endpoint governance, provider logs, and billing records rem
 responsibility when those properties matter.
 
 The checked-in [request](../examples/execution-request-v2.json),
-[plan](../examples/execution-plan-v1.json),
+[plan](../examples/execution-plan-v2.json),
 [synthetic result](../examples/structured-execution-result-v2.json),
 [policy](../examples/structured-result-policy-v2.json), and
 [evidence](../examples/execution-evidence-v3.json) form one runnable policy-bound offline chain. The
 test suite rebuilds the request from `examples/sample.py`, verifies all four inputs through the
 public API and CLI, and requires the computed evidence to equal the checked-in record. The legacy
-versions 1 and 2 evidence schemas remain bundled for existing external consumers. No provider request
-produced the explicitly labeled synthetic result. Create a new plan for every real request rather
-than editing or reusing the fixture; reuse a team policy only while its exact fingerprint and rules
-remain the intended approval.
+execution-plan version 1 and evidence versions 1 and 2 remain bundled for existing external
+consumers. No provider request produced the explicitly labeled synthetic result. Create a new plan
+for every real request rather than editing or reusing the fixture; reuse a team policy only while
+its exact fingerprint and rules remain the intended approval.

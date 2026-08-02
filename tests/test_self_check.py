@@ -39,7 +39,7 @@ def test_self_check_matches_the_checked_in_offline_chain(monkeypatch) -> None:
         (REPOSITORY_ROOT / "examples/execution-request-v2.json").read_text(encoding="utf-8")
     )
     example_plan = json.loads(
-        (REPOSITORY_ROOT / "examples/execution-plan-v1.json").read_text(encoding="utf-8")
+        (REPOSITORY_ROOT / "examples/execution-plan-v2.json").read_text(encoding="utf-8")
     )
     example_evidence = json.loads(
         (REPOSITORY_ROOT / "examples/execution-evidence-v3.json").read_text(encoding="utf-8")

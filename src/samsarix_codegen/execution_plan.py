@@ -16,6 +16,7 @@ from samsarix_codegen.artifact import (
     FINGERPRINT_PREFIX,
     MAX_ARTIFACT_CONTEXT_ITEMS,
     MAX_ARTIFACT_MESSAGES,
+    ExecutionResultPolicy,
     RequestArtifact,
 )
 from samsarix_codegen.errors import ArtifactError, ConfigurationError
@@ -25,9 +26,11 @@ from samsarix_codegen.models import (
     MAX_PROVIDER_TIMEOUT_SECONDS,
     ProviderConfig,
 )
+from samsarix_codegen.result_policy import fingerprint_execution_result_policy
 
-EXECUTION_PLAN_SCHEMA_VERSION = 1
-EXECUTION_PLAN_VERIFICATION_SCHEMA_VERSION = 1
+EXECUTION_PLAN_SCHEMA_VERSION = 2
+EXECUTION_PLAN_VERIFICATION_SCHEMA_VERSION = 2
+SUPPORTED_EXECUTION_PLAN_SCHEMA_VERSIONS = frozenset({1, EXECUTION_PLAN_SCHEMA_VERSION})
 MAX_EXECUTION_PLAN_BYTES = 64 * 1024
 
 
@@ -41,10 +44,27 @@ class ExecutionPlan:
     timeout_seconds: int
     max_output_tokens: int
     max_estimated_input_tokens: int
+    result_policy_fingerprint: str | None = None
+    schema_version: int = EXECUTION_PLAN_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.schema_version, int)
+            or isinstance(self.schema_version, bool)
+            or self.schema_version not in SUPPORTED_EXECUTION_PLAN_SCHEMA_VERSIONS
+        ):
+            raise ArtifactError(
+                f"unsupported execution plan schema: {self.schema_version!r}; "
+                f"expected one of {sorted(SUPPORTED_EXECUTION_PLAN_SCHEMA_VERSIONS)}"
+            )
         if not _is_sha256(self.request_fingerprint):
             raise ArtifactError("execution plan contains an invalid request fingerprint")
+        if self.result_policy_fingerprint is not None and not _is_sha256(
+            self.result_policy_fingerprint
+        ):
+            raise ArtifactError("execution plan contains an invalid result policy fingerprint")
+        if self.schema_version == 1 and self.result_policy_fingerprint is not None:
+            raise ArtifactError("execution plan schema version 1 cannot bind a result policy")
         if (
             not isinstance(self.timeout_seconds, int)
             or isinstance(self.timeout_seconds, bool)
@@ -92,8 +112,8 @@ class ExecutionPlan:
         return _fingerprint(self._unsigned_payload())
 
     def _unsigned_payload(self) -> dict[str, Any]:
-        return {
-            "schema_version": EXECUTION_PLAN_SCHEMA_VERSION,
+        payload = {
+            "schema_version": self.schema_version,
             "request_fingerprint": self.request_fingerprint,
             "provider": {
                 "endpoint": self.endpoint,
@@ -105,18 +125,24 @@ class ExecutionPlan:
                 "max_estimated_input_tokens": self.max_estimated_input_tokens,
             },
         }
+        if self.schema_version >= 2:
+            payload["result_policy_fingerprint"] = self.result_policy_fingerprint
+        return payload
 
     def to_payload(self) -> dict[str, Any]:
         """Return the stable JSON-compatible plan representation."""
 
         unsigned = self._unsigned_payload()
-        return {
+        payload = {
             "schema_version": unsigned["schema_version"],
             "plan_fingerprint": self.fingerprint,
             "request_fingerprint": unsigned["request_fingerprint"],
             "provider": unsigned["provider"],
             "budgets": unsigned["budgets"],
         }
+        if self.schema_version >= 2:
+            payload["result_policy_fingerprint"] = unsigned["result_policy_fingerprint"]
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +196,7 @@ class ExecutionPlanVerification:
         return {
             "schema_version": EXECUTION_PLAN_VERIFICATION_SCHEMA_VERSION,
             "plan_fingerprint": self.plan.fingerprint,
+            "result_policy_fingerprint": self.plan.result_policy_fingerprint,
             "request": {
                 "fingerprint": self.plan.request_fingerprint,
                 "messages": self.request_messages,
@@ -199,6 +226,7 @@ def create_execution_plan(
     config: ProviderConfig,
     *,
     max_estimated_input_tokens: int | None = None,
+    result_policy_fingerprint: str | None = None,
 ) -> ExecutionPlan:
     """Bind one validated request to canonical provider settings without credentials."""
 
@@ -218,6 +246,7 @@ def create_execution_plan(
         timeout_seconds=_exact_timeout(config.timeout_seconds),
         max_output_tokens=config.max_output_tokens,
         max_estimated_input_tokens=limit,
+        result_policy_fingerprint=result_policy_fingerprint,
     )
     if artifact.estimated_input_tokens > plan.max_estimated_input_tokens:
         raise ArtifactError(
@@ -239,24 +268,29 @@ def parse_execution_plan(raw: str | bytes) -> ExecutionPlan:
     except (json.JSONDecodeError, ValueError) as exc:
         message = exc.msg if isinstance(exc, json.JSONDecodeError) else str(exc)
         raise ArtifactError(f"execution plan is not valid JSON: {message}") from exc
-    if not isinstance(decoded, dict) or set(decoded) != {
+    if not isinstance(decoded, dict):
+        raise ArtifactError("execution plan must be a JSON object")
+    schema_version = decoded.get("schema_version")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version not in SUPPORTED_EXECUTION_PLAN_SCHEMA_VERSIONS
+    ):
+        raise ArtifactError(
+            f"unsupported execution plan schema: {schema_version!r}; "
+            f"expected one of {sorted(SUPPORTED_EXECUTION_PLAN_SCHEMA_VERSIONS)}"
+        )
+    required_fields = {
         "schema_version",
         "plan_fingerprint",
         "request_fingerprint",
         "provider",
         "budgets",
-    }:
-        raise ArtifactError("execution plan fields do not match schema version 1")
-    schema_version = decoded.get("schema_version")
-    if (
-        not isinstance(schema_version, int)
-        or isinstance(schema_version, bool)
-        or schema_version != EXECUTION_PLAN_SCHEMA_VERSION
-    ):
-        raise ArtifactError(
-            f"unsupported execution plan schema: {schema_version!r}; "
-            f"expected {EXECUTION_PLAN_SCHEMA_VERSION}"
-        )
+    }
+    if schema_version >= 2:
+        required_fields.add("result_policy_fingerprint")
+    if set(decoded) != required_fields:
+        raise ArtifactError(f"execution plan fields do not match schema version {schema_version}")
 
     provider = decoded.get("provider")
     budgets = decoded.get("budgets")
@@ -277,6 +311,12 @@ def parse_execution_plan(raw: str | bytes) -> ExecutionPlan:
         timeout_seconds=cast(int, provider.get("timeout_seconds")),
         max_output_tokens=cast(int, provider.get("max_output_tokens")),
         max_estimated_input_tokens=cast(int, budgets.get("max_estimated_input_tokens")),
+        result_policy_fingerprint=(
+            cast(str | None, decoded.get("result_policy_fingerprint"))
+            if schema_version >= 2
+            else None
+        ),
+        schema_version=schema_version,
     )
     fingerprint = decoded.get("plan_fingerprint")
     if not isinstance(fingerprint, str) or not _is_sha256(fingerprint):
@@ -378,6 +418,41 @@ def provider_config_from_execution_plan(
     )
 
 
+def require_execution_plan_result_policy(
+    plan: ExecutionPlan,
+    result_policy: ExecutionResultPolicy | None,
+) -> str | None:
+    """Require a bound policy and check any supplied policy against the plan's model.
+
+    A plan without a policy fingerprint accepts an omitted policy, but a supplied policy's
+    ``expected_model`` must still match ``plan.model``.
+    """
+
+    if not isinstance(plan, ExecutionPlan):
+        raise ArtifactError("result policy verification requires a validated execution plan")
+    expected = plan.result_policy_fingerprint
+    if expected is None:
+        if (
+            result_policy is not None
+            and result_policy.expected_model is not None
+            and result_policy.expected_model != plan.model
+        ):
+            raise ArtifactError(
+                "result policy expected model does not match the execution-plan model"
+            )
+        return None
+    if result_policy is None:
+        raise ArtifactError("execution plan requires its bound result policy")
+    actual = fingerprint_execution_result_policy(result_policy)
+    if not hmac.compare_digest(actual, expected):
+        raise ArtifactError(
+            "result policy does not match the fingerprint bound by the execution plan"
+        )
+    if result_policy.expected_model is not None and result_policy.expected_model != plan.model:
+        raise ArtifactError("result policy expected model does not match the execution-plan model")
+    return actual
+
+
 def render_execution_plan_verification(
     verification: ExecutionPlanVerification,
     *,
@@ -398,6 +473,11 @@ def render_execution_plan_verification(
     lines = [
         "Execution plan references the supplied validated request.",
         f"Plan: {plan.fingerprint}",
+        (
+            "Result policy: unbound"
+            if plan.result_policy_fingerprint is None
+            else f"Result policy: {plan.result_policy_fingerprint} (bound)"
+        ),
         f"Request: {plan.request_fingerprint}",
         f"Request messages: {verification.request_messages:,}",
         (

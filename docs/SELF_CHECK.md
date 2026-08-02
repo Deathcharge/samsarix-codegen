@@ -19,10 +19,11 @@ The command performs five fail-closed checks using only package code and bundled
    `jsonschema` development dependency so the shipped package can retain zero runtime dependencies.
 2. Rebuild and parse the same deterministic request represented by the repository's offline
    example, then compare its pinned fingerprint.
-3. Build and parse the credential-free execution plan, then compare its pinned fingerprint.
+3. Build and parse the credential-free execution-plan v2 with the exact example result-policy
+   fingerprint bound inside it, then compare its pinned fingerprint.
 4. Build and parse an explicitly synthetic result and compare its response hash.
-5. Verify the complete request/plan/result chain, pin the deterministic example result-policy
-   fingerprint, enforce its exact model, response-byte, and bounded JSON-object shape rules, and
+5. Verify the complete request/plan/result chain, require the policy bound by the plan, enforce its
+   exact model, response-byte, and bounded JSON-object shape rules, and
    check input/output limits through the public evidence version 3 implementation.
 
 A passing report includes the package version, Python implementation/version, contract count, and

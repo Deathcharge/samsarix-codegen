@@ -43,6 +43,10 @@ approves a first public release.
   model, whole-second timeout, estimated-input ceiling, and output ceiling without credentials.
 - Offline `create-plan` and `verify-plan` commands, plan-backed `execute` with no provider/budget
   override precedence, typed public APIs, independent plan/verification schemas, and an example.
+- Backward-compatible execution-plan schema version 2, which optionally binds the exact
+  result-policy fingerprint so one approved plan fingerprint covers request, provider settings,
+  budgets, and output rules; missing, substituted, or model-incompatible policies fail before
+  provider setup.
 - An installed-wheel smoke harness that proves the exact plan-backed journey against one local
   provider request and proves tamper/override failures make no additional request.
 - Execution-result schema version 2 with an optional reviewed-plan fingerprint and separate
@@ -78,6 +82,8 @@ approves a first public release.
 
 - JSON `build` output is now executable request-artifact schema version 2.
 - Redirected and piped CLI output is emitted as UTF-8 consistently across platforms.
+- Current execution-plan and plan-verification schema exports now emit version 2 while the version 1
+  schema, example, parser behavior, and original fingerprints remain available for compatibility.
 - Execution-result rendering now rejects values outside its documented schema.
 - Result inspection, verification, and comparison records advance to schema version 2 so plan and
   response-model metadata remain visible in content-omitting workflows.

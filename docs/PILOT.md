@@ -138,25 +138,27 @@ samsarix-codegen inspect request.json
 samsarix-codegen inspect request.json --format markdown
 $fingerprint = samsarix-codegen inspect request.json --format fingerprint
 
+@'
+{"schema_version":1,"max_response_bytes":262144}
+'@ | Set-Content -Encoding utf8 result-policy.json
+Get-Content result-policy.json
+
 samsarix-codegen create-plan request.json `
   --expect-fingerprint $fingerprint `
   --endpoint $pilotEndpoint `
   --model $pilotModel `
   --max-output-tokens 1200 `
-  --max-estimated-input-tokens 50000 > execution-plan.json
+  --max-estimated-input-tokens 50000 `
+  --policy result-policy.json > execution-plan.json
 
 $planFingerprint = samsarix-codegen verify-plan request.json execution-plan.json `
+  --policy result-policy.json `
   --format fingerprint
 samsarix-codegen verify-plan request.json execution-plan.json `
   --expect-plan-fingerprint $planFingerprint `
+  --policy result-policy.json `
   --format json > plan-verification.json
 Get-Content execution-plan.json
-
-@'
-{"schema_version":1,"max_response_bytes":262144}
-'@ | Set-Content -Encoding utf8 result-policy.json
-$policyFingerprint = samsarix-codegen fingerprint-policy result-policy.json
-Get-Content result-policy.json
 ```
 
 The participant confirms that the exact prompt contains only the intended diff and separately
@@ -169,13 +171,11 @@ samsarix-codegen execute request.json `
   --plan execution-plan.json `
   --expect-plan-fingerprint $planFingerprint `
   --policy result-policy.json `
-  --expect-policy-fingerprint $policyFingerprint `
   --format json > result.json
 
 samsarix-codegen verify-execution request.json execution-plan.json result.json `
   --expect-plan-fingerprint $planFingerprint `
   --policy result-policy.json `
-  --expect-policy-fingerprint $policyFingerprint `
   --format json > execution-evidence.json
 ```
 
@@ -200,33 +200,35 @@ samsarix-codegen inspect incident-request.json
 samsarix-codegen inspect incident-request.json --format markdown
 $incidentFingerprint = samsarix-codegen inspect incident-request.json --format fingerprint
 
+@'
+{"schema_version":2,"max_response_bytes":262144,"response_format":"json-object","required_json_keys":["diagnosis","evidence","next_step"],"allowed_json_keys":["diagnosis","evidence","next_step"],"json_key_types":{"diagnosis":"string","evidence":"array","next_step":"string"}}
+'@ | Set-Content -Encoding utf8 incident-result-policy.json
+Get-Content incident-result-policy.json
+
 samsarix-codegen create-plan incident-request.json `
   --expect-fingerprint $incidentFingerprint `
   --endpoint $pilotEndpoint `
   --model $pilotModel `
   --max-output-tokens 1200 `
-  --max-estimated-input-tokens 60000 > incident-plan.json
+  --max-estimated-input-tokens 60000 `
+  --policy incident-result-policy.json > incident-plan.json
 
 $incidentPlanFingerprint = samsarix-codegen verify-plan `
-  incident-request.json incident-plan.json --format fingerprint
+  incident-request.json incident-plan.json `
+  --policy incident-result-policy.json --format fingerprint
 samsarix-codegen verify-plan incident-request.json incident-plan.json `
   --expect-plan-fingerprint $incidentPlanFingerprint `
+  --policy incident-result-policy.json `
   --format json > incident-plan-verification.json
 Get-Content incident-plan.json
-
-@'
-{"schema_version":2,"max_response_bytes":262144,"response_format":"json-object","required_json_keys":["diagnosis","evidence","next_step"],"allowed_json_keys":["diagnosis","evidence","next_step"],"json_key_types":{"diagnosis":"string","evidence":"array","next_step":"string"}}
-'@ | Set-Content -Encoding utf8 incident-result-policy.json
-$incidentPolicyFingerprint = samsarix-codegen fingerprint-policy incident-result-policy.json
-Get-Content incident-result-policy.json
 ```
 
 Stop before execution if the exact prompt contains a secret, personal data, or context that the
 selected provider is not authorized to receive. If execution is approved, use the same
 plan-backed `execute` and `verify-execution` sequence as Session A, substituting the incident file
-names and both incident fingerprints. Pass `--policy incident-result-policy.json` and
-`--expect-policy-fingerprint $incidentPolicyFingerprint` to `execute` as well as to the later
-offline `verify-execution`. The version 2 policy makes the incident workflow's downstream JSON
+names and the incident plan fingerprint. Pass `--policy incident-result-policy.json` to `execute`
+and to the later offline `verify-execution`; the plan requires that exact file. The version 2 policy
+makes the incident workflow's downstream JSON
 handoff fail closed on invalid JSON, unapproved top-level keys, or wrong top-level types. It does
 not establish that the diagnosis or next step is correct. A rejected response still consumes the
 single provider request, produces no normal stdout, and is never retried.
@@ -273,11 +275,11 @@ free-form text. Keep `pilot-record.json` untracked unless its disclosure has bee
 Call the pilot complete only when all of these are true:
 
 1. At least three developers complete staged-review artifact build, exact-prompt inspection,
-   request fingerprint capture, plan-settings review, plan fingerprint capture, result-policy
-   review, and policy fingerprint capture from the same wheel digest and commit.
+   request fingerprint capture, plan-settings review, result-policy review, and policy-bound plan
+   fingerprint capture from the same wheel digest and commit.
 2. Both workflows are exercised, including at least one selected-log session.
 3. Every provider check and execution is attempted at most once. Every successful execution uses
-   approved plan and policy fingerprints and passes policy-bound `verify-execution`; failures remain
+   an approved policy-bound plan fingerprint and passes `verify-execution`; failures remain
    failures rather than being rerun until a pass appears.
 4. At least two participants score clarity and usefulness at 4 or higher and answer `yes` or `maybe`
    to reuse.
