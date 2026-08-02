@@ -425,7 +425,8 @@ and Windows. See
 [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
-the remaining external usefulness gate and its privacy-preserving evidence record.
+the remaining external usefulness gate, a strict privacy-minimal record, and a deterministic
+maintainer-side decision checker.
 
 The [release runbook](docs/RELEASING.md) documents a non-publishing workflow dry run, exact
 version/tag/changelog gates, SHA-256 manifests, provenance attestation, manually approved PyPI

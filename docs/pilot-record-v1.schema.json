@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samsarix.com/schemas/codegen/pilot-record-v1.schema.json",
+  "title": "Samsarix Codegen three-developer pilot record",
+  "description": "Privacy-minimal, content-free observations used to evaluate the documented adoption pilot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "wheel_sha256", "commit", "sessions"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "wheel_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "sessions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 40,
+      "items": {"$ref": "#/$defs/session"}
+    }
+  },
+  "$defs": {
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pilot_id",
+        "platform",
+        "workflow",
+        "provider_mode",
+        "provider_check",
+        "context",
+        "review_checks",
+        "execution",
+        "completion_stage",
+        "review_minutes",
+        "clarity_score",
+        "usefulness_score",
+        "reuse",
+        "friction_codes",
+        "safety"
+      ],
+      "properties": {
+        "pilot_id": {"type": "string", "pattern": "^pilot-[0-9a-f]{12}$"},
+        "platform": {"$ref": "#/$defs/platform"},
+        "workflow": {"enum": ["staged-review", "log-triage"]},
+        "provider_mode": {"enum": ["offline-only", "local", "hosted"]},
+        "provider_check": {"$ref": "#/$defs/run"},
+        "context": {"$ref": "#/$defs/context"},
+        "review_checks": {"$ref": "#/$defs/review_checks"},
+        "execution": {"$ref": "#/$defs/execution"},
+        "completion_stage": {
+          "enum": [
+            "request-built",
+            "request-inspected",
+            "plan-created",
+            "plan-verified",
+            "provider-checked",
+            "executed",
+            "evidence-verified"
+          ]
+        },
+        "review_minutes": {"type": "integer", "minimum": 0, "maximum": 480},
+        "clarity_score": {"type": "integer", "minimum": 1, "maximum": 5},
+        "usefulness_score": {"type": "integer", "minimum": 1, "maximum": 5},
+        "reuse": {"enum": ["yes", "maybe", "no"]},
+        "friction_codes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "none",
+              "setup",
+              "context-selection",
+              "prompt-review",
+              "plan-review",
+              "provider-preflight",
+              "execution",
+              "evidence-verification",
+              "documentation",
+              "other"
+            ]
+          }
+        },
+        "safety": {"$ref": "#/$defs/safety"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"provider_mode": {"const": "offline-only"}}},
+          "then": {
+            "properties": {
+              "provider_check": {"properties": {"status": {"const": "not-run"}}},
+              "execution": {"properties": {"status": {"const": "not-run"}}}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"friction_codes": {"contains": {"const": "none"}}}},
+          "then": {"properties": {"friction_codes": {"maxItems": 1}}}
+        }
+      ]
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os_family", "python_version"],
+      "properties": {
+        "os_family": {"enum": ["windows", "macos", "linux", "other"]},
+        "python_version": {
+          "type": "string",
+          "pattern": "^3\\.(?:10|11|12|13|14)(?:\\.[0-9]+)?$"
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "bytes", "estimated_input_tokens"],
+      "properties": {
+        "items": {"type": "integer", "minimum": 0, "maximum": 20},
+        "bytes": {"type": "integer", "minimum": 0, "maximum": 5000000},
+        "estimated_input_tokens": {"type": "integer", "minimum": 1, "maximum": 2000000}
+      }
+    },
+    "review_checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exact_prompt_inspected",
+        "request_fingerprint_captured",
+        "plan_settings_reviewed",
+        "plan_fingerprint_captured"
+      ],
+      "properties": {
+        "exact_prompt_inspected": {"type": "boolean"},
+        "request_fingerprint_captured": {"type": "boolean"},
+        "plan_settings_reviewed": {"type": "boolean"},
+        "plan_fingerprint_captured": {"type": "boolean"}
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "attempts", "exit_code"],
+      "properties": {
+        "status": {"enum": ["not-run", "passed", "failed"]},
+        "attempts": {"type": "integer", "minimum": 0, "maximum": 1},
+        "exit_code": {"type": ["integer", "null"], "minimum": 0, "maximum": 255}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": {"const": "not-run"},
+            "attempts": {"const": 0},
+            "exit_code": {"type": "null"}
+          }
+        },
+        {
+          "properties": {
+            "status": {"const": "passed"},
+            "attempts": {"const": 1},
+            "exit_code": {"const": 0}
+          }
+        },
+        {
+          "properties": {
+            "status": {"const": "failed"},
+            "attempts": {"const": 1},
+            "exit_code": {"type": "integer", "minimum": 1, "maximum": 255}
+          }
+        }
+      ]
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "attempts", "exit_code", "evidence_status"],
+      "properties": {
+        "status": {"enum": ["not-run", "passed", "failed"]},
+        "attempts": {"type": "integer", "minimum": 0, "maximum": 1},
+        "exit_code": {"type": ["integer", "null"], "minimum": 0, "maximum": 255},
+        "evidence_status": {"enum": ["not-run", "passed", "failed"]}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": {"const": "not-run"},
+            "attempts": {"const": 0},
+            "exit_code": {"type": "null"},
+            "evidence_status": {"const": "not-run"}
+          }
+        },
+        {
+          "properties": {
+            "status": {"const": "passed"},
+            "attempts": {"const": 1},
+            "exit_code": {"const": 0},
+            "evidence_status": {"enum": ["passed", "failed"]}
+          }
+        },
+        {
+          "properties": {
+            "status": {"const": "failed"},
+            "attempts": {"const": 1},
+            "exit_code": {"type": "integer", "minimum": 1, "maximum": 255},
+            "evidence_status": {"enum": ["not-run", "failed"]}
+          }
+        }
+      ]
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unintended_file_access",
+        "unreviewed_context_sent",
+        "credential_exposure",
+        "samsarix_content_collection"
+      ],
+      "properties": {
+        "unintended_file_access": {"type": "boolean"},
+        "unreviewed_context_sent": {"type": "boolean"},
+        "credential_exposure": {"type": "boolean"},
+        "samsarix_content_collection": {"type": "boolean"}
+      }
+    }
+  }
+}
