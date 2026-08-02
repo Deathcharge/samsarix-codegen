@@ -8,6 +8,9 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from samsarix_codegen.artifact import (
+    MAX_ARTIFACT_CONTEXT_ITEMS,
+    MAX_ARTIFACT_MESSAGES,
+    MAX_RESULT_BYTES,
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
@@ -143,6 +146,19 @@ def test_request_schema_rejects_contract_drift() -> None:
 
     with pytest.raises(ValidationError):
         Draft202012Validator(load_contract_schema("request")).validate(payload)
+
+
+def test_result_verification_schema_limits_match_runtime() -> None:
+    schema = load_contract_schema("result-verification")
+    request_properties = schema["properties"]["request"]["properties"]
+    result_response_properties = schema["$defs"]["result_summary"]["properties"]["response"][
+        "properties"
+    ]
+
+    assert request_properties["messages"]["maximum"] == MAX_ARTIFACT_MESSAGES
+    assert request_properties["context_items"]["maximum"] == MAX_ARTIFACT_CONTEXT_ITEMS
+    assert result_response_properties["chars"]["maximum"] == MAX_RESULT_BYTES
+    assert result_response_properties["bytes"]["maximum"] == MAX_RESULT_BYTES
 
 
 @pytest.mark.parametrize(
