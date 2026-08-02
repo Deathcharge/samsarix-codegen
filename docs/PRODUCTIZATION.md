@@ -473,9 +473,9 @@ sdist digest.
 
 ### Context-manifest follow-up
 
-Python 3.14.6 source checks passed formatting, lint, strict typing, and 160 tests in 17.82 seconds.
+Python 3.14.6 source checks passed formatting, lint, strict typing, and 161 tests in 24.64 seconds.
 The repository-built sdist and wheel passed Twine and the fail-closed release audit. The extracted
-sdist imported its own source path, then passed formatting, lint, strict typing, and the same 160
+sdist imported its own source path, then passed formatting, lint, strict typing, and the same 161
 tests. Its isolated wheel rebuild was Twine-valid and visibly included the new
 context-manifest schema. A dependency-free fresh environment installed the audited repository
 wheel, reported no broken requirements, built a three-file request through the checked-in manifest,

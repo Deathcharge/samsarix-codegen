@@ -232,6 +232,25 @@ def test_context_manifest_byte_limit_applies_before_json_decode() -> None:
         parse_context_manifest(raw)
 
 
+def test_context_manifest_size_uses_the_exact_public_rendering() -> None:
+    near_limit_files = tuple(f"{index:02d}-{'a' * 3260}.py" for index in range(20))
+    manifest = ContextManifest(files=near_limit_files)
+    rendered = render_context_manifest(manifest)
+
+    assert len(rendered.encode("utf-8")) <= MAX_CONTEXT_MANIFEST_BYTES
+    assert parse_context_manifest(rendered) == manifest
+
+    oversized_files = tuple(f"{index:02d}-{'a' * 3261}.py" for index in range(20))
+    payload = {"schema_version": 1, "files": list(oversized_files)}
+    compact_size = len(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+
+    assert compact_size <= MAX_CONTEXT_MANIFEST_BYTES
+    with pytest.raises(ContextError, match="byte limit"):
+        ContextManifest(files=oversized_files)
+
+
 def test_manifest_bounded_read_does_not_depend_only_on_stat_size(
     tmp_path: Path, monkeypatch
 ) -> None:

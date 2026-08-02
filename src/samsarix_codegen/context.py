@@ -48,13 +48,7 @@ class ContextManifest:
             if path in seen:
                 raise ContextError(f"context manifest contains duplicate file path: {path}")
             seen.add(path)
-        rendered_size = len(
-            json.dumps(
-                {"schema_version": self.schema_version, "files": list(self.files)},
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        )
+        rendered_size = len(_render_context_manifest_files(self.files).encode("utf-8"))
         if rendered_size > MAX_CONTEXT_MANIFEST_BYTES:
             raise ContextError(
                 f"context manifest exceeds the {MAX_CONTEXT_MANIFEST_BYTES:,}-byte limit"
@@ -125,7 +119,7 @@ def parse_context_manifest(raw: str | bytes) -> ContextManifest:
 def render_context_manifest(manifest: ContextManifest) -> str:
     """Render a context manifest deterministically."""
 
-    return json.dumps(manifest.to_payload(), ensure_ascii=False, indent=2) + "\n"
+    return _render_context_manifest_files(manifest.files)
 
 
 def load_context_manifest(
@@ -350,3 +344,8 @@ def _reject_duplicate_manifest_keys(pairs: list[tuple[str, Any]]) -> dict[str, A
             )
         decoded[key] = value
     return decoded
+
+
+def _render_context_manifest_files(files: tuple[str, ...]) -> str:
+    payload = {"schema_version": CONTEXT_MANIFEST_SCHEMA_VERSION, "files": list(files)}
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
