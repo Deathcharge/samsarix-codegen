@@ -304,6 +304,23 @@ def test_execution_plan_document_and_render_limits() -> None:
         )
 
 
+def test_execution_plan_text_verification_is_useful_and_content_omitting() -> None:
+    artifact = make_artifact("Private prompt content")
+    plan = create_execution_plan(
+        artifact,
+        ProviderConfig("http://127.0.0.1:11434/v1", "reviewed-model"),
+        max_estimated_input_tokens=artifact.estimated_input_tokens + 100,
+    )
+
+    rendered = render_execution_plan_verification(verify_execution_plan(artifact, plan))
+
+    assert plan.fingerprint in rendered
+    assert artifact.fingerprint in rendered
+    assert plan.endpoint in rendered
+    assert plan.model in rendered
+    assert "Private prompt content" not in rendered
+
+
 def test_execution_plan_loader_is_bounded_and_converts_path_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

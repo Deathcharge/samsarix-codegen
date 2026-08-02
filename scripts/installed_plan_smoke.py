@@ -16,6 +16,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
+CLI_TIMEOUT_SECONDS = 120
+
 
 class FixtureHandler(BaseHTTPRequestHandler):
     requests: list[dict[str, Any]] = []
@@ -65,6 +67,7 @@ def run_cli(
         input=stdin,
         capture_output=True,
         check=False,
+        timeout=CLI_TIMEOUT_SECONDS,
     )
     if result.returncode != expected_exit:
         raise AssertionError(
@@ -72,6 +75,13 @@ def run_cli(
             f"{result.stderr.decode('utf-8', errors='replace')}"
         )
     return result
+
+
+def require(condition: bool, message: str) -> None:
+    """Raise even under optimized Python when one smoke invariant fails."""
+
+    if not condition:
+        raise AssertionError(message)
 
 
 def main() -> int:
@@ -158,8 +168,14 @@ def main() -> int:
                 cwd=root,
                 environment=environment,
             )
-            assert b"Private fixture instruction" not in verification.stdout
-            assert b"enabled = True" not in verification.stdout
+            require(
+                b"Private fixture instruction" not in verification.stdout,
+                "plan verification disclosed the private instruction",
+            )
+            require(
+                b"enabled = True" not in verification.stdout,
+                "plan verification disclosed selected context",
+            )
 
             execution_environment = environment.copy()
             execution_environment.update(
@@ -187,21 +203,48 @@ def main() -> int:
                 environment=execution_environment,
             )
             result = json.loads(executed.stdout)
-            assert result["request_fingerprint"] == request_fingerprint
-            assert result["model"] == "fixture-model"
-            assert result["response"]["text"] == "Fixture response"
-            assert result["usage"]["total_tokens"] == 25
-            assert b"fixture-secret" not in executed.stdout + executed.stderr
-            assert len(FixtureHandler.requests) == 1
+            require(
+                result["request_fingerprint"] == request_fingerprint,
+                "result does not reference the exact request",
+            )
+            require(result["model"] == "fixture-model", "result model does not match the plan")
+            require(
+                result["response"]["text"] == "Fixture response",
+                "provider response was not normalized",
+            )
+            require(result["usage"]["total_tokens"] == 25, "provider usage was not normalized")
+            require(
+                b"fixture-secret" not in executed.stdout + executed.stderr,
+                "API key appeared in CLI output",
+            )
+            require(len(FixtureHandler.requests) == 1, "expected exactly one provider request")
 
             received = FixtureHandler.requests[0]
-            assert received["path"] == "/v1/chat/completions"
-            assert received["authorization"] == "Bearer fixture-secret"
-            assert received["payload"]["model"] == "fixture-model"
-            assert received["payload"]["max_tokens"] == 64
-            assert received["payload"]["stream"] is False
-            assert "Private fixture instruction" in received["payload"]["messages"][1]["content"]
-            assert "enabled = True" in received["payload"]["messages"][1]["content"]
+            require(
+                received["path"] == "/v1/chat/completions",
+                "provider request used the wrong path",
+            )
+            require(
+                received["authorization"] == "Bearer fixture-secret",
+                "provider request omitted the external bearer credential",
+            )
+            require(
+                received["payload"]["model"] == "fixture-model",
+                "provider request did not use the planned model",
+            )
+            require(
+                received["payload"]["max_tokens"] == 64,
+                "provider request did not use the planned output limit",
+            )
+            require(received["payload"]["stream"] is False, "provider request enabled streaming")
+            require(
+                "Private fixture instruction" in received["payload"]["messages"][1]["content"],
+                "provider request omitted the reviewed instruction",
+            )
+            require(
+                "enabled = True" in received["payload"]["messages"][1]["content"],
+                "provider request omitted the reviewed context",
+            )
 
             tampered_path = root / "tampered-plan.json"
             tampered = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -213,8 +256,11 @@ def main() -> int:
                 environment=execution_environment,
                 expected_exit=5,
             )
-            assert rejected_tamper.stdout == b""
-            assert len(FixtureHandler.requests) == 1
+            require(rejected_tamper.stdout == b"", "tampered plan produced normal output")
+            require(
+                len(FixtureHandler.requests) == 1,
+                "tampered plan caused an additional provider request",
+            )
 
             rejected_override = run_cli(
                 [
@@ -229,8 +275,11 @@ def main() -> int:
                 environment=execution_environment,
                 expected_exit=2,
             )
-            assert rejected_override.stdout == b""
-            assert len(FixtureHandler.requests) == 1
+            require(rejected_override.stdout == b"", "plan override produced normal output")
+            require(
+                len(FixtureHandler.requests) == 1,
+                "plan override caused an additional provider request",
+            )
     finally:
         server.shutdown()
         server.server_close()

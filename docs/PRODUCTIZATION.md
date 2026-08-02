@@ -623,9 +623,9 @@ because recording them inside the sdist would change the sdist digest.
 ### Reviewed execution-plan follow-up
 
 Python 3.14.6 source checks passed formatting, lint, strict typing across 14 source files, workflow
-parsing, the source release check, and 275 tests. A source-built sdist contained the execution-plan
+parsing, the source release check, and 280 tests. A source-built sdist contained the execution-plan
 implementation, standalone guide, example, smoke harness, and both bundled schemas. Its extracted
-tree passed the same formatting, lint, typing, workflow, release-source, and 275-test gates before
+tree passed the same formatting, lint, typing, workflow, release-source, and 280-test gates before
 building the wheel. Twine and the fail-closed release audit accepted the zero-runtime-dependency
 sdist/wheel pair.
 

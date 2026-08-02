@@ -56,6 +56,7 @@ def test_provider_config_accepts_explicit_full_endpoint() -> None:
     [
         ({"endpoint": 1, "model": "model"}, "endpoint must be text"),
         ({"endpoint": "https://example.com/v1", "model": 1}, "model name must be text"),
+        ({"endpoint": "https://example.com\n/v1", "model": "model"}, "control"),
         ({"endpoint": "https://example.com/v1", "model": "bad\nmodel"}, "control"),
         ({"endpoint": "https://example.com/v1", "model": "\ud800"}, "valid Unicode"),
         ({"endpoint": "https://[broken/v1", "model": "model"}, "URL is invalid"),

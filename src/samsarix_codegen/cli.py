@@ -516,10 +516,10 @@ def _add_provider_arguments(
     timeout_default = None if defer_defaults else os.environ.get("SAMSARIX_TIMEOUT", "60")
     parser.add_argument(
         "--timeout",
-        type=_bounded_int(1, 300, "timeout"),
+        type=_bounded_int(1, MAX_PROVIDER_TIMEOUT_SECONDS, "timeout"),
         default=timeout_default,
         metavar="SECONDS",
-        help="network timeout from 1 to 300 seconds (default: 60)",
+        help=(f"network timeout from 1 to {MAX_PROVIDER_TIMEOUT_SECONDS} seconds (default: 60)"),
     )
     maximum_output_tokens = (
         MAX_PROVIDER_CHECK_OUTPUT_TOKENS if provider_check else MAX_PROVIDER_OUTPUT_TOKENS

@@ -94,6 +94,8 @@ class ProviderConfig:
             raise ConfigurationError(
                 f"the model endpoint exceeds {MAX_ENDPOINT_CHARS:,} characters"
             )
+        if any(ord(character) < 32 or ord(character) == 127 for character in endpoint):
+            raise ConfigurationError("the model endpoint contains a control character")
         if not model:
             raise ConfigurationError("a model is required; use --model or SAMSARIX_MODEL")
         if len(model) > MAX_MODEL_CHARS:

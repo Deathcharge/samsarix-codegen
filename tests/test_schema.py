@@ -232,6 +232,13 @@ def test_execution_plan_schema_limits_match_runtime(contract: str) -> None:
     assert budgets["max_estimated_input_tokens"]["maximum"] == MAX_ESTIMATED_INPUT_TOKENS
 
 
+def test_execution_plan_schemas_share_the_same_provider_contract() -> None:
+    plan_provider = load_contract_schema("execution-plan")["$defs"]["provider"]
+    verification_provider = load_contract_schema("execution-plan-verification")["$defs"]["provider"]
+
+    assert verification_provider == plan_provider
+
+
 def test_execution_plan_example_is_schema_valid_and_internally_consistent() -> None:
     example = Path(__file__).resolve().parents[1] / "examples" / "execution-plan-v1.json"
     payload = json.loads(example.read_text(encoding="utf-8"))
@@ -247,6 +254,10 @@ def test_execution_plan_example_is_schema_valid_and_internally_consistent() -> N
         lambda payload: payload.update(unexpected=True),
         lambda payload: payload["provider"].update(model=" model-a"),
         lambda payload: payload["provider"].update(endpoint="http://remote.example.com/v1"),
+        lambda payload: payload["provider"].update(endpoint="http://127.evil.com/v1"),
+        lambda payload: payload["provider"].update(
+            endpoint="https://user:pass@models.example.com/v1"
+        ),
         lambda payload: payload["provider"].update(timeout_seconds=0),
         lambda payload: payload["provider"].update(max_output_tokens=32_769),
         lambda payload: payload["budgets"].update(max_estimated_input_tokens=2_000_001),
