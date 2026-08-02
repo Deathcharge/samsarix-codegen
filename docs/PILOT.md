@@ -51,8 +51,8 @@ endpoint is contacted only by `provider-check` or `execute`.
 
 ## Optional provider preflight
 
-Participants who intend to execute an artifact should first check the exact endpoint/model pair they
-will use:
+After reviewing a session's request and execution plan, participants who intend to execute should
+check the exact endpoint/model pair before sending the reviewed request:
 
 ```powershell
 $env:SAMSARIX_API_BASE = $pilotEndpoint
@@ -102,7 +102,8 @@ Get-Content execution-plan.json
 
 The participant confirms that the exact prompt contains only the intended diff and separately
 reviews the plan's endpoint, model, timeout, input ceiling, and output ceiling. If provider access
-is approved, they may run one execution attempt:
+is approved, they may run the optional preflight once. An omitted or passing preflight permits one
+execution attempt; a failed preflight stops the session:
 
 ```powershell
 samsarix-codegen execute request.json `
