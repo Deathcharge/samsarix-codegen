@@ -8,6 +8,9 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from samsarix_codegen.artifact import (
+    MAX_ARTIFACT_CONTEXT_ITEMS,
+    MAX_ARTIFACT_MESSAGES,
+    MAX_RESULT_BYTES,
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
@@ -17,7 +20,9 @@ from samsarix_codegen.artifact import (
     render_execution_result,
     render_execution_result_comparison,
     render_execution_result_inspection,
+    render_execution_result_verification,
     render_request_artifact,
+    verify_execution_result,
 )
 from samsarix_codegen.cli import main
 from samsarix_codegen.context import ContextManifest
@@ -72,6 +77,12 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
             output_format="json",
         )
     )
+    result_verification_payload = json.loads(
+        render_execution_result_verification(
+            verify_execution_result(base, base_execution_result),
+            output_format="json",
+        )
+    )
     comparison_payload = json.loads(
         render_artifact_comparison(
             compare_request_artifacts(base, target),
@@ -99,6 +110,9 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
     Draft202012Validator(load_contract_schema("result-inspection")).validate(
         result_inspection_payload
+    )
+    Draft202012Validator(load_contract_schema("result-verification")).validate(
+        result_verification_payload
     )
     Draft202012Validator(load_contract_schema("comparison")).validate(comparison_payload)
     Draft202012Validator(load_contract_schema("result-comparison")).validate(
@@ -134,7 +148,23 @@ def test_request_schema_rejects_contract_drift() -> None:
         Draft202012Validator(load_contract_schema("request")).validate(payload)
 
 
-@pytest.mark.parametrize("contract", ["result", "result-inspection", "result-comparison"])
+def test_result_verification_schema_limits_match_runtime() -> None:
+    schema = load_contract_schema("result-verification")
+    request_properties = schema["properties"]["request"]["properties"]
+    result_response_properties = schema["$defs"]["result_summary"]["properties"]["response"][
+        "properties"
+    ]
+
+    assert request_properties["messages"]["maximum"] == MAX_ARTIFACT_MESSAGES
+    assert request_properties["context_items"]["maximum"] == MAX_ARTIFACT_CONTEXT_ITEMS
+    assert result_response_properties["chars"]["maximum"] == MAX_RESULT_BYTES
+    assert result_response_properties["bytes"]["maximum"] == MAX_RESULT_BYTES
+
+
+@pytest.mark.parametrize(
+    "contract",
+    ["result", "result-inspection", "result-verification", "result-comparison"],
+)
 def test_result_schemas_reject_noncanonical_model_labels(contract: str) -> None:
     artifact = make_artifact("Review this")
     result = parse_execution_result(
@@ -146,6 +176,9 @@ def test_result_schemas_reject_noncanonical_model_labels(contract: str) -> None:
     elif contract == "result-inspection":
         payload = inspect_execution_result(result).to_payload()
         payload["summary"]["model"] = " model "
+    elif contract == "result-verification":
+        payload = verify_execution_result(artifact, result).to_payload()
+        payload["result"]["model"] = " model "
     else:
         payload = compare_execution_results(result, result).to_payload()
         payload["base"]["model"] = " model "

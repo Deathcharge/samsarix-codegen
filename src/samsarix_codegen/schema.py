@@ -20,6 +20,7 @@ class ContractSchema(str, Enum):
     RESULT = "result"
     COMPARISON = "comparison"
     RESULT_INSPECTION = "result-inspection"
+    RESULT_VERIFICATION = "result-verification"
     RESULT_COMPARISON = "result-comparison"
     PROVIDER_CHECK = "provider-check"
     CONTEXT_MANIFEST = "context-manifest"
@@ -30,6 +31,7 @@ _SCHEMA_FILES = {
     ContractSchema.RESULT: "execution-result-v1.schema.json",
     ContractSchema.COMPARISON: "artifact-comparison-v1.schema.json",
     ContractSchema.RESULT_INSPECTION: "execution-result-inspection-v1.schema.json",
+    ContractSchema.RESULT_VERIFICATION: "execution-result-verification-v1.schema.json",
     ContractSchema.RESULT_COMPARISON: "execution-result-comparison-v1.schema.json",
     ContractSchema.PROVIDER_CHECK: "provider-check-v1.schema.json",
     ContractSchema.CONTEXT_MANIFEST: "context-manifest-v1.schema.json",

@@ -70,6 +70,10 @@ jobs:
           ! grep -q "first response" result-inspection.json
           samsarix-codegen schema result-inspection > result-inspection.schema.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('result-inspection.schema.json', encoding='utf-8')); payload=json.load(open('result-inspection.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
+          samsarix-codegen verify-result request.json result-a.json --format json > result-verification.json
+          ! grep -q "Review this change\|first response" result-verification.json
+          samsarix-codegen schema result-verification > result-verification.schema.json
+          python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('result-verification.schema.json', encoding='utf-8')); payload=json.load(open('result-verification.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
           samsarix-codegen compare-results result-a.json result-b.json --format json > result-comparison.json
           ! grep -q "first response\|second response" result-comparison.json
           samsarix-codegen schema result-comparison > result-comparison.schema.json

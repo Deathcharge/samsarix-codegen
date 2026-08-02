@@ -192,14 +192,15 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add dry-runnable release verification, provenance, and gated Trusted Publishing automation.
 - [x] Add strict same-request execution-result comparison without reproducing response contents.
 - [x] Add strict single-result inspection without reproducing response contents.
+- [x] Add offline request/result linkage verification without reproducing either content body.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build`, `inspect`, `inspect-result`, `compare`, `compare-results`, `execute`, `run`, `schema`, and
-  `provider-check` commands with useful help and version behavior.
+- [x] `build`, `inspect`, `inspect-result`, `verify-result`, `compare`, `compare-results`, `execute`,
+  `run`, `schema`, and `provider-check` commands with useful help and version behavior.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -240,6 +241,8 @@ Final command evidence is recorded in the **Final verification** section after e
   versioned schema for downstream CI consumers.
 - Added content-omitting single-result inspection and an independent versioned schema for CI run
   evidence before a comparison partner exists.
+- Added offline request/result linkage verification and an independent versioned schema for
+  content-omitting CI handoff evidence.
 - Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
   installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
@@ -509,6 +512,21 @@ isolated import resolved to the installed wheel and passed. Exact final distribu
 attached to the corresponding pull request because recording them inside the sdist would change the
 sdist digest.
 
+### Request/result verification follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing, and 173 tests. The
+repository-built sdist and wheel passed Twine and the fail-closed release audit. The extracted sdist
+passed formatting, lint, strict typing, and the same 173 tests, then rebuilt a wheel that passed an
+independent Twine recheck. A fresh dependency-free target installed the repository wheel and ran
+`verify-result` outside the checkout: a matching request/result pair produced schema-valid
+content-omitting metadata, while a different valid request failed with exit `5`. The installed
+public API and bundled schema were exercised, and explicit assertions kept the fixture instruction
+and response out of the record. The combined extracted-sdist wrapper reached its time limit after
+printing successful output for every constituent stage, so the wrapper exit itself was not treated
+as a pass; the final wheel's existence and Twine result were rechecked separately with exit `0`.
+Exact final distribution digests are attached to the corresponding pull request because recording
+them inside the sdist would change the sdist digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -529,9 +547,9 @@ sdist digest.
 
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
-review-first artifact workflow, offline review/comparison tools, reusable explicit context
-manifests, independent JSON contracts, and an operator-run provider conformance check; each has
-local clean-package evidence recorded above.
+review-first artifact workflow, offline review/comparison and request/result linkage tools,
+reusable explicit context manifests, independent JSON contracts, and an operator-run provider
+conformance check; each has local clean-package evidence recorded above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release
 tag, and approval of the publishing environment. The usefulness claim remains gated on the
 three-developer pilot, and live provider certification remains optional unless the owner advertises

@@ -11,6 +11,7 @@ from samsarix_codegen.artifact import (
     ExecutionResultComparison,
     ExecutionResultInspection,
     ExecutionResultSummary,
+    ExecutionResultVerification,
     RequestArtifact,
     RequestArtifactComparison,
     compare_execution_results,
@@ -24,8 +25,10 @@ from samsarix_codegen.artifact import (
     render_execution_result,
     render_execution_result_comparison,
     render_execution_result_inspection,
+    render_execution_result_verification,
     render_request_artifact,
     require_fingerprint,
+    verify_execution_result,
 )
 from samsarix_codegen.context import (
     ContextManifest,
@@ -60,6 +63,7 @@ __all__ = [
     "ExecutionResultComparison",
     "ExecutionResultInspection",
     "ExecutionResultSummary",
+    "ExecutionResultVerification",
     "OpenAIChatClient",
     "PromptRequest",
     "ProviderConfig",
@@ -86,9 +90,11 @@ __all__ = [
     "render_execution_result",
     "render_execution_result_comparison",
     "render_execution_result_inspection",
+    "render_execution_result_verification",
     "render_markdown",
     "render_provider_check",
     "render_request_artifact",
     "render_contract_schema",
     "require_fingerprint",
+    "verify_execution_result",
 ]

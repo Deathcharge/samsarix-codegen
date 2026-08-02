@@ -149,6 +149,8 @@ SAMSARIX_MODEL=model-a SAMSARIX_API_BASE=https://provider-a.example/v1 \
   samsarix-codegen execute request.json --format json > result-a.json
 SAMSARIX_MODEL=model-b SAMSARIX_API_BASE=https://provider-b.example/v1 \
   samsarix-codegen execute request.json --format json > result-b.json
+samsarix-codegen verify-result request.json result-a.json
+samsarix-codegen verify-result request.json result-a.json --format json > verified-run.json
 samsarix-codegen inspect-result result-a.json
 samsarix-codegen inspect-result result-a.json --format json > result-a-summary.json
 samsarix-codegen compare-results result-a.json result-b.json
@@ -156,6 +158,9 @@ samsarix-codegen compare-results result-a.json result-b.json --format json
 ```
 
 Both result files identify the common request fingerprint and omit the endpoint and API key.
+`verify-result` strictly validates a concrete request and result together, fails unless their
+fingerprints match, and emits content-omitting request metrics plus result metadata. It is a local
+linkage check, not proof that a provider authored either file or received the request.
 `inspect-result` strictly validates one envelope and reports its request fingerprint, model,
 response character/UTF-8 byte counts and SHA-256 hash, and available usage without reproducing the
 response. This makes a stored run fail-closed and loggable before a second run exists.
@@ -171,6 +176,7 @@ resource comparison, not a quality score or proof that a provider authored an en
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
 | `inspect-result` | Never | Validate and summarize one result without its response contents |
+| `verify-result` | Never | Link one result to a supplied validated request without contents |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
 | `compare-results` | Never | Compare same-request results without response contents |
 | `schema` | Never | Print any bundled versioned contract JSON Schema |
@@ -192,6 +198,7 @@ samsarix-codegen schema request > request-artifact-v2.schema.json
 samsarix-codegen schema result > execution-result-v1.schema.json
 samsarix-codegen schema comparison > artifact-comparison-v1.schema.json
 samsarix-codegen schema result-inspection > execution-result-inspection-v1.schema.json
+samsarix-codegen schema result-verification > execution-result-verification-v1.schema.json
 samsarix-codegen schema result-comparison > execution-result-comparison-v1.schema.json
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
 samsarix-codegen schema context-manifest > context-manifest-v1.schema.json
@@ -327,9 +334,9 @@ manifest = ContextManifest(files=("src/app.py", "tests/test_app.py"))
 assert parse_context_manifest(render_context_manifest(manifest)) == manifest
 ```
 
-`parse_execution_result()`, `inspect_execution_result()`, and `compare_execution_results()` provide
-the same strict, content-omitting result metadata paths to typed consumers. Unstable implementation
-helpers are not exported from `samsarix_codegen`.
+`parse_execution_result()`, `inspect_execution_result()`, `verify_execution_result()`, and
+`compare_execution_results()` provide the same strict, content-omitting result metadata paths to
+typed consumers. Unstable implementation helpers are not exported from `samsarix_codegen`.
 
 ## Development and package verification
 
@@ -342,8 +349,9 @@ python -m pytest -ra
 python -m build
 ```
 
-CI runs these checks plus built-wheel request/result inspection and comparison, provider-check
-contract, and schema smoke tests on Python 3.10 and 3.14 across Ubuntu and Windows. See
+CI runs these checks plus built-wheel request/result inspection, linkage verification, and
+comparison, provider-check contract, and schema smoke tests on Python 3.10 and 3.14 across Ubuntu
+and Windows. See
 [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines

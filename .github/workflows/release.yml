@@ -97,6 +97,8 @@ jobs:
             > "${RUNNER_TEMP}/result-comparison.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema result-inspection \
             > "${RUNNER_TEMP}/result-inspection.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema result-verification \
+            > "${RUNNER_TEMP}/result-verification.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema context-manifest \
             > "${RUNNER_TEMP}/context-manifest.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
@@ -105,6 +107,8 @@ jobs:
             "from samsarix_codegen import ExecutionResult, compare_execution_results; fingerprint='sha256:' + ('0' * 64); base=ExecutionResult(fingerprint, 'a', 'one', 1, 1, 2); target=ExecutionResult(fingerprint, 'b', 'two', 1, 2, 3); comparison=compare_execution_results(base, target); assert comparison.model_changed and not comparison.response_identical"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
             "from samsarix_codegen import ExecutionResult, inspect_execution_result; fingerprint='sha256:' + ('0' * 64); inspection=inspect_execution_result(ExecutionResult(fingerprint, 'fixture', 'private response', 1, 2, 3)); assert inspection.request_fingerprint == fingerprint and inspection.summary.response_chars == 16"
+          "${RUNNER_TEMP}/release-venv/bin/python" -c \
+            "from samsarix_codegen import ChatResult, PromptRequest, Task, build_messages, create_request_artifact, ExecutionResult, verify_execution_result; request=PromptRequest(Task.REVIEW, 'fixture'); artifact=create_request_artifact(build_messages(request), request.files); result=ExecutionResult(artifact.fingerprint, 'fixture', 'private response', 1, 2, 3); verification=verify_execution_result(artifact, result); assert verification.request_fingerprint == artifact.fingerprint and verification.result.response_chars == 16"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
             "from samsarix_codegen import ContextManifest, parse_context_manifest, render_context_manifest; value=ContextManifest(('src/app.py',)); assert parse_context_manifest(render_context_manifest(value)) == value"
       - name: Upload Python distributions

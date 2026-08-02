@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Samsarix Codegen Execution Result Verification",
+  "description": "Content-omitting linkage metadata for one validated request artifact and execution result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request", "result"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fingerprint",
+        "messages",
+        "context_items",
+        "context_bytes",
+        "estimated_input_tokens"
+      ],
+      "properties": {
+        "fingerprint": {"$ref": "#/$defs/fingerprint"},
+        "messages": {"type": "integer", "minimum": 1, "maximum": 32},
+        "context_items": {"type": "integer", "minimum": 0, "maximum": 100},
+        "context_bytes": {"type": "integer", "minimum": 0},
+        "estimated_input_tokens": {"type": "integer", "minimum": 1}
+      }
+    },
+    "result": {"$ref": "#/$defs/result_summary"}
+  },
+  "$defs": {
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "usage_value": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "result_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "response", "usage"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chars", "bytes", "sha256"],
+          "properties": {
+            "chars": {"type": "integer", "minimum": 1, "maximum": 12582912},
+            "bytes": {"type": "integer", "minimum": 1, "maximum": 12582912},
+            "sha256": {"$ref": "#/$defs/fingerprint"}
+          }
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+          "properties": {
+            "prompt_tokens": {"$ref": "#/$defs/usage_value"},
+            "completion_tokens": {"$ref": "#/$defs/usage_value"},
+            "total_tokens": {"$ref": "#/$defs/usage_value"}
+          }
+        }
+      }
+    }
+  }
+}

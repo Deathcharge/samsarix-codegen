@@ -11,6 +11,7 @@ from samsarix_codegen import (
 from samsarix_codegen import (
     render_execution_result as public_render_execution_result,
 )
+from samsarix_codegen import verify_execution_result as public_verify_execution_result
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
     MAX_RESULT_BYTES,
@@ -18,6 +19,7 @@ from samsarix_codegen.artifact import (
     ExecutionResultComparison,
     ExecutionResultInspection,
     ExecutionResultSummary,
+    ExecutionResultVerification,
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
@@ -29,8 +31,10 @@ from samsarix_codegen.artifact import (
     render_execution_result,
     render_execution_result_comparison,
     render_execution_result_inspection,
+    render_execution_result_verification,
     render_request_artifact,
     require_fingerprint,
+    verify_execution_result,
 )
 from samsarix_codegen.errors import ArtifactError
 from samsarix_codegen.models import ChatResult, ContextFile, PromptRequest, Task
@@ -244,6 +248,9 @@ def test_execution_result_comparison_public_values_fail_closed() -> None:
     with pytest.raises(ArtifactError, match="invalid request fingerprint"):
         ExecutionResultInspection("invalid", summary)
 
+    with pytest.raises(ArtifactError, match="request messages"):
+        ExecutionResultVerification(fingerprint, True, 0, 0, 1, summary)
+
 
 def test_execution_result_inspection_is_typed_content_omitting_metadata() -> None:
     artifact = make_artifact()
@@ -274,6 +281,49 @@ def test_execution_result_inspection_is_typed_content_omitting_metadata() -> Non
         inspect_execution_result(object())  # type: ignore[arg-type]
     with pytest.raises(ArtifactError, match="format must be"):
         render_execution_result_inspection(inspection, output_format="yaml")
+
+
+def test_execution_result_verification_links_request_without_contents() -> None:
+    artifact = make_artifact()
+    result = parse_execution_result(
+        render_execution_result(
+            artifact,
+            ChatResult("private result α", prompt_tokens=10, completion_tokens=4, total_tokens=14),
+            model="model-a",
+        )
+    )
+
+    verification = verify_execution_result(artifact, result)
+    text = render_execution_result_verification(verification)
+    payload = json.loads(render_execution_result_verification(verification, output_format="json"))
+
+    assert verification == public_verify_execution_result(artifact, result)
+    assert payload["request"]["fingerprint"] == artifact.fingerprint
+    assert payload["request"]["messages"] == len(artifact.messages)
+    assert payload["request"]["context_items"] == 1
+    assert payload["request"]["context_bytes"] == 15
+    assert payload["request"]["estimated_input_tokens"] == artifact.estimated_input_tokens
+    assert payload["result"]["model"] == "model-a"
+    assert payload["result"]["response"]["bytes"] == len("private result α".encode())
+    assert "references the supplied validated request" in text
+    for private_content in ("Review this", "print('hello')", "private result α"):
+        assert private_content not in text
+        assert private_content not in json.dumps(payload, ensure_ascii=False)
+
+    with pytest.raises(ArtifactError, match="format must be"):
+        render_execution_result_verification(verification, output_format="yaml")
+
+
+def test_execution_result_verification_rejects_a_different_request() -> None:
+    artifact = make_artifact()
+    other_request = PromptRequest(Task.REVIEW, "Review something else")
+    other_artifact = create_request_artifact(build_messages(other_request), other_request.files)
+    result = parse_execution_result(
+        render_execution_result(other_artifact, ChatResult("private"), model="model-a")
+    )
+
+    with pytest.raises(ArtifactError, match="does not reference the supplied request"):
+        verify_execution_result(artifact, result)
 
 
 def test_execution_result_comparison_is_same_request_and_content_omitting() -> None:
