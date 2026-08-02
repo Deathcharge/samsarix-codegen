@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "expected_model": "example-review-model",
+  "max_response_bytes": 256
+}

@@ -87,13 +87,16 @@ jobs:
           samsarix-codegen schema execution-evidence > execution-evidence.schema.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('execution-evidence.schema.json', encoding='utf-8')); Draft202012Validator.check_schema(schema)"
           example_plan_fingerprint="$(samsarix-codegen verify-plan examples/execution-request-v2.json examples/execution-plan-v1.json --format fingerprint)"
+          example_policy_fingerprint="$(samsarix-codegen fingerprint-policy examples/execution-evidence-policy-v1.json)"
           samsarix-codegen verify-execution \
             examples/execution-request-v2.json \
             examples/execution-plan-v1.json \
             examples/execution-result-v2.json \
             --expect-plan-fingerprint "$example_plan_fingerprint" \
+            --policy examples/execution-evidence-policy-v1.json \
+            --expect-policy-fingerprint "$example_policy_fingerprint" \
             --format json > checked-in-execution-evidence.json
-          python -c "import json; actual=json.load(open('checked-in-execution-evidence.json', encoding='utf-8')); expected=json.load(open('examples/execution-evidence-v1.json', encoding='utf-8')); assert actual == expected"
+          python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('execution-evidence.schema.json', encoding='utf-8')); actual=json.load(open('checked-in-execution-evidence.json', encoding='utf-8')); expected=json.load(open('examples/execution-evidence-v2.json', encoding='utf-8')); Draft202012Validator(schema).validate(actual); assert actual == expected"
           samsarix-codegen schema provider-check > provider-check.schema.json
           python -c "from pathlib import Path; from samsarix_codegen import ProviderCheckReport, render_provider_check; Path('provider-check.json').write_text(render_provider_check(ProviderCheckReport(model='fixture-model', max_output_tokens=64, response_chars=11), output_format='json'), encoding='utf-8')"
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('provider-check.schema.json', encoding='utf-8')); payload=json.load(open('provider-check.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"

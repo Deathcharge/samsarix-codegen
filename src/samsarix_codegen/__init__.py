@@ -70,9 +70,11 @@ from samsarix_codegen.provider_check import (
     render_provider_check,
 )
 from samsarix_codegen.result_policy import (
+    fingerprint_execution_result_policy,
     load_execution_result_policy,
     parse_execution_result_policy,
     render_execution_result_policy,
+    require_execution_result_policy_fingerprint,
 )
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 from samsarix_codegen.self_check import SelfCheckReport, render_self_check, run_self_check
@@ -108,6 +110,7 @@ __all__ = [
     "create_execution_plan",
     "estimate_tokens",
     "enforce_execution_result_policy",
+    "fingerprint_execution_result_policy",
     "inspect_execution_result",
     "load_context_files",
     "load_context_manifest",
@@ -136,6 +139,7 @@ __all__ = [
     "render_self_check",
     "render_contract_schema",
     "require_fingerprint",
+    "require_execution_result_policy_fingerprint",
     "run_self_check",
     "provider_config_from_execution_plan",
     "verify_execution_plan",

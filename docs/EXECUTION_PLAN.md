@@ -31,10 +31,12 @@ plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.jso
   --format fingerprint)"
 samsarix-codegen verify-plan request.json execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" --format json > plan-verification.json
+
+policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
 ```
 
-The credential-bearing job needs the two explicit files, the separately approved plan fingerprint,
-and an optional environment-only API key:
+The credential-bearing job needs the two explicit files, separately approved plan and policy
+fingerprints, the explicit policy file, and an optional environment-only API key:
 
 ```bash
 export SAMSARIX_API_KEY="your-provider-key"
@@ -45,6 +47,8 @@ samsarix-codegen execute request.json \
 
 samsarix-codegen verify-execution request.json execution-plan.json result.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy result-policy.json \
+  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > execution-evidence.json
 ```
 
@@ -53,7 +57,9 @@ the plan's internal fingerprint, request linkage, estimated-input budget, and op
 approved plan fingerprint before constructing the client. It then makes one non-streaming request.
 The plan-backed JSON result records the exact plan fingerprint. `verify-execution` uses that field
 to validate the complete request/plan/result chain later without network access or content
-disclosure.
+disclosure. When an explicit result policy is supplied, it also requires the exact separately
+approved policy fingerprint, enforces every rule, and records the fingerprint and rules in evidence
+schema version 2. The [result-policy contract](RESULT_POLICY.md) defines that final gate.
 
 ## Schema version 1
 
@@ -116,7 +122,7 @@ samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
 samsarix-codegen schema execution-plan-verification \
   > execution-plan-verification-v1.schema.json
 samsarix-codegen schema execution-evidence \
-  > execution-evidence-verification-v1.schema.json
+  > execution-evidence-verification-v2.schema.json
 ```
 
 JSON Schema validates the portable structure. The CLI or typed parser remains authoritative for
@@ -130,19 +136,23 @@ the approved value is held separately under stronger access control. An actor ab
 the plan and that expected value can still bypass the handoff.
 
 The plan does not authenticate the endpoint, provider, model label, TLS operator, provider-reported
-usage, or result. The result's plan fingerprint and `verify-execution` establish local structural
-linkage, not signed provider attestation: an actor who can rewrite every document can construct a
-new consistent chain. The requested model is recorded separately from the provider-reported
-response model because proxies and aliases can legitimately return a different label. Neither
-label proves which infrastructure served the request. The evidence does not establish monetary
-cost because current price schedules remain external. External access controls,
+usage, or result. The result's plan fingerprint, optional policy fingerprint, and
+`verify-execution` establish local structural linkage and deterministic limits, not signed provider
+attestation: an actor who can rewrite every document can construct a new consistent chain. The
+requested model is recorded separately from the provider-reported response model because proxies
+and aliases can legitimately return a different label. Neither label proves which infrastructure
+served the request. The evidence does not establish monetary cost because current price schedules
+remain external. External access controls,
 signing/attestation, endpoint governance, provider logs, and billing records remain the operator's
 responsibility when those properties matter.
 
 The checked-in [request](../examples/execution-request-v2.json),
 [plan](../examples/execution-plan-v1.json), [synthetic result](../examples/execution-result-v2.json),
-and [evidence](../examples/execution-evidence-v1.json) form one runnable offline chain. The test
-suite rebuilds the request from `examples/sample.py`, verifies all three artifacts through the
-public API and CLI, and requires the computed evidence to equal the checked-in record. No provider
-request produced the explicitly labeled synthetic result. Create a new plan for every real request
-rather than editing or reusing the fixture.
+[policy](../examples/execution-evidence-policy-v1.json), and
+[evidence](../examples/execution-evidence-v2.json) form one runnable policy-bound offline chain. The
+test suite rebuilds the request from `examples/sample.py`, verifies all four inputs through the
+public API and CLI, and requires the computed evidence to equal the checked-in record. The legacy
+version 1 evidence and schema remain bundled for existing external consumers. No provider request
+produced the explicitly labeled synthetic result. Create a new plan for every real request rather
+than editing or reusing the fixture; reuse a team policy only while its exact fingerprint and rules
+remain the intended approval.

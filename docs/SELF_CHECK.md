@@ -21,8 +21,9 @@ The command performs five fail-closed checks using only package code and bundled
    example, then compare its pinned fingerprint.
 3. Build and parse the credential-free execution plan, then compare its pinned fingerprint.
 4. Build and parse an explicitly synthetic result and compare its response hash.
-5. Verify the complete request/plan/result chain and its input/output limits through the public
-   evidence implementation.
+5. Verify the complete request/plan/result chain, pin the deterministic example result-policy
+   fingerprint, enforce its exact model and response-byte rules, and check input/output limits
+   through the public evidence implementation.
 
 A passing report includes the package version, Python implementation/version, contract count, and
 content-omitting request, plan, and response fingerprints. It explicitly records
@@ -36,4 +37,4 @@ The self-check proves that this installed package can reproduce its own known of
 does not inspect a project, authenticate an artifact, validate a provider, measure model quality,
 test endpoint availability, or prove that a future real execution will be safe. Run
 `provider-check` separately only when one explicit network request and any associated provider cost
-are approved. Review every real request and execution plan independently.
+are approved. Review every real request, execution plan, and result policy independently.

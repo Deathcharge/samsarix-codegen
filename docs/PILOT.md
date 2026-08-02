@@ -110,6 +110,12 @@ samsarix-codegen verify-plan request.json execution-plan.json `
   --expect-plan-fingerprint $planFingerprint `
   --format json > plan-verification.json
 Get-Content execution-plan.json
+
+@'
+{"schema_version":1,"max_response_bytes":262144}
+'@ | Set-Content -Encoding utf8 result-policy.json
+$policyFingerprint = samsarix-codegen fingerprint-policy result-policy.json
+Get-Content result-policy.json
 ```
 
 The participant confirms that the exact prompt contains only the intended diff and separately
@@ -125,6 +131,8 @@ samsarix-codegen execute request.json `
 
 samsarix-codegen verify-execution request.json execution-plan.json result.json `
   --expect-plan-fingerprint $planFingerprint `
+  --policy result-policy.json `
+  --expect-policy-fingerprint $policyFingerprint `
   --format json > execution-evidence.json
 ```
 
@@ -167,7 +175,8 @@ Get-Content incident-plan.json
 Stop before execution if the exact prompt contains a secret, personal data, or context that the
 selected provider is not authorized to receive. If execution is approved, use the same
 plan-backed `execute` and `verify-execution` sequence as Session A, substituting the incident file
-names and incident plan fingerprint.
+names and incident plan fingerprint while reusing the same reviewed result policy and policy
+fingerprint.
 
 ## Results record
 
@@ -204,12 +213,12 @@ free-form text. Keep `pilot-record.json` untracked unless its disclosure has bee
 Call the pilot complete only when all of these are true:
 
 1. At least three developers complete staged-review artifact build, exact-prompt inspection,
-   request fingerprint capture, plan-settings review, and plan fingerprint capture from the same
-   wheel digest and commit.
+   request fingerprint capture, plan-settings review, plan fingerprint capture, result-policy
+   review, and policy fingerprint capture from the same wheel digest and commit.
 2. Both workflows are exercised, including at least one selected-log session.
-3. Every provider check and execution is attempted at most once. Every successful execution uses a
-   plan fingerprint and passes `verify-execution`; failures remain failures rather than being rerun
-   until a pass appears.
+3. Every provider check and execution is attempted at most once. Every successful execution uses
+   approved plan and policy fingerprints and passes policy-bound `verify-execution`; failures remain
+   failures rather than being rerun until a pass appears.
 4. At least two participants score clarity and usefulness at 4 or higher and answer `yes` or `maybe`
    to reuse.
 5. No session reads an unintended file, sends unreviewed context, exposes a credential, or requires

@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 
 from samsarix_codegen import (
+    fingerprint_execution_result_policy as public_fingerprint_execution_result_policy,
+)
+from samsarix_codegen import (
     load_execution_result_policy as public_load_execution_result_policy,
 )
 from samsarix_codegen import (
@@ -14,6 +17,9 @@ from samsarix_codegen import (
 )
 from samsarix_codegen import (
     render_execution_result_policy as public_render_execution_result_policy,
+)
+from samsarix_codegen import (
+    require_execution_result_policy_fingerprint as public_require_policy_fingerprint,
 )
 from samsarix_codegen.artifact import (
     MAX_RESULT_BYTES,
@@ -23,9 +29,11 @@ from samsarix_codegen.artifact import (
 from samsarix_codegen.errors import ArtifactError
 from samsarix_codegen.result_policy import (
     MAX_RESULT_POLICY_BYTES,
+    fingerprint_execution_result_policy,
     load_execution_result_policy,
     parse_execution_result_policy,
     render_execution_result_policy,
+    require_execution_result_policy_fingerprint,
 )
 
 
@@ -56,6 +64,28 @@ def test_result_policy_round_trips_as_an_exact_versioned_contract() -> None:
     }
     assert public_parse_execution_result_policy(rendered) == policy
     assert public_render_execution_result_policy(policy) == rendered
+
+
+def test_result_policy_fingerprint_is_canonical_and_approval_check_is_fail_closed() -> None:
+    policy = make_policy()
+    fingerprint = fingerprint_execution_result_policy(policy)
+    differently_formatted = parse_execution_result_policy(
+        '{"max_total_tokens":12000,"max_completion_tokens":2000,'
+        '"max_prompt_tokens":10000,"max_response_bytes":100000,'
+        '"expected_model":"model-a","schema_version":1}'
+    )
+
+    assert fingerprint.startswith("sha256:")
+    assert len(fingerprint) == 71
+    assert fingerprint_execution_result_policy(differently_formatted) == fingerprint
+    assert public_fingerprint_execution_result_policy(policy) == fingerprint
+    assert require_execution_result_policy_fingerprint(policy, fingerprint) == fingerprint
+    assert public_require_policy_fingerprint(policy, fingerprint) == fingerprint
+
+    with pytest.raises(ArtifactError, match="not canonical sha256"):
+        require_execution_result_policy_fingerprint(policy, "SHA256:invalid")
+    with pytest.raises(ArtifactError, match="does not match the expected fingerprint"):
+        require_execution_result_policy_fingerprint(policy, "sha256:" + "0" * 64)
 
 
 def test_loads_result_policy_from_an_explicit_file(tmp_path: Path) -> None:

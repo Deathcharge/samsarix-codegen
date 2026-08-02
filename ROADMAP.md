@@ -16,9 +16,10 @@ and CI workflows without implicit discovery. Versioned execution plans now bind 
 to exact non-secret provider settings and budgets across an offline-to-credentialed handoff without
 execution-time override precedence. Plan-backed result schema version 2 now carries that reviewed
 plan fingerprint, and offline execution verification validates the full request/plan/result chain
-plus requested-model and reported-output-budget consistency without content disclosure.
-A checked-in offline request/plan/synthetic-result chain now makes that verifier runnable from a
-clone without credentials, a provider process, or network access.
+plus requested-model and reported-output-budget consistency without content disclosure. Evidence
+schema version 2 can also bind and enforce one separately approved result-policy fingerprint in the
+same fail-closed command. A checked-in offline request/plan/synthetic-result/policy chain now makes
+that verifier runnable from a clone without credentials, a provider process, or network access.
 An installed-package self-check reproduces the same deterministic chain and validates every
 bundled contract before a pilot participant selects project context or configures a provider.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
@@ -48,8 +49,8 @@ Current hardening backlog:
   and standalone plan/verification schemas are implemented; live endpoints remain optional owner
   evidence rather than a hidden release dependency.
 - Plan-bound result schema version 2, legacy result parsing, separate requested/response model
-  labels, and offline request/plan/result evidence verification are implemented and locally tested;
-  the evidence is intentionally not a provider signature or attestation.
+  labels, and policy-capable offline request/plan/result evidence verification are implemented and
+  locally tested; the evidence is intentionally not a provider signature or attestation.
 - Exact stored-prompt rendering and content-safe artifact comparison are implemented and locally
   package-verified for the review-tools follow-up.
 - Strict execution-result parsing and content-omitting same-request comparison are implemented for

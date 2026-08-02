@@ -14,6 +14,7 @@ from samsarix_codegen.cli import main
 from samsarix_codegen.schema import load_contract_schema
 from samsarix_codegen.self_check import (
     EXPECTED_PLAN_FINGERPRINT,
+    EXPECTED_POLICY_FINGERPRINT,
     EXPECTED_REQUEST_FINGERPRINT,
     EXPECTED_RESPONSE_FINGERPRINT,
     SELF_CHECK_SOURCE,
@@ -41,7 +42,7 @@ def test_self_check_matches_the_checked_in_offline_chain(monkeypatch) -> None:
         (REPOSITORY_ROOT / "examples/execution-plan-v1.json").read_text(encoding="utf-8")
     )
     example_evidence = json.loads(
-        (REPOSITORY_ROOT / "examples/execution-evidence-v1.json").read_text(encoding="utf-8")
+        (REPOSITORY_ROOT / "examples/execution-evidence-v2.json").read_text(encoding="utf-8")
     )
 
     assert (
@@ -52,6 +53,7 @@ def test_self_check_matches_the_checked_in_offline_chain(monkeypatch) -> None:
     assert report.request_fingerprint == EXPECTED_REQUEST_FINGERPRINT
     assert report.plan_fingerprint == example_plan["plan_fingerprint"]
     assert report.plan_fingerprint == EXPECTED_PLAN_FINGERPRINT
+    assert example_evidence["result_policy"]["fingerprint"] == EXPECTED_POLICY_FINGERPRINT
     assert report.response_fingerprint == example_evidence["result"]["response"]["sha256"]
     assert report.response_fingerprint == EXPECTED_RESPONSE_FINGERPRINT
     assert payload["network"] == {"attempted": False, "provider_called": False}
