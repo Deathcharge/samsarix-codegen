@@ -345,6 +345,7 @@ def test_execution_result_policy_fails_closed_when_required_usage_is_missing() -
 def test_execution_result_policy_rejects_invalid_public_values() -> None:
     for kwargs in (
         {"expected_model": "unsafe\nmodel"},
+        {"expected_model": "\ud800"},
         {"max_response_bytes": 0},
         {"max_response_bytes": MAX_RESULT_BYTES + 1},
         {"max_response_bytes": True},

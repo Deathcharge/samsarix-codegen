@@ -11,6 +11,8 @@ from samsarix_codegen.artifact import (
     MAX_ARTIFACT_CONTEXT_ITEMS,
     MAX_ARTIFACT_MESSAGES,
     MAX_RESULT_BYTES,
+    MAX_RESULT_POLICY_TOKENS,
+    ExecutionResultPolicy,
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
@@ -30,6 +32,7 @@ from samsarix_codegen.errors import ConfigurationError
 from samsarix_codegen.models import ChatResult, ContextFile, PromptRequest, Task
 from samsarix_codegen.prompt import build_messages
 from samsarix_codegen.provider_check import ProviderCheckReport, render_provider_check
+from samsarix_codegen.result_policy import render_execution_result_policy
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 
 
@@ -105,6 +108,15 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     context_manifest_payload = ContextManifest(
         files=("src/app.py", "tests/test_app.py")
     ).to_payload()
+    result_policy_payload = json.loads(
+        render_execution_result_policy(
+            ExecutionResultPolicy(
+                expected_model="local-model",
+                max_response_bytes=100_000,
+                max_total_tokens=1_000,
+            )
+        )
+    )
 
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
@@ -122,6 +134,7 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     Draft202012Validator(load_contract_schema("context-manifest")).validate(
         context_manifest_payload
     )
+    Draft202012Validator(load_contract_schema("result-policy")).validate(result_policy_payload)
 
 
 @pytest.mark.parametrize(
@@ -159,6 +172,33 @@ def test_result_verification_schema_limits_match_runtime() -> None:
     assert request_properties["context_items"]["maximum"] == MAX_ARTIFACT_CONTEXT_ITEMS
     assert result_response_properties["chars"]["maximum"] == MAX_RESULT_BYTES
     assert result_response_properties["bytes"]["maximum"] == MAX_RESULT_BYTES
+
+
+def test_result_policy_schema_limits_match_runtime() -> None:
+    schema = load_contract_schema("result-policy")
+
+    assert schema["properties"]["max_response_bytes"]["maximum"] == MAX_RESULT_BYTES
+    for field in ("max_prompt_tokens", "max_completion_tokens", "max_total_tokens"):
+        assert schema["properties"][field]["maximum"] == MAX_RESULT_POLICY_TOKENS
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"schema_version": 1},
+        {"schema_version": 1, "unexpected": True},
+        {"schema_version": 1, "expected_model": None},
+        {"schema_version": 1, "expected_model": " model-a"},
+        {"schema_version": 1, "max_response_bytes": 0},
+        {"schema_version": 1, "max_response_bytes": MAX_RESULT_BYTES + 1},
+        {"schema_version": 1, "max_total_tokens": -1},
+        {"schema_version": 1, "max_total_tokens": True},
+        {"schema_version": 1, "max_total_tokens": MAX_RESULT_POLICY_TOKENS + 1},
+    ],
+)
+def test_result_policy_schema_rejects_contract_drift(payload: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        Draft202012Validator(load_contract_schema("result-policy")).validate(payload)
 
 
 @pytest.mark.parametrize(

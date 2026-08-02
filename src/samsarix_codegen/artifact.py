@@ -24,6 +24,7 @@ RESULT_VERIFICATION_SCHEMA_VERSION = 1
 RESULT_COMPARISON_SCHEMA_VERSION = 1
 MAX_ARTIFACT_BYTES = 12 * 1024 * 1024
 MAX_RESULT_BYTES = 12 * 1024 * 1024
+MAX_RESULT_POLICY_TOKENS = (1 << 53) - 1
 MAX_ARTIFACT_MESSAGES = 32
 MAX_ARTIFACT_CONTEXT_ITEMS = 100
 MAX_CONTEXT_NAME_CHARS = 4_096
@@ -240,6 +241,7 @@ class ExecutionResultPolicy:
                 value,
                 label=f"execution result policy {label}",
                 minimum=0,
+                maximum=MAX_RESULT_POLICY_TOKENS,
             )
 
 
@@ -932,6 +934,10 @@ def _normalize_result_model(value: object, *, require_canonical: bool = False) -
         raise ArtifactError(f"execution result model exceeds the {MAX_MODEL_CHARS}-character limit")
     if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
         raise ArtifactError("execution result model contains a control character")
+    try:
+        normalized.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ArtifactError("execution result model is not valid Unicode") from exc
     return normalized
 
 

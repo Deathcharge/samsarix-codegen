@@ -16,6 +16,7 @@ from samsarix_codegen import __version__
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
     MAX_RESULT_BYTES,
+    MAX_RESULT_POLICY_TOKENS,
     ExecutionResult,
     ExecutionResultPolicy,
     RequestArtifact,
@@ -54,6 +55,7 @@ from samsarix_codegen.provider_check import (
     check_provider,
     render_provider_check,
 )
+from samsarix_codegen.result_policy import load_execution_result_policy
 from samsarix_codegen.schema import ContractSchema, render_contract_schema
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1"
@@ -427,6 +429,11 @@ def _add_provider_arguments(
 
 def _add_result_policy_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
+        "--policy",
+        metavar="PATH",
+        help="load deterministic result limits from a versioned JSON policy file",
+    )
+    parser.add_argument(
         "--expect-model",
         help="fail unless the stored result has this exact model label",
     )
@@ -438,32 +445,46 @@ def _add_result_policy_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--max-prompt-tokens",
-        type=_non_negative_int("maximum prompt tokens"),
+        type=_bounded_int(0, MAX_RESULT_POLICY_TOKENS, "maximum prompt tokens"),
         metavar="TOKENS",
         help="fail when reported prompt usage exceeds this value or is missing",
     )
     parser.add_argument(
         "--max-completion-tokens",
-        type=_non_negative_int("maximum completion tokens"),
+        type=_bounded_int(0, MAX_RESULT_POLICY_TOKENS, "maximum completion tokens"),
         metavar="TOKENS",
         help="fail when reported completion usage exceeds this value or is missing",
     )
     parser.add_argument(
         "--max-total-tokens",
-        type=_non_negative_int("maximum total tokens"),
+        type=_bounded_int(0, MAX_RESULT_POLICY_TOKENS, "maximum total tokens"),
         metavar="TOKENS",
         help="fail when reported total usage exceeds this value or is missing",
     )
 
 
 def _enforce_result_policy(result: ExecutionResult, args: argparse.Namespace) -> None:
-    policy = ExecutionResultPolicy(
-        expected_model=args.expect_model,
-        max_response_bytes=args.max_response_bytes,
-        max_prompt_tokens=args.max_prompt_tokens,
-        max_completion_tokens=args.max_completion_tokens,
-        max_total_tokens=args.max_total_tokens,
+    inline_values = (
+        args.expect_model,
+        args.max_response_bytes,
+        args.max_prompt_tokens,
+        args.max_completion_tokens,
+        args.max_total_tokens,
     )
+    if args.policy is not None:
+        if args.policy == "-":
+            raise ConfigurationError("--policy requires a file path and cannot read from stdin")
+        if any(value is not None for value in inline_values):
+            raise ConfigurationError("--policy cannot be combined with inline result-policy flags")
+        policy = load_execution_result_policy(args.policy)
+    else:
+        policy = ExecutionResultPolicy(
+            expected_model=args.expect_model,
+            max_response_bytes=args.max_response_bytes,
+            max_prompt_tokens=args.max_prompt_tokens,
+            max_completion_tokens=args.max_completion_tokens,
+            max_total_tokens=args.max_total_tokens,
+        )
     enforce_execution_result_policy(result, policy)
 
 
@@ -586,19 +607,6 @@ def _bounded_int(minimum: int, maximum: int, label: str) -> Callable[[str], int]
             raise argparse.ArgumentTypeError(f"{label} must be an integer") from exc
         if not minimum <= parsed <= maximum:
             raise argparse.ArgumentTypeError(f"{label} must be between {minimum:,} and {maximum:,}")
-        return parsed
-
-    return parse
-
-
-def _non_negative_int(label: str) -> Callable[[str], int]:
-    def parse(value: str) -> int:
-        try:
-            parsed = int(value)
-        except ValueError as exc:
-            raise argparse.ArgumentTypeError(f"{label} must be an integer") from exc
-        if parsed < 0:
-            raise argparse.ArgumentTypeError(f"{label} must be at least 0")
         return parsed
 
     return parse

@@ -155,6 +155,12 @@ inspection records still require handling appropriate to the underlying result.
 - `--max-prompt-tokens`, `--max-completion-tokens`, and `--max-total-tokens` limit the corresponding
   provider-reported usage fields.
 
+For repeatable team/CI rules, pass one explicit versioned JSON file with
+`--policy PATH`. The [execution-result policy contract](RESULT_POLICY.md) is bounded, strict,
+schema-exportable, and independently parseable. It requires at least one active rule and rejects
+unknown, duplicate, or null fields. File rules cannot be mixed with inline policy flags, so there is
+no hidden override order.
+
 Every configured rule must pass before the command emits its normal inspection or verification
 record. A configured token ceiling fails closed when the provider omitted that field. The gates are
 local, make no network request, preserve the existing content-omitting output contracts, and return
@@ -180,7 +186,7 @@ schema version `1` and request schema version `2`.
 ## Machine-readable contract schemas
 
 The package bundles self-contained
-[JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) files for every JSON envelope:
+[JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) files for every JSON contract:
 
 | CLI name | Contract | Bundled file |
 | --- | --- | --- |
@@ -192,6 +198,7 @@ The package bundles self-contained
 | `result-comparison` | Execution-result comparison schema version 1 | `src/samsarix_codegen/schemas/execution-result-comparison-v1.schema.json` |
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
 | `context-manifest` | Explicit context manifest schema version 1 | `src/samsarix_codegen/schemas/context-manifest-v1.schema.json` |
+| `result-policy` | Execution-result policy schema version 1 | `src/samsarix_codegen/schemas/execution-result-policy-v1.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
 `load_contract_schema()` from Python. The files are package data in both the sdist and wheel.
@@ -202,4 +209,5 @@ bytes sum correctly, estimates match messages, or deltas match their base/target
 `inspect`, `inspect-result`, `verify-result`, `compare`, `compare-results`, or the corresponding
 Python parser for those semantic checks. Context manifests are input contracts rather than
 request/result envelopes; their [separate contract](CONTEXT_MANIFEST.md) defines the additional
-runtime path and containment rules.
+runtime path and containment rules. Result policies are explicitly selected input contracts; their
+[separate contract](RESULT_POLICY.md) defines rule enforcement and trust limits.

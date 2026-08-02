@@ -12,6 +12,15 @@ samsarix-codegen build "Review the context boundary" \
   --format json
 ```
 
+`result-policy-v1.json` is a reusable local/CI policy for a stored result envelope. It requires the
+approved model and applies response and reported-token ceilings without reproducing the response:
+
+```bash
+samsarix-codegen verify-result request.json result.json \
+  --policy examples/result-policy-v1.json \
+  --format json
+```
+
 `review-staged.sh` and `review-staged.ps1` compile the current repository's staged diff into
 `samsarix-review-request.json` (or a path passed as the first argument), validate it, and print its
 fingerprint. They stop when no changes are staged and never contact a model endpoint.

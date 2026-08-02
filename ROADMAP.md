@@ -11,7 +11,8 @@ Current disposition: The productized default is merged and preserved by a rollba
 Versioned machine-readable contracts, explicitly invoked context manifests, an operator-run
 provider conformance check, offline single-result inspection, request/result linkage verification,
 same-request result comparison, and deterministic post-result policy gates are implemented
-milestones.
+milestones. A versioned, checked-in result-policy contract makes those gates repeatable across local
+and CI workflows without implicit discovery.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
 pilot validation, and flagship adoption remain separate decisions.
 
@@ -43,7 +44,8 @@ Current hardening backlog:
 - Offline request/result linkage verification confirms a result fingerprint against a concrete
   validated artifact without exposing either content body; it intentionally is not a signature.
 - Exact-model, UTF-8 response-byte, and reported-token limits can now fail closed in CI through
-  either single-result path; they intentionally do not authenticate usage or score quality.
+  either single-result path. A strict versioned file can carry the same rules across team workflows;
+  neither form authenticates usage or scores quality.
 - Strict versioned context manifests make repeated component reviews portable without automatic
   repository discovery, glob expansion, or a second path-loading boundary.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented

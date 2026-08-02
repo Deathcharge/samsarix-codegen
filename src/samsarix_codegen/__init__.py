@@ -53,6 +53,11 @@ from samsarix_codegen.provider_check import (
     check_provider,
     render_provider_check,
 )
+from samsarix_codegen.result_policy import (
+    load_execution_result_policy,
+    parse_execution_result_policy,
+    render_execution_result_policy,
+)
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 
 __all__ = [
@@ -85,8 +90,10 @@ __all__ = [
     "load_context_files",
     "load_context_manifest",
     "load_contract_schema",
+    "load_execution_result_policy",
     "parse_execution_result",
     "parse_context_manifest",
+    "parse_execution_result_policy",
     "parse_request_artifact",
     "render_artifact_comparison",
     "render_artifact_summary",
@@ -94,6 +101,7 @@ __all__ = [
     "render_execution_result",
     "render_execution_result_comparison",
     "render_execution_result_inspection",
+    "render_execution_result_policy",
     "render_execution_result_verification",
     "render_markdown",
     "render_provider_check",

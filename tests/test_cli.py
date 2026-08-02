@@ -7,6 +7,7 @@ from io import BytesIO, TextIOWrapper
 from pathlib import Path
 
 from samsarix_codegen.artifact import (
+    ExecutionResultPolicy,
     create_request_artifact,
     render_execution_result,
     render_request_artifact,
@@ -14,6 +15,7 @@ from samsarix_codegen.artifact import (
 from samsarix_codegen.cli import main
 from samsarix_codegen.models import ChatResult, PromptRequest, Task
 from samsarix_codegen.prompt import build_messages
+from samsarix_codegen.result_policy import render_execution_result_policy
 
 EXPECTED_PROVIDER_CHECK_MESSAGES = (
     {
@@ -573,6 +575,83 @@ def test_inspect_result_policy_fails_closed_for_missing_usage(capsys) -> None:
     assert "secret provider response" not in captured.err
 
 
+def test_inspect_result_loads_a_policy_file_and_rejects_excess_usage(
+    tmp_path: Path, capsys
+) -> None:
+    request = PromptRequest(Task.REVIEW, "Review provider behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    result_path = tmp_path / "result.json"
+    policy_path = tmp_path / "result-policy.json"
+    result_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult("secret provider response", 10, 3, 13),
+            model="model-a",
+        ),
+        encoding="utf-8",
+    )
+    policy_path.write_text(
+        render_execution_result_policy(ExecutionResultPolicy(max_total_tokens=12)),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["inspect-result", str(result_path), "--policy", str(policy_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
+    assert "total token usage is 13" in captured.err
+    assert "secret provider response" not in captured.err
+
+
+def test_result_policy_file_cannot_mix_with_inline_rules(tmp_path: Path, capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review provider behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    result_path = tmp_path / "result.json"
+    policy_path = tmp_path / "result-policy.json"
+    result_path.write_text(
+        render_execution_result(artifact, ChatResult("private"), model="model-a"),
+        encoding="utf-8",
+    )
+    policy_path.write_text(
+        render_execution_result_policy(ExecutionResultPolicy(expected_model="model-a")),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "inspect-result",
+            str(result_path),
+            "--policy",
+            str(policy_path),
+            "--expect-model",
+            "model-a",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "cannot be combined" in captured.err
+
+
+def test_result_policy_file_cannot_read_from_stdin(tmp_path: Path, capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review provider behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    result_path = tmp_path / "result.json"
+    result_path.write_text(
+        render_execution_result(artifact, ChatResult("private"), model="model-a"),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["inspect-result", str(result_path), "--policy", "-"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "requires a file path" in captured.err
+
+
 def test_inspect_result_rejects_invalid_envelope(capsys) -> None:
     exit_code = main(["inspect-result", "-"], stdin=BytesIO(b"{}"))
 
@@ -587,6 +666,7 @@ def test_verify_result_is_machine_readable_and_omits_contents(tmp_path: Path, ca
     artifact = create_request_artifact(build_messages(request), request.files)
     request_path = tmp_path / "request.json"
     result_path = tmp_path / "result.json"
+    policy_path = tmp_path / "result-policy.json"
     request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
     result_path.write_text(
         render_execution_result(
@@ -596,22 +676,26 @@ def test_verify_result_is_machine_readable_and_omits_contents(tmp_path: Path, ca
         ),
         encoding="utf-8",
     )
+    policy_path.write_text(
+        render_execution_result_policy(
+            ExecutionResultPolicy(
+                expected_model="model-a",
+                max_response_bytes=len(b"private provider response"),
+                max_prompt_tokens=10,
+                max_completion_tokens=3,
+                max_total_tokens=13,
+            )
+        ),
+        encoding="utf-8",
+    )
 
     exit_code = main(
         [
             "verify-result",
             str(request_path),
             str(result_path),
-            "--expect-model",
-            "model-a",
-            "--max-response-bytes",
-            str(len(b"private provider response")),
-            "--max-prompt-tokens",
-            "10",
-            "--max-completion-tokens",
-            "3",
-            "--max-total-tokens",
-            "13",
+            "--policy",
+            str(policy_path),
             "--format",
             "json",
         ]
