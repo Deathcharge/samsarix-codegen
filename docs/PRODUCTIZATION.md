@@ -45,6 +45,8 @@ without granting file-write or shell access. The primary journey is:
 4. Record the artifact fingerprint as an approval object, then use `execute --expect-fingerprint`
    against a local or hosted OpenAI-compatible endpoint.
 5. Review text output or retain the structured result envelope and provider-reported usage.
+6. Optionally apply deterministic model, response-byte, and reported-token policy gates before CI
+   retains a content-omitting inspection or request/result verification record.
 
 ### Independent reason to exist
 
@@ -122,6 +124,10 @@ Research references:
     schema-validatable, and composable. They flow into the existing contained loader and do not add
     globs, ignore rules, implicit lookup, or a second request provenance format; the resulting
     artifact records the effective context content and hashes.
+17. **Fail-closed result policy.** The same typed local policy can gate one validated envelope on an
+    exact model label, actual UTF-8 response size, and reported token ceilings. Missing usage rejects
+    a configured token rule; output contracts remain unchanged and no evaluator/network authority
+    is added.
 
 ## Assumptions
 
@@ -193,6 +199,7 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add strict same-request execution-result comparison without reproducing response contents.
 - [x] Add strict single-result inspection without reproducing response contents.
 - [x] Add offline request/result linkage verification without reproducing either content body.
+- [x] Add deterministic post-result model, size, and reported-usage gates for CI.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
@@ -201,6 +208,7 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
 - [x] `build`, `inspect`, `inspect-result`, `verify-result`, `compare`, `compare-results`, `execute`,
   `run`, `schema`, and `provider-check` commands with useful help and version behavior.
+- [x] Fail-closed post-result policy flags and a typed public enforcement API.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -243,11 +251,15 @@ Final command evidence is recorded in the **Final verification** section after e
   evidence before a comparison partner exists.
 - Added offline request/result linkage verification and an independent versioned schema for
   content-omitting CI handoff evidence.
+- Added optional exact-model, UTF-8 response-byte, and reported-token policy gates to both
+  single-result paths, with missing usage rejected whenever its limit is configured.
 - Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
   installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
   full-SHA-pinned Actions, provenance attestations, gated Trusted Publishing, immutable-ready GitHub
   release assembly, and a recovery runbook.
+- Tightened the wheel audit to reject any unexpected top-level import package or dist-info directory
+  after clean-room verification exposed stale local build-cache contamination.
 
 ## Deferred work and rationale
 
@@ -294,6 +306,8 @@ required for local evaluation and none was performed.
   syntax is expanded as a glob.
 - UTF-8/NUL checks reject accidental binary or opaque inputs.
 - Count, byte, character, token, timeout, and response caps prevent unbounded local/API work.
+- Optional post-result limits reject an unexpected model, oversized UTF-8 response, excessive
+  reported usage, or missing usage needed by a configured token rule before emitting normal output.
 - Remote plaintext transport and URL credentials are rejected; Python's default TLS verification is
   retained.
 - HTTP redirects are rejected so bearer credentials cannot be forwarded to a provider-selected
@@ -313,6 +327,10 @@ required for local evaluation and none was performed.
   potentially costly fallback requests.
 - The four-bytes-per-token estimate can differ materially by tokenizer and language. Actual price is
   provider/model-specific and intentionally not fabricated.
+- Result model labels and usage remain unauthenticated provider-envelope data; policy checks do not
+  prove authorship, normalize tokenization, or establish monetary cost or response quality.
+- Python build frontends can reuse a local `build/` cache. The release audit rejects unexpected wheel
+  roots, but local releasers should still build from a clean checkout or remove generated caches.
 
 ## Distribution and sustainability
 
@@ -527,6 +545,28 @@ as a pass; the final wheel's existence and Twine result were rechecked separatel
 Exact final distribution digests are attached to the corresponding pull request because recording
 them inside the sdist would change the sdist digest.
 
+### Result-policy and wheel-integrity follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing, and 185 tests. Optional policy
+flags on both single-result commands passed at exact model/byte/token boundaries and rejected an
+unexpected model, every exceeded limit, and provider-omitted usage needed by a configured ceiling.
+The typed public API enforced the same rules, including UTF-8 byte counting and bounded public
+values, without changing either content-omitting output contract.
+
+The first local package build exposed stale ignored `build/` cache content: its wheel contained a
+legacy `helix_codegen` root, and the prior release audit incorrectly accepted it. The cache was moved
+to the temporary evidence directory rather than deleted. A new regression test and stricter audit
+then rejected that exact wheel, a clean rebuild contained only `samsarix_codegen` plus its matching
+dist-info directory, and Twine and the release audit passed. The extracted clean sdist passed lint,
+formatting, strict typing, and all 185 tests before rebuilding a Twine-valid wheel.
+
+A dependency-free fresh environment installed the clean repository wheel, reported no broken
+requirements, and resolved the public API from that environment. Outside the checkout,
+`verify-result` passed every exact limit with exit `0`; `inspect-result` rejected excessive reported
+usage with exit `5`, empty stdout, and no response disclosure. The installed typed policy API passed
+the same exact limits. Exact final distribution digests are attached to the corresponding pull
+request because recording them inside the sdist would change the sdist digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -547,7 +587,8 @@ them inside the sdist would change the sdist digest.
 
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
-review-first artifact workflow, offline review/comparison and request/result linkage tools,
+review-first artifact workflow, offline review/comparison, request/result linkage and deterministic
+result-policy tools,
 reusable explicit context manifests, independent JSON contracts, and an operator-run provider
 conformance check; each has local clean-package evidence recorded above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release

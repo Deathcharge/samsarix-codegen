@@ -6,6 +6,9 @@ import json
 import pytest
 
 from samsarix_codegen import (
+    enforce_execution_result_policy as public_enforce_execution_result_policy,
+)
+from samsarix_codegen import (
     inspect_execution_result as public_inspect_execution_result,
 )
 from samsarix_codegen import (
@@ -18,11 +21,13 @@ from samsarix_codegen.artifact import (
     ExecutionResult,
     ExecutionResultComparison,
     ExecutionResultInspection,
+    ExecutionResultPolicy,
     ExecutionResultSummary,
     ExecutionResultVerification,
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
+    enforce_execution_result_policy,
     inspect_execution_result,
     parse_execution_result,
     parse_request_artifact,
@@ -281,6 +286,77 @@ def test_execution_result_inspection_is_typed_content_omitting_metadata() -> Non
         inspect_execution_result(object())  # type: ignore[arg-type]
     with pytest.raises(ArtifactError, match="format must be"):
         render_execution_result_inspection(inspection, output_format="yaml")
+
+
+def test_execution_result_policy_accepts_exact_limits_and_public_api() -> None:
+    artifact = make_artifact()
+    result = ExecutionResult(
+        artifact.fingerprint,
+        "model-a",
+        "secret α",
+        10,
+        3,
+        13,
+    )
+    policy = ExecutionResultPolicy(
+        expected_model="model-a",
+        max_response_bytes=len("secret α".encode()),
+        max_prompt_tokens=10,
+        max_completion_tokens=3,
+        max_total_tokens=13,
+    )
+
+    assert enforce_execution_result_policy(result, policy) is None
+    assert public_enforce_execution_result_policy(result, policy) is None
+
+
+@pytest.mark.parametrize(
+    ("policy", "match"),
+    [
+        (ExecutionResultPolicy(expected_model="model-b"), "does not match"),
+        (ExecutionResultPolicy(max_response_bytes=8), "response is 9 bytes"),
+        (ExecutionResultPolicy(max_prompt_tokens=9), "prompt token usage is 10"),
+        (ExecutionResultPolicy(max_completion_tokens=2), "completion token usage is 3"),
+        (ExecutionResultPolicy(max_total_tokens=12), "total token usage is 13"),
+    ],
+)
+def test_execution_result_policy_rejects_exceeded_limits(
+    policy: ExecutionResultPolicy,
+    match: str,
+) -> None:
+    result = ExecutionResult(make_artifact().fingerprint, "model-a", "secret α", 10, 3, 13)
+
+    with pytest.raises(ArtifactError, match=match):
+        enforce_execution_result_policy(result, policy)
+
+
+def test_execution_result_policy_fails_closed_when_required_usage_is_missing() -> None:
+    result = ExecutionResult(make_artifact().fingerprint, "model-a", "ok", None, None, None)
+
+    for policy in (
+        ExecutionResultPolicy(max_prompt_tokens=0),
+        ExecutionResultPolicy(max_completion_tokens=0),
+        ExecutionResultPolicy(max_total_tokens=0),
+    ):
+        with pytest.raises(ArtifactError, match="was not reported"):
+            enforce_execution_result_policy(result, policy)
+
+
+def test_execution_result_policy_rejects_invalid_public_values() -> None:
+    for kwargs in (
+        {"expected_model": "unsafe\nmodel"},
+        {"max_response_bytes": 0},
+        {"max_response_bytes": MAX_RESULT_BYTES + 1},
+        {"max_response_bytes": True},
+        {"max_prompt_tokens": -1},
+        {"max_completion_tokens": False},
+        {"max_total_tokens": -1},
+    ):
+        with pytest.raises(ArtifactError):
+            ExecutionResultPolicy(**kwargs)
+
+    with pytest.raises(ArtifactError, match="requires a validated result and policy"):
+        enforce_execution_result_policy(object(), ExecutionResultPolicy())  # type: ignore[arg-type]
 
 
 def test_execution_result_verification_links_request_without_contents() -> None:

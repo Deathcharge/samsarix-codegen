@@ -146,6 +146,21 @@ metadata was derived from that envelope. It does not authenticate a provider, es
 quality, or make the unkeyed hashes signatures. A response hash can confirm a guessed response, so
 inspection records still require handling appropriate to the underlying result.
 
+### Post-result policy gates
+
+`inspect-result` and `verify-result` accept the same optional deterministic policy flags:
+
+- `--expect-model MODEL` requires an exact model-label match.
+- `--max-response-bytes BYTES` limits the response's actual UTF-8 byte count.
+- `--max-prompt-tokens`, `--max-completion-tokens`, and `--max-total-tokens` limit the corresponding
+  provider-reported usage fields.
+
+Every configured rule must pass before the command emits its normal inspection or verification
+record. A configured token ceiling fails closed when the provider omitted that field. The gates are
+local, make no network request, preserve the existing content-omitting output contracts, and return
+artifact exit code `5` on rejection. They do not authenticate model labels or usage, normalize
+tokenizers between providers, estimate price, or evaluate response correctness or quality.
+
 `compare-results BASE TARGET` validates two execution-result envelopes and fails unless they
 reference the same request fingerprint. Its text and JSON forms report the common fingerprint,
 whether model labels changed, whether response hashes match, response character/UTF-8 byte counts,

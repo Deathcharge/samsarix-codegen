@@ -120,6 +120,16 @@ def test_artifact_check_rejects_duplicate_wheel_member(tmp_path: Path) -> None:
         verify_artifacts(tmp_path, VERSION)
 
 
+def test_artifact_check_rejects_unexpected_wheel_package(tmp_path: Path) -> None:
+    _write_distribution_pair(tmp_path)
+    wheel = tmp_path / f"samsarix_codegen-{VERSION}-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, mode="a") as archive:
+        archive.writestr("legacy_package/__init__.py", "legacy = True\n")
+
+    with pytest.raises(ReleaseCheckError, match="unexpected top-level paths: legacy_package"):
+        verify_artifacts(tmp_path, VERSION)
+
+
 def _write_distribution_pair(dist_dir: Path, *, dependency: str | None = None) -> None:
     root = f"samsarix_codegen-{VERSION}"
     sdist_path = dist_dir / f"{root}.tar.gz"

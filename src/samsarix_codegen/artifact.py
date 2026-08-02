@@ -213,6 +213,37 @@ class ExecutionResultSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutionResultPolicy:
+    """Optional deterministic limits for one validated execution result."""
+
+    expected_model: str | None = None
+    max_response_bytes: int | None = None
+    max_prompt_tokens: int | None = None
+    max_completion_tokens: int | None = None
+    max_total_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.expected_model is not None:
+            _normalize_result_model(self.expected_model, require_canonical=True)
+        _require_optional_limit(
+            self.max_response_bytes,
+            label="execution result policy response-byte limit",
+            minimum=1,
+            maximum=MAX_RESULT_BYTES,
+        )
+        for label, value in (
+            ("prompt-token limit", self.max_prompt_tokens),
+            ("completion-token limit", self.max_completion_tokens),
+            ("total-token limit", self.max_total_tokens),
+        ):
+            _require_optional_limit(
+                value,
+                label=f"execution result policy {label}",
+                minimum=0,
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionResultInspection:
     """Content-omitting metadata for one validated execution result envelope."""
 
@@ -581,6 +612,48 @@ def inspect_execution_result(result: ExecutionResult) -> ExecutionResultInspecti
     )
 
 
+def enforce_execution_result_policy(
+    result: ExecutionResult,
+    policy: ExecutionResultPolicy,
+) -> None:
+    """Fail unless a validated result satisfies every configured metadata limit."""
+
+    if not isinstance(result, ExecutionResult) or not isinstance(policy, ExecutionResultPolicy):
+        raise ArtifactError(
+            "execution result policy enforcement requires a validated result and policy"
+        )
+    if policy.expected_model is not None and not hmac.compare_digest(
+        result.model, policy.expected_model
+    ):
+        raise ArtifactError(
+            f"execution result model {result.model!r} does not match "
+            f"the expected model {policy.expected_model!r}"
+        )
+
+    response_bytes = _utf8_size(result.response_text, label="execution result response text")
+    if policy.max_response_bytes is not None and response_bytes > policy.max_response_bytes:
+        raise ArtifactError(
+            f"execution result response is {response_bytes:,} bytes; "
+            f"the configured maximum is {policy.max_response_bytes:,}"
+        )
+
+    for label, actual, maximum in (
+        ("prompt token usage", result.prompt_tokens, policy.max_prompt_tokens),
+        ("completion token usage", result.completion_tokens, policy.max_completion_tokens),
+        ("total token usage", result.total_tokens, policy.max_total_tokens),
+    ):
+        if maximum is None:
+            continue
+        if actual is None:
+            raise ArtifactError(
+                f"execution result {label} was not reported; cannot enforce the configured maximum"
+            )
+        if actual > maximum:
+            raise ArtifactError(
+                f"execution result {label} is {actual:,}; the configured maximum is {maximum:,}"
+            )
+
+
 def verify_execution_result(
     artifact: RequestArtifact,
     result: ExecutionResult,
@@ -907,6 +980,28 @@ def _require_bounded_integer(
     if maximum is not None and value > maximum:
         raise ArtifactError(f"{label} must be between {minimum:,} and {maximum:,}")
     return value
+
+
+def _require_optional_limit(
+    value: object,
+    *,
+    label: str,
+    minimum: int,
+    maximum: int | None = None,
+) -> None:
+    if value is None:
+        return
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < minimum
+        or (maximum is not None and value > maximum)
+    ):
+        if maximum is not None:
+            raise ArtifactError(
+                f"{label} must be an integer between {minimum:,} and {maximum:,} or null"
+            )
+        raise ArtifactError(f"{label} must be an integer of at least {minimum:,} or null")
 
 
 def _utf8_size(value: str, *, label: str) -> int:
