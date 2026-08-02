@@ -101,7 +101,8 @@ def test_verify_rejects_tampered_content(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "member", ["../escape.txt", "/absolute.txt", "root/../escape.txt", "C:/drive.txt"]
+    "member",
+    ["../escape.txt", "/absolute.txt", "root/../escape.txt", "C:/drive.txt", "root/bad\nname"],
 )
 def test_verify_rejects_unsafe_archive_paths(tmp_path: Path, member: str) -> None:
     archive_path = tmp_path / ARCHIVE_NAME

@@ -433,6 +433,7 @@ def _validate_relative_path(value: str, label: str, *, require_root: bool = Fals
         path.is_absolute()
         or len(parts) < minimum_parts
         or re.match(r"^[A-Za-z]:", parts[0]) is not None
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
         or any(part in {"", ".", ".."} for part in parts)
         or path.as_posix() != value
     ):
