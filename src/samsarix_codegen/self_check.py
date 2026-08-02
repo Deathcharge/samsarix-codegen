@@ -162,7 +162,7 @@ def run_self_check() -> SelfCheckReport:
     """Exercise bundled contracts and the core evidence path without user input or network."""
 
     try:
-        contract_count = _check_bundled_contracts()
+        contract_count = _check_bundled_contract_resources()
 
         source_bytes = SELF_CHECK_SOURCE.encode("utf-8")
         context = ContextFile(
@@ -269,7 +269,15 @@ def render_self_check(
     )
 
 
-def _check_bundled_contracts() -> int:
+def _check_bundled_contract_resources() -> int:
+    """Check package resources without adding a runtime JSON Schema dependency.
+
+    Full Draft 2020-12 meta-schema validation is intentionally a development and CI gate using the
+    optional ``jsonschema`` dependency. The installed-package path stays dependency-free and checks
+    that the exact registry is present, every resource parses, and each root declares the expected
+    draft and object shape.
+    """
+
     registered = tuple(contract.value for contract in ContractSchema)
     _require_equal(registered, EXPECTED_CONTRACTS, label="contract registry")
     for contract in ContractSchema:

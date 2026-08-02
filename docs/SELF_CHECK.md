@@ -13,7 +13,10 @@ samsarix-codegen schema self-check > self-check-v1.schema.json
 
 The command performs five fail-closed checks using only package code and bundled resources:
 
-1. Load every public contract and require its Draft 2020-12 declaration and object root.
+1. Load every public contract and require its Draft 2020-12 declaration and object root. This is an
+   intentional standard-library resource/header check, not full JSON meta-schema validation; the
+   development suite and every CI wheel job perform the full validation with the optional
+   `jsonschema` development dependency so the shipped package can retain zero runtime dependencies.
 2. Rebuild and parse the same deterministic request represented by the repository's offline
    example, then compare its pinned fingerprint.
 3. Build and parse the credential-free execution plan, then compare its pinned fingerprint.
