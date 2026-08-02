@@ -19,6 +19,8 @@ plan fingerprint, and offline execution verification validates the full request/
 plus requested-model and reported-output-budget consistency without content disclosure.
 A checked-in offline request/plan/synthetic-result chain now makes that verifier runnable from a
 clone without credentials, a provider process, or network access.
+An installed-package self-check reproduces the same deterministic chain and validates every
+bundled contract before a pilot participant selects project context or configures a provider.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
 pilot validation, and flagship adoption remain separate decisions.
 

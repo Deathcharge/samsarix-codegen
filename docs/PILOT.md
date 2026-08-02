@@ -28,7 +28,14 @@ python -m build
 Get-FileHash .\dist\samsarix_codegen-0.2.0-py3-none-any.whl -Algorithm SHA256
 python -m pip install --force-reinstall --no-deps .\dist\samsarix_codegen-0.2.0-py3-none-any.whl
 samsarix-codegen --version
+samsarix-codegen self-check --format json > self-check.json
 ```
+
+The self-check must exit `0` and report `status: passed`, `network.attempted: false`, and
+`network.provider_called: false` before recruiting participants. It validates the installed
+package's bundled contracts and synthetic evidence chain; it does not validate a provider or the
+participant's project. Delete `self-check.json` after confirming it unless normal release evidence
+retention requires it.
 
 Copy the printed commit with the wheel digest. On macOS or Linux, require
 `test -z "$(git status --porcelain)"`, print `git rev-parse HEAD`, and use

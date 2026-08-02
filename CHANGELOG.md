@@ -48,6 +48,9 @@ approves a first public release.
   API.
 - A fully linked, reproducible offline request/plan/synthetic-result example whose rendered
   evidence must exactly match the checked-in record in tests and the installed-wheel CI journey.
+- An installed-package `self-check` command and standalone report schema that load every bundled
+  contract and reproduce the synthetic evidence chain without project input, credentials, or a
+  network request.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.

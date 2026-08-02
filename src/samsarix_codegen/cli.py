@@ -77,6 +77,7 @@ from samsarix_codegen.provider_check import (
 )
 from samsarix_codegen.result_policy import load_execution_result_policy
 from samsarix_codegen.schema import ContractSchema, render_contract_schema
+from samsarix_codegen.self_check import render_self_check, run_self_check
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1"
 DEFAULT_MAX_CONTEXT_BYTES = 200_000
@@ -92,6 +93,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    self_check_command = subparsers.add_parser(
+        "self-check",
+        help="verify the installed package and offline evidence path without network access",
+    )
+    self_check_command.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="self-check evidence output format (default: text)",
+    )
 
     build_command = subparsers.add_parser(
         "build", help="compile a prompt or deterministic request artifact without network access"
@@ -292,6 +304,9 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
     args = parser.parse_args(argv)
     input_stream = stdin if stdin is not None else cast(BinaryIO, sys.stdin.buffer)
     try:
+        if args.command == "self-check":
+            _write_stdout(render_self_check(run_self_check(), output_format=args.format))
+            return 0
         if args.command in {"build", "run"}:
             return _handle_request_command(args, input_stream)
         if args.command == "provider-check":

@@ -41,13 +41,18 @@ Prerequisite: Python 3.10 or newer.
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e .
+samsarix-codegen self-check
 samsarix-codegen build "Explain the behavior and edge cases" `
   --task explain `
   --file examples/sample.py
 ```
 
 On macOS or Linux, activate with `source .venv/bin/activate` and use `\` for shell continuation.
-`build` defaults to a readable Markdown prompt and performs no network request.
+`self-check` first loads every bundled contract and reproduces the synthetic request, plan, result,
+and content-omitting evidence chain entirely inside the installed package. It reads no project
+files, requires no configuration or credentials, and makes no network request. `build` defaults to
+a readable Markdown prompt and also performs no network request. See the
+[self-check contract and trust boundary](docs/SELF_CHECK.md).
 
 For a repeatable project review, check in a versioned context manifest:
 
@@ -230,6 +235,7 @@ resource comparison, not a quality score or proof that a provider authored an en
 
 | Command | Network | Purpose |
 | --- | --- | --- |
+| `self-check` | Never | Verify the installed contracts and synthetic evidence path |
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
 | `create-plan` | Never | Bind one request to credential-free provider settings and budgets |
@@ -268,6 +274,7 @@ samsarix-codegen schema result-policy > execution-result-policy-v1.schema.json
 samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
 samsarix-codegen schema execution-plan-verification > execution-plan-verification-v1.schema.json
 samsarix-codegen schema execution-evidence > execution-evidence-verification-v1.schema.json
+samsarix-codegen schema self-check > self-check-v1.schema.json
 ```
 
 The same files ship inside the typed Python package and are available through

@@ -230,13 +230,15 @@ Final command evidence is recorded in the **Final verification** section after e
   offline without reproducing prompt or response contents.
 - [x] Add a fully linked offline request/plan/synthetic-result fixture whose evidence is reproduced
   through both the public API and installed CLI in CI.
+- [x] Add an installed-package self-check that validates every bundled contract and reproduces the
+  synthetic request/plan/result/evidence path without project input or network access.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build`, `inspect`, `create-plan`, `verify-plan`, `verify-execution`, `inspect-result`,
+- [x] `self-check`, `build`, `inspect`, `create-plan`, `verify-plan`, `verify-execution`, `inspect-result`,
   `verify-result`, `compare`, `compare-results`, `execute`, `run`, `schema`, and `provider-check`
   commands with useful help and
   version behavior.
