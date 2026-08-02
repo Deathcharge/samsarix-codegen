@@ -28,11 +28,15 @@ approves a first public release.
   a standalone Draft 2020-12 contract.
 - Offline `verify-result` linkage validation for a concrete request/result pair, with
   content-omitting text/JSON evidence and a standalone Draft 2020-12 contract.
+- Optional fail-closed result policies on `inspect-result` and `verify-result` for an exact model,
+  UTF-8 response bytes, and provider-reported prompt, completion, or total token ceilings.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.
 - Fail-closed source/distribution release checks, a non-publishing dry-run path, SHA-256 manifests,
   build-provenance attestations, and gated PyPI/GitHub release automation.
+- Distribution auditing that rejects an unexpected import package or dist-info directory in the
+  wheel, including stale local build-cache contamination.
 - A release and rollback runbook plus monthly GitHub Actions dependency updates.
 - Competitive-positioning and request-artifact contract documentation.
 

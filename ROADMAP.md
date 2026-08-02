@@ -10,7 +10,8 @@ Current disposition: The productized default is merged and preserved by a rollba
 `0.2.0` has merged deterministic request-artifact and offline review/comparison workflows.
 Versioned machine-readable contracts, explicitly invoked context manifests, an operator-run
 provider conformance check, offline single-result inspection, request/result linkage verification,
-and same-request result comparison are implemented milestones.
+same-request result comparison, and deterministic post-result policy gates are implemented
+milestones.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
 pilot validation, and flagship adoption remain separate decisions.
 
@@ -41,6 +42,8 @@ Current hardening backlog:
   comparison partner exists; it intentionally does not authenticate or score a response.
 - Offline request/result linkage verification confirms a result fingerprint against a concrete
   validated artifact without exposing either content body; it intentionally is not a signature.
+- Exact-model, UTF-8 response-byte, and reported-token limits can now fail closed in CI through
+  either single-result path; they intentionally do not authenticate usage or score quality.
 - Strict versioned context manifests make repeated component reviews portable without automatic
   repository discovery, glob expansion, or a second path-loading boundary.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented
@@ -48,7 +51,8 @@ Current hardening backlog:
 - A content-free, one-request provider check is implemented; no owner-selected live provider has
   been certified. Streaming, ignore-aware discovery, and editor integration remain deferred.
 - Package name reservation and publication are not owner-completed. Release checks, SHA-256
-  manifests, GitHub provenance attestations, and Trusted Publishing workflow support are implemented.
+  manifests, unexpected-wheel-root rejection, GitHub provenance attestations, and Trusted
+  Publishing workflow support are implemented.
 - A standard-library HTTP client creates a small but ongoing compatibility review burden across
   provider variants. Redirects are rejected to prevent bearer-credential forwarding.
 

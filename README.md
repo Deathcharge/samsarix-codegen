@@ -151,6 +151,8 @@ SAMSARIX_MODEL=model-b SAMSARIX_API_BASE=https://provider-b.example/v1 \
   samsarix-codegen execute request.json --format json > result-b.json
 samsarix-codegen verify-result request.json result-a.json
 samsarix-codegen verify-result request.json result-a.json --format json > verified-run.json
+samsarix-codegen verify-result request.json result-a.json \
+  --expect-model model-a --max-response-bytes 100000 --max-total-tokens 12000
 samsarix-codegen inspect-result result-a.json
 samsarix-codegen inspect-result result-a.json --format json > result-a-summary.json
 samsarix-codegen compare-results result-a.json result-b.json
@@ -163,7 +165,10 @@ fingerprints match, and emits content-omitting request metrics plus result metad
 linkage check, not proof that a provider authored either file or received the request.
 `inspect-result` strictly validates one envelope and reports its request fingerprint, model,
 response character/UTF-8 byte counts and SHA-256 hash, and available usage without reproducing the
-response. This makes a stored run fail-closed and loggable before a second run exists.
+response. This makes a stored run fail-closed and loggable before a second run exists. Both
+`inspect-result` and `verify-result` can additionally require an exact model label and enforce hard
+response-byte, prompt-token, completion-token, and total-token ceilings. A configured token ceiling
+fails closed when that usage field was not reported.
 `compare-results` strictly validates both envelopes, refuses results with different request
 fingerprints, and reports model names, response UTF-8 sizes and SHA-256 hashes, equality, and
 available token-usage deltas without reproducing either response. It is an offline structural and
@@ -175,8 +180,8 @@ resource comparison, not a quality score or proof that a provider authored an en
 | --- | --- | --- |
 | `build` | Never | Compile a readable Markdown prompt or schema-versioned JSON artifact |
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
-| `inspect-result` | Never | Validate and summarize one result without its response contents |
-| `verify-result` | Never | Link one result to a supplied validated request without contents |
+| `inspect-result` | Never | Validate, policy-check, and summarize one result without its response contents |
+| `verify-result` | Never | Link and policy-check one result against a validated request without contents |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
 | `compare-results` | Never | Compare same-request results without response contents |
 | `schema` | Never | Print any bundled versioned contract JSON Schema |
@@ -336,7 +341,9 @@ assert parse_context_manifest(render_context_manifest(manifest)) == manifest
 
 `parse_execution_result()`, `inspect_execution_result()`, `verify_execution_result()`, and
 `compare_execution_results()` provide the same strict, content-omitting result metadata paths to
-typed consumers. Unstable implementation helpers are not exported from `samsarix_codegen`.
+typed consumers. `ExecutionResultPolicy` and `enforce_execution_result_policy()` expose the same
+deterministic post-result gates used by the CLI. Unstable implementation helpers are not exported
+from `samsarix_codegen`.
 
 ## Development and package verification
 

@@ -522,7 +522,22 @@ def test_inspect_result_validates_stdin_and_omits_response(capsys) -> None:
     )
 
     exit_code = main(
-        ["inspect-result", "-", "--format", "json"],
+        [
+            "inspect-result",
+            "-",
+            "--expect-model",
+            "model-a",
+            "--max-response-bytes",
+            str(len(b"secret provider response")),
+            "--max-prompt-tokens",
+            "10",
+            "--max-completion-tokens",
+            "3",
+            "--max-total-tokens",
+            "13",
+            "--format",
+            "json",
+        ],
         stdin=BytesIO(rendered.encode("utf-8")),
     )
 
@@ -535,6 +550,27 @@ def test_inspect_result_validates_stdin_and_omits_response(capsys) -> None:
     assert payload["summary"]["response"]["chars"] == len("secret provider response")
     assert payload["summary"]["usage"]["total_tokens"] == 13
     assert "secret provider response" not in captured.out
+
+
+def test_inspect_result_policy_fails_closed_for_missing_usage(capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review provider behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    rendered = render_execution_result(
+        artifact,
+        ChatResult("secret provider response"),
+        model="model-a",
+    )
+
+    exit_code = main(
+        ["inspect-result", "-", "--max-total-tokens", "13"],
+        stdin=BytesIO(rendered.encode("utf-8")),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
+    assert "total token usage was not reported" in captured.err
+    assert "secret provider response" not in captured.err
 
 
 def test_inspect_result_rejects_invalid_envelope(capsys) -> None:
@@ -561,7 +597,25 @@ def test_verify_result_is_machine_readable_and_omits_contents(tmp_path: Path, ca
         encoding="utf-8",
     )
 
-    exit_code = main(["verify-result", str(request_path), str(result_path), "--format", "json"])
+    exit_code = main(
+        [
+            "verify-result",
+            str(request_path),
+            str(result_path),
+            "--expect-model",
+            "model-a",
+            "--max-response-bytes",
+            str(len(b"private provider response")),
+            "--max-prompt-tokens",
+            "10",
+            "--max-completion-tokens",
+            "3",
+            "--max-total-tokens",
+            "13",
+            "--format",
+            "json",
+        ]
+    )
 
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
@@ -572,6 +626,38 @@ def test_verify_result_is_machine_readable_and_omits_contents(tmp_path: Path, ca
     assert payload["result"]["usage"]["total_tokens"] == 13
     assert "Review private behavior" not in captured.out
     assert "private provider response" not in captured.out
+
+
+def test_verify_result_policy_rejects_unexpected_model(tmp_path: Path, capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review private behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    request_path = tmp_path / "request.json"
+    result_path = tmp_path / "result.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    result_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult("private provider response", 10, 3, 13),
+            model="model-a",
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "verify-result",
+            str(request_path),
+            str(result_path),
+            "--expect-model",
+            "model-b",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
+    assert "does not match the expected model" in captured.err
+    assert "private provider response" not in captured.err
 
 
 def test_verify_result_rejects_mismatched_request(tmp_path: Path, capsys) -> None:

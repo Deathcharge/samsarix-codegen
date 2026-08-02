@@ -84,10 +84,17 @@ python -m ruff check .
 python -m ruff format --check .
 python -m mypy src
 python -m pytest -ra
+if (Test-Path -LiteralPath build) { throw "Refusing to reuse a local build cache" }
+if (Test-Path -LiteralPath dist) { throw "Refusing to mix prior distribution artifacts" }
 python -m build
 python scripts/release_check.py artifacts --version 0.2.0 `
   --dist-dir dist --write-checksums dist\SHA256SUMS
 ```
+
+Python build frontends can reuse the ignored `build/` directory. Start from a fresh checkout or
+verify that both generated directories are absent as above. The artifact audit independently
+rejects unexpected wheel roots and a mismatched dist-info directory, but a clean input keeps a
+failed release build from being created in the first place.
 
 5. Merge the release PR only after the complete CI matrix passes. Sync `master`, rerun the source
    check with `--require-clean`, and record the commit.

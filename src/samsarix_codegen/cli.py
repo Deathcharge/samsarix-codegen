@@ -17,10 +17,12 @@ from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
     MAX_RESULT_BYTES,
     ExecutionResult,
+    ExecutionResultPolicy,
     RequestArtifact,
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
+    enforce_execution_result_policy,
     inspect_execution_result,
     parse_execution_result,
     parse_request_artifact,
@@ -126,6 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="text",
         help="content-omitting inspection output format (default: text)",
     )
+    _add_result_policy_arguments(inspect_result_command)
 
     verify_result_command = subparsers.add_parser(
         "verify-result",
@@ -143,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="text",
         help="content-omitting verification output format (default: text)",
     )
+    _add_result_policy_arguments(verify_result_command)
 
     compare_command = subparsers.add_parser(
         "compare", help="compare two validated request artifacts without showing prompt contents"
@@ -210,6 +214,7 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             return 0
         if args.command == "inspect-result":
             result = _read_execution_result(args.result, input_stream)
+            _enforce_result_policy(result, args)
             inspection = inspect_execution_result(result)
             _write_stdout(render_execution_result_inspection(inspection, output_format=args.format))
             return 0
@@ -219,6 +224,7 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             artifact = _read_artifact(args.artifact, input_stream)
             result = _read_execution_result(args.result, input_stream)
             verification = verify_execution_result(artifact, result)
+            _enforce_result_policy(result, args)
             _write_stdout(
                 render_execution_result_verification(verification, output_format=args.format)
             )
@@ -419,6 +425,48 @@ def _add_provider_arguments(
     )
 
 
+def _add_result_policy_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--expect-model",
+        help="fail unless the stored result has this exact model label",
+    )
+    parser.add_argument(
+        "--max-response-bytes",
+        type=_bounded_int(1, MAX_RESULT_BYTES, "maximum response bytes"),
+        metavar="BYTES",
+        help="fail when the UTF-8 response exceeds this byte count",
+    )
+    parser.add_argument(
+        "--max-prompt-tokens",
+        type=_non_negative_int("maximum prompt tokens"),
+        metavar="TOKENS",
+        help="fail when reported prompt usage exceeds this value or is missing",
+    )
+    parser.add_argument(
+        "--max-completion-tokens",
+        type=_non_negative_int("maximum completion tokens"),
+        metavar="TOKENS",
+        help="fail when reported completion usage exceeds this value or is missing",
+    )
+    parser.add_argument(
+        "--max-total-tokens",
+        type=_non_negative_int("maximum total tokens"),
+        metavar="TOKENS",
+        help="fail when reported total usage exceeds this value or is missing",
+    )
+
+
+def _enforce_result_policy(result: ExecutionResult, args: argparse.Namespace) -> None:
+    policy = ExecutionResultPolicy(
+        expected_model=args.expect_model,
+        max_response_bytes=args.max_response_bytes,
+        max_prompt_tokens=args.max_prompt_tokens,
+        max_completion_tokens=args.max_completion_tokens,
+        max_total_tokens=args.max_total_tokens,
+    )
+    enforce_execution_result_policy(result, policy)
+
+
 def _request_from_args(args: argparse.Namespace, stdin: BinaryIO) -> PromptRequest:
     if len(args.context_manifest) > DEFAULT_MAX_MANIFESTS:
         raise ContextError(f"at most {DEFAULT_MAX_MANIFESTS} context manifests may be selected")
@@ -538,6 +586,19 @@ def _bounded_int(minimum: int, maximum: int, label: str) -> Callable[[str], int]
             raise argparse.ArgumentTypeError(f"{label} must be an integer") from exc
         if not minimum <= parsed <= maximum:
             raise argparse.ArgumentTypeError(f"{label} must be between {minimum:,} and {maximum:,}")
+        return parsed
+
+    return parse
+
+
+def _non_negative_int(label: str) -> Callable[[str], int]:
+    def parse(value: str) -> int:
+        try:
+            parsed = int(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"{label} must be an integer") from exc
+        if parsed < 0:
+            raise argparse.ArgumentTypeError(f"{label} must be at least 0")
         return parsed
 
     return parse

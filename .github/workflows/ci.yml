@@ -66,11 +66,27 @@ jobs:
           python -c "from pathlib import Path; from samsarix_codegen import ProviderCheckReport, render_provider_check; Path('provider-check.json').write_text(render_provider_check(ProviderCheckReport(model='fixture-model', max_output_tokens=64, response_chars=11), output_format='json'), encoding='utf-8')"
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('provider-check.schema.json', encoding='utf-8')); payload=json.load(open('provider-check.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
           python -c "import json; from pathlib import Path; from samsarix_codegen import ExecutionResult; fingerprint=json.load(open('request.json', encoding='utf-8'))['request_fingerprint']; Path('result-a.json').write_text(json.dumps(ExecutionResult(fingerprint, 'model-a', 'first response', 10, 2, 12).to_payload()), encoding='utf-8'); Path('result-b.json').write_text(json.dumps(ExecutionResult(fingerprint, 'model-b', 'second response', 10, 3, 13).to_payload()), encoding='utf-8')"
-          samsarix-codegen inspect-result result-a.json --format json > result-inspection.json
+          samsarix-codegen inspect-result result-a.json \
+            --expect-model model-a \
+            --max-response-bytes 14 \
+            --max-prompt-tokens 10 \
+            --max-completion-tokens 2 \
+            --max-total-tokens 12 \
+            --format json > result-inspection.json
           ! grep -q "first response" result-inspection.json
+          if samsarix-codegen inspect-result result-a.json --max-total-tokens 11 > /dev/null; then
+            echo "result policy unexpectedly accepted excessive usage" >&2
+            exit 1
+          fi
           samsarix-codegen schema result-inspection > result-inspection.schema.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('result-inspection.schema.json', encoding='utf-8')); payload=json.load(open('result-inspection.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
-          samsarix-codegen verify-result request.json result-a.json --format json > result-verification.json
+          samsarix-codegen verify-result request.json result-a.json \
+            --expect-model model-a \
+            --max-response-bytes 14 \
+            --max-prompt-tokens 10 \
+            --max-completion-tokens 2 \
+            --max-total-tokens 12 \
+            --format json > result-verification.json
           ! grep -q "Review this change\|first response" result-verification.json
           samsarix-codegen schema result-verification > result-verification.schema.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('result-verification.schema.json', encoding='utf-8')); payload=json.load(open('result-verification.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"

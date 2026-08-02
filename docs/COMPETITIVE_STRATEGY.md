@@ -23,6 +23,8 @@ Its product promise is narrower and testable:
    repository-discovery or glob authority.
 10. Verify a stored result against a concrete request artifact and emit local linkage metadata
     without copying prompt or response contents into ordinary logs.
+11. Let CI reject a structurally valid result on an unexpected model, excessive response size, or
+    excessive/missing reported usage without sending another provider request.
 
 ## Evidence from adjacent products
 
@@ -75,10 +77,20 @@ The evaluation category validates demand for repeatable model comparisons:
   trace metadata while hiding inputs and outputs, validating demand for content-omitting evidence.
 - [Braintrust trace inspection](https://www.braintrust.dev/docs/observe/examine-traces) treats a
   trace as one end-to-end execution and supports navigation back to its prompt or dataset origin.
+- [Promptfoo assertions and metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs/)
+  support deterministic checks plus token, cost, and latency thresholds, while its
+  [CI/CD guidance](https://www.promptfoo.dev/docs/integrations/ci-cd/) frames them as quality and
+  cost-control gates.
+- [Braintrust evaluations](https://www.braintrust.dev/docs/evaluate) are designed for automated
+  regression detection in CI/CD, and its
+  [custom reporters](https://www.braintrust.dev/docs/evaluate/run-evaluations) can determine whether
+  an evaluation process succeeds.
 
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
 dependency-free offline check that both bounded result envelopes reference the same reviewed
-request, then emits only model labels, response hashes/sizes, and reported usage deltas.
+request, then emits only model labels, response hashes/sizes, and reported usage deltas. For one
+result, it can also enforce a narrow deterministic envelope policy without datasets, scorers,
+hosted traces, or another model call.
 
 These products validate demand for automation and broad context. They also leave a useful boundary
 for teams that want a smaller approval object without granting repository discovery, shell access,
@@ -122,6 +134,15 @@ keeps only bounded request metrics and result metadata. Unlike hosted observabil
 path is local and dependency-free; unlike signatures or attestations, it does not establish
 authorship or protect files from an actor who can rewrite both.
 
+### Fail-closed CI result policy
+
+After a credential-bearing job writes a result envelope, require the approved model label and hard
+response-byte or provider-reported token ceilings with `inspect-result` or `verify-result`. CI gets a
+nonzero artifact exit before archiving the normal content-omitting record. Missing usage fails when
+its ceiling matters. This is a deterministic contract/cost guard, not a semantic evaluator: it does
+not establish response quality, pricing, provider authenticity, or cross-provider tokenizer
+equivalence.
+
 ### Repeatable project review
 
 Commit a small versioned context manifest for a component's implementation, public contract, and
@@ -139,6 +160,8 @@ shell history or repository discovery.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.
 - No claim that result hashes, length, or provider-reported usage evaluate response quality.
+- No claim that a token ceiling proves a monetary budget unless the operator separately maps the
+  selected model's authenticated usage to current pricing.
 
 ## Next evidence gates
 

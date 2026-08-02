@@ -355,6 +355,19 @@ def _verify_wheel(path: Path, version: str) -> None:
             if len(metadata_names) != 1:
                 raise ReleaseCheckError("wheel must contain exactly one METADATA file")
             dist_info = metadata_names[0].removesuffix("METADATA")
+            expected_dist_info = f"{DIST_NAME}-{version}.dist-info/"
+            if dist_info != expected_dist_info:
+                raise ReleaseCheckError(
+                    f"wheel dist-info directory is {dist_info!r}, expected {expected_dist_info!r}"
+                )
+            allowed_roots = {"samsarix_codegen", dist_info.removesuffix("/")}
+            unexpected_roots = sorted(
+                {PurePosixPath(name).parts[0] for name in names} - allowed_roots
+            )
+            if unexpected_roots:
+                raise ReleaseCheckError(
+                    "wheel contains unexpected top-level paths: " + ", ".join(unexpected_roots)
+                )
             legal_files = {f"{dist_info}licenses/LICENSE", f"{dist_info}licenses/NOTICE"}
             missing_legal = sorted(legal_files - names)
             if missing_legal:
