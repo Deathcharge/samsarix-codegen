@@ -65,15 +65,22 @@ Get-Content SHA256SUMS | ForEach-Object {
 Pop-Location
 gh attestation verify .\release-dry-run\samsarix_codegen-0.2.0.tar.gz `
   --repo Deathcharge/samsarix-codegen
+if ($LASTEXITCODE -ne 0) { throw "Source-distribution provenance verification failed." }
 gh attestation verify .\release-dry-run\samsarix_codegen-0.2.0-py3-none-any.whl `
   --repo Deathcharge/samsarix-codegen
+if ($LASTEXITCODE -ne 0) { throw "Wheel provenance verification failed." }
 gh attestation verify .\release-dry-run\samsarix-codegen-pilot-kit-0.2.0.zip `
   --repo Deathcharge/samsarix-codegen
+if ($LASTEXITCODE -ne 0) { throw "Pilot-kit provenance verification failed." }
 Expand-Archive .\release-dry-run\samsarix-codegen-pilot-kit-0.2.0.zip `
   -DestinationPath .\release-dry-run
 Push-Location .\release-dry-run\samsarix-codegen-pilot-kit-0.2.0
-python scripts/pilot_bundle.py verify-directory .
-Pop-Location
+try {
+  python scripts/pilot_bundle.py verify-directory .
+  if ($LASTEXITCODE -ne 0) { throw "Extracted pilot-kit verification failed." }
+} finally {
+  Pop-Location
+}
 ```
 
 The pilot kit verifier proves internal consistency and wheel/commit linkage. The outer GitHub

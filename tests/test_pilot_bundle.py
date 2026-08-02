@@ -77,6 +77,23 @@ def test_manifest_matches_schema_and_record_is_valid_but_not_ready(tmp_path: Pat
     manifest = json.loads((root / "pilot-kit-v1.json").read_text(encoding="utf-8"))
     schema = json.loads((ROOT / "docs/pilot-kit-v1.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(manifest)
+    path_schema = schema["$defs"]["content"]["properties"]["path"]
+    path_validator = Draft202012Validator(path_schema)
+    unsafe_paths = (
+        "../escape.txt",
+        ".",
+        "..",
+        "/absolute.txt",
+        "root/../escape.txt",
+        "root/.",
+        "root/..",
+        "C:/drive.txt",
+        "root//double.txt",
+        "root\\backslash.txt",
+        "root/bad\nname",
+        "directory/",
+    )
+    assert all(not path_validator.is_valid(path) for path in unsafe_paths)
     record = load_pilot_record(root / "pilot-record.json")
     assert record["wheel_sha256"] == manifest["wheel"]["sha256"]
     assert record["commit"] == manifest["source_commit"]
@@ -147,6 +164,22 @@ def test_verify_directory_rejects_unexpected_file(tmp_path: Path) -> None:
     (root / "unexpected.txt").write_text("not declared", encoding="utf-8")
 
     with pytest.raises(PilotKitError, match="unexpected: unexpected.txt"):
+        verify_pilot_kit_directory(root)
+
+
+def test_verify_directory_rejects_symlink(tmp_path: Path) -> None:
+    archive_path = _create(tmp_path)
+    extracted = tmp_path / "extracted"
+    with zipfile.ZipFile(archive_path) as archive:
+        archive.extractall(extracted)
+    root = extracted / ROOT_NAME
+    link = root / "linked-start.md"
+    try:
+        link.symlink_to("PILOT-START.md")
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symbolic links are unavailable: {exc}")
+
+    with pytest.raises(PilotKitError, match="contains a symbolic link"):
         verify_pilot_kit_directory(root)
 
 

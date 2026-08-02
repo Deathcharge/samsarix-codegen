@@ -53,6 +53,23 @@ def test_malformed_record_returns_invalid_exit_code(
     assert "pilot check failed:" in captured.err
 
 
+def test_unexpected_runtime_failure_returns_invalid_exit_code(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fail_to_load(_path: Path) -> dict[str, Any]:
+        raise RuntimeError("private diagnostic")
+
+    monkeypatch.setattr("scripts.pilot_check.load_pilot_record", fail_to_load)
+
+    exit_code = main([str(EXAMPLE_PATH)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert captured.err == "pilot check failed: unexpected RuntimeError\n"
+    assert "private diagnostic" not in captured.err
+
+
 def test_three_participants_and_both_workflows_pass() -> None:
     record = _passing_record()
 

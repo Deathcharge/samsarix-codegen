@@ -33,15 +33,20 @@ $kits = @(Get-ChildItem -LiteralPath $download -Filter 'samsarix-codegen-pilot-k
 if ($kits.Count -ne 1) { throw "Expected exactly one downloaded pilot-kit ZIP." }
 $kit = $kits[0]
 gh attestation verify $kit.FullName --repo Deathcharge/samsarix-codegen
+if ($LASTEXITCODE -ne 0) { throw "Pilot-kit provenance verification failed." }
 Expand-Archive -LiteralPath $kit.FullName -DestinationPath $download
 $roots = @(Get-ChildItem -LiteralPath $download -Directory `
   | Where-Object Name -Like 'samsarix-codegen-pilot-kit-*')
 if ($roots.Count -ne 1) { throw "Expected exactly one extracted pilot-kit directory." }
 $root = $roots[0]
 Push-Location $root.FullName
-python scripts/pilot_bundle.py verify-directory .
-Get-Content PILOT-START.md
-Pop-Location
+try {
+  python scripts/pilot_bundle.py verify-directory .
+  if ($LASTEXITCODE -ne 0) { throw "Extracted pilot-kit verification failed." }
+  Get-Content PILOT-START.md
+} finally {
+  Pop-Location
+}
 ```
 
 Require both verification commands to exit `0`. GitHub's attestation links the ZIP to its source
@@ -73,10 +78,10 @@ participant's project. Delete `self-check.json` after confirming it unless norma
 retention requires it.
 
 The kit's `PILOT-START.md` supplies the exact install command and has already placed the commit and
-wheel digest in `pilot-record.json`. For a source build, copy the printed commit with the wheel
-digest. On macOS or Linux, require
-`test -z "$(git status --porcelain)"`, print `git rev-parse HEAD`, and use
-`sha256sum dist/samsarix_codegen-0.2.0-py3-none-any.whl`.
+wheel digest in `pilot-record.json`. For a source build on macOS or Linux, require
+`test -z "$(git status --porcelain)"` and print `git rev-parse HEAD`. Use
+`shasum -a 256 dist/samsarix_codegen-0.2.0-py3-none-any.whl` on macOS or
+`sha256sum dist/samsarix_codegen-0.2.0-py3-none-any.whl` on Linux.
 
 ## Choose the reviewed provider settings
 
@@ -242,8 +247,13 @@ contract:
 
 ```powershell
 python scripts/pilot_check.py pilot-record.json > pilot-decision.json
-if ($LASTEXITCODE -eq 2) { throw "The pilot record is invalid." }
-if ($LASTEXITCODE -eq 1) { Write-Host "The pilot is valid but not ready to pass." }
+$pilotExitCode = $LASTEXITCODE
+switch ($pilotExitCode) {
+  0 { }
+  1 { Write-Host "The pilot is valid but not ready to pass." }
+  2 { throw "The pilot record is invalid." }
+  default { throw "pilot_check.py failed with exit code $pilotExitCode." }
+}
 ```
 
 Exit `0` means every decision gate passed, `1` means the record is valid but the adoption gate is

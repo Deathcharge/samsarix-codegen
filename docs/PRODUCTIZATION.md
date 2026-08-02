@@ -803,7 +803,7 @@ without claiming recursive schema or semantic validation. Links and the explicit
 ### Verifiable evaluator-kit follow-up
 
 Python 3.14.6 source checks passed formatting, lint, strict typing across 17 source files, the
-unreleased source gate, and all 389 tests. Pilot-kit coverage proves byte-identical creation,
+unreleased source gate, and all 391 tests. Pilot-kit coverage proves byte-identical creation,
 strict manifest schema conformance, archive and extracted-directory verification,
 valid-but-not-ready prefilled pilot evidence, and fail-closed handling for content tampering,
 duplicate members, traversal/absolute/drive paths, non-regular entries, unexpected extracted

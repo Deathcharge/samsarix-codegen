@@ -67,6 +67,9 @@ def create_pilot_kit(
     expected_wheel_name = _wheel_name(version)
     if wheel.name != expected_wheel_name:
         raise PilotKitError(f"wheel must be named {expected_wheel_name!r}, got {wheel.name!r}")
+    root_name = f"{ARCHIVE_PREFIX}{version}"
+    if output.name != f"{root_name}.zip":
+        raise PilotKitError(f"output must be named {root_name}.zip")
     wheel_bytes = _read_regular_file(wheel, "wheel", MAX_UNCOMPRESSED_BYTES)
     if output.exists():
         raise PilotKitError(f"refusing to overwrite existing output: {output}")
@@ -80,7 +83,11 @@ def create_pilot_kit(
         source = repository_root / Path(relative)
         assets[relative] = _read_regular_file(source, relative, MAX_UNCOMPRESSED_BYTES)
 
-    example = _load_json_file(repository_root / "examples/pilot-record-v1.json", "pilot record")
+    example = _load_json_file(
+        repository_root / "examples/pilot-record-v1.json",
+        "pilot record",
+        maximum=MAX_PILOT_RECORD_BYTES,
+    )
     if not isinstance(example, dict):
         raise PilotKitError("pilot record example must be a JSON object")
     example["wheel_sha256"] = wheel_sha256
@@ -108,9 +115,6 @@ def create_pilot_kit(
     checksum_bytes = _render_checksums(files)
     files[CHECKSUMS_NAME] = checksum_bytes
 
-    root_name = f"{ARCHIVE_PREFIX}{version}"
-    if output.name != f"{root_name}.zip":
-        raise PilotKitError(f"output must be named {root_name}.zip")
     try:
         with zipfile.ZipFile(
             output,
@@ -119,7 +123,7 @@ def create_pilot_kit(
             compresslevel=9,
         ) as archive:
             for relative, data in sorted(files.items()):
-                archive.writestr(_zip_info(f"{root_name}/{relative}"), data)
+                archive.writestr(_zip_info(f"{root_name}/{relative}"), data, compresslevel=9)
     except (OSError, zipfile.BadZipFile) as exc:
         with suppress(OSError):
             output.unlink()
@@ -541,8 +545,8 @@ def _read_regular_file(path: Path, label: str, maximum: int) -> bytes:
         raise PilotKitError(f"cannot read {label}: {path}") from exc
 
 
-def _load_json_file(path: Path, label: str) -> object:
-    return _load_json_bytes(_read_regular_file(path, label, MAX_MANIFEST_BYTES), label)
+def _load_json_file(path: Path, label: str, *, maximum: int = MAX_MANIFEST_BYTES) -> object:
+    return _load_json_bytes(_read_regular_file(path, label, maximum), label)
 
 
 def _load_json_bytes(raw: bytes, label: str) -> object:
