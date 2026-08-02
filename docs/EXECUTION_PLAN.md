@@ -34,16 +34,24 @@ samsarix-codegen verify-plan request.json execution-plan.json \
 
 cat > result-policy.json <<'JSON'
 {
-  "schema_version": 1,
-  "max_response_bytes": 262144
+  "schema_version": 2,
+  "max_response_bytes": 262144,
+  "response_format": "json-object",
+  "required_json_keys": ["diagnosis", "evidence", "next_step"],
+  "allowed_json_keys": ["diagnosis", "evidence", "next_step"],
+  "json_key_types": {
+    "diagnosis": "string",
+    "evidence": "array",
+    "next_step": "string"
+  }
 }
 JSON
 cat result-policy.json
 policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
 ```
 
-This example policy places a 256 KiB ceiling on the stored response without requiring
-provider-reported usage. Review and tailor its explicit rules before approval; the
+This example policy places a 256 KiB ceiling on the stored response and requires a stable
+machine-consumable top-level shape without requiring provider-reported usage. Review and tailor its explicit rules before approval; the
 [result-policy contract](RESULT_POLICY.md) documents every field and stricter checked-in examples.
 
 The credential-bearing job needs the two explicit files, separately approved plan and policy
@@ -70,7 +78,8 @@ The plan-backed JSON result records the exact plan fingerprint. `verify-executio
 to validate the complete request/plan/result chain later without network access or content
 disclosure. When an explicit result policy is supplied, it also requires the exact separately
 approved policy fingerprint, enforces every rule, and records the fingerprint and rules in evidence
-schema version 2. The [result-policy contract](RESULT_POLICY.md) defines that final gate.
+schema version 3. Structured evidence adds only the response format and top-level key count, not
+response-derived field names or values. The [result-policy contract](RESULT_POLICY.md) defines that final gate.
 
 ## Schema version 1
 
@@ -133,7 +142,7 @@ samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
 samsarix-codegen schema execution-plan-verification \
   > execution-plan-verification-v1.schema.json
 samsarix-codegen schema execution-evidence \
-  > execution-evidence-verification-v2.schema.json
+  > execution-evidence-verification-v3.schema.json
 ```
 
 JSON Schema validates the portable structure. The CLI or typed parser remains authoritative for
@@ -158,12 +167,13 @@ signing/attestation, endpoint governance, provider logs, and billing records rem
 responsibility when those properties matter.
 
 The checked-in [request](../examples/execution-request-v2.json),
-[plan](../examples/execution-plan-v1.json), [synthetic result](../examples/execution-result-v2.json),
-[policy](../examples/execution-evidence-policy-v1.json), and
-[evidence](../examples/execution-evidence-v2.json) form one runnable policy-bound offline chain. The
+[plan](../examples/execution-plan-v1.json),
+[synthetic result](../examples/structured-execution-result-v2.json),
+[policy](../examples/structured-result-policy-v2.json), and
+[evidence](../examples/execution-evidence-v3.json) form one runnable policy-bound offline chain. The
 test suite rebuilds the request from `examples/sample.py`, verifies all four inputs through the
 public API and CLI, and requires the computed evidence to equal the checked-in record. The legacy
-version 1 evidence and schema remain bundled for existing external consumers. No provider request
+versions 1 and 2 evidence schemas remain bundled for existing external consumers. No provider request
 produced the explicitly labeled synthetic result. Create a new plan for every real request rather
 than editing or reusing the fixture; reuse a team policy only while its exact fingerprint and rules
 remain the intended approval.

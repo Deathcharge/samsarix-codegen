@@ -140,6 +140,7 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
                 expected_model="local-model",
                 max_response_bytes=100_000,
                 max_total_tokens=1_000,
+                schema_version=2,
             )
         )
     )
@@ -283,12 +284,12 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
     examples = repository / "examples"
     request_path = examples / "execution-request-v2.json"
     plan_path = examples / "execution-plan-v1.json"
-    result_path = examples / "execution-result-v2.json"
-    policy_path = examples / "execution-evidence-policy-v1.json"
+    result_path = examples / "structured-execution-result-v2.json"
+    policy_path = examples / "structured-result-policy-v2.json"
     request = json.loads(request_path.read_text(encoding="utf-8"))
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     result = json.loads(result_path.read_text(encoding="utf-8"))
-    evidence = json.loads((examples / "execution-evidence-v2.json").read_text(encoding="utf-8"))
+    evidence = json.loads((examples / "execution-evidence-v3.json").read_text(encoding="utf-8"))
     policy = load_execution_result_policy(policy_path)
 
     Draft202012Validator(load_contract_schema("request")).validate(request)
@@ -368,6 +369,23 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
     )
     Draft202012Validator.check_schema(legacy_schema)
     Draft202012Validator(legacy_schema).validate(legacy_evidence)
+    evidence_v2_schema = json.loads(
+        (
+            repository
+            / "src/samsarix_codegen/schemas/execution-evidence-verification-v2.schema.json"
+        ).read_text(encoding="utf-8")
+    )
+    evidence_v2 = json.loads((examples / "execution-evidence-v2.json").read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(evidence_v2_schema)
+    Draft202012Validator(evidence_v2_schema).validate(evidence_v2)
+    policy_v1_schema = json.loads(
+        (
+            repository / "src/samsarix_codegen/schemas/execution-result-policy-v1.schema.json"
+        ).read_text(encoding="utf-8")
+    )
+    policy_v1 = json.loads((examples / "result-policy-v1.json").read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(policy_v1_schema)
+    Draft202012Validator(policy_v1_schema).validate(policy_v1)
 
 
 @pytest.mark.parametrize(
@@ -400,15 +418,29 @@ def test_execution_plan_schema_rejects_contract_drift(mutator) -> None:
 @pytest.mark.parametrize(
     "payload",
     [
-        {"schema_version": 1},
-        {"schema_version": 1, "unexpected": True},
-        {"schema_version": 1, "expected_model": None},
-        {"schema_version": 1, "expected_model": " model-a"},
-        {"schema_version": 1, "max_response_bytes": 0},
-        {"schema_version": 1, "max_response_bytes": MAX_RESULT_BYTES + 1},
-        {"schema_version": 1, "max_total_tokens": -1},
-        {"schema_version": 1, "max_total_tokens": True},
-        {"schema_version": 1, "max_total_tokens": MAX_RESULT_POLICY_TOKENS + 1},
+        {"schema_version": 2},
+        {"schema_version": 2, "unexpected": True},
+        {"schema_version": 2, "expected_model": None},
+        {"schema_version": 2, "expected_model": " model-a"},
+        {"schema_version": 2, "max_response_bytes": 0},
+        {"schema_version": 2, "max_response_bytes": MAX_RESULT_BYTES + 1},
+        {"schema_version": 2, "max_total_tokens": -1},
+        {"schema_version": 2, "max_total_tokens": True},
+        {"schema_version": 2, "max_total_tokens": MAX_RESULT_POLICY_TOKENS + 1},
+        {"schema_version": 2, "response_format": "json"},
+        {"schema_version": 2, "required_json_keys": ["answer"]},
+        {"schema_version": 2, "response_format": "json-object", "required_json_keys": []},
+        {
+            "schema_version": 2,
+            "response_format": "json-object",
+            "required_json_keys": ["answer", "answer"],
+        },
+        {"schema_version": 2, "response_format": "json-object", "json_key_types": {}},
+        {
+            "schema_version": 2,
+            "response_format": "json-object",
+            "json_key_types": {"answer": "date"},
+        },
     ],
 )
 def test_result_policy_schema_rejects_contract_drift(payload: dict[str, object]) -> None:
@@ -424,12 +456,15 @@ def test_result_policy_schema_rejects_contract_drift(payload: dict[str, object])
         lambda payload: payload["result_policy"].pop("fingerprint"),
         lambda payload: payload["result_policy"]["rules"].update(unexpected=True),
         lambda payload: payload["result_policy"]["rules"].update(expected_model=None),
+        lambda payload: payload["result"].pop("response_structure"),
+        lambda payload: payload["result"]["response_structure"].update(format="json"),
+        lambda payload: payload["result"]["response_structure"].update(top_level_keys=257),
     ],
 )
 def test_execution_evidence_schema_rejects_policy_contract_drift(mutator) -> None:
     repository = Path(__file__).resolve().parents[1]
     payload = json.loads(
-        (repository / "examples/execution-evidence-v2.json").read_text(encoding="utf-8")
+        (repository / "examples/execution-evidence-v3.json").read_text(encoding="utf-8")
     )
     mutator(payload)
 
@@ -491,6 +526,18 @@ def test_schema_command_prints_standalone_machine_readable_contract(capsys) -> N
     assert exit_code == 0
     assert captured.err == ""
     assert schema["properties"]["schema_version"]["const"] == 2
+
+
+def test_schema_command_exports_latest_policy_and_evidence_versions(capsys) -> None:
+    policy_exit = main(["schema", "result-policy"])
+    policy_output = capsys.readouterr()
+    evidence_exit = main(["schema", "execution-evidence"])
+    evidence_output = capsys.readouterr()
+
+    assert policy_exit == evidence_exit == 0
+    assert policy_output.err == evidence_output.err == ""
+    assert json.loads(policy_output.out)["properties"]["schema_version"]["const"] == 2
+    assert json.loads(evidence_output.out)["properties"]["schema_version"]["const"] == 3
 
 
 def test_unknown_library_schema_name_is_a_configuration_error() -> None:

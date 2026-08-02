@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from samsarix_codegen.errors import ArtifactError
@@ -26,6 +26,10 @@ RESULT_COMPARISON_SCHEMA_VERSION = 2
 MAX_ARTIFACT_BYTES = 12 * 1024 * 1024
 MAX_RESULT_BYTES = 12 * 1024 * 1024
 MAX_RESULT_POLICY_TOKENS = (1 << 53) - 1
+MAX_STRUCTURED_RESPONSE_BYTES = 1 * 1024 * 1024
+MAX_STRUCTURED_RESPONSE_KEYS = 256
+MAX_RESULT_POLICY_JSON_KEYS = 64
+MAX_RESULT_POLICY_JSON_KEY_BYTES = 256
 MAX_ARTIFACT_MESSAGES = 32
 MAX_ARTIFACT_CONTEXT_ITEMS = 100
 MAX_CONTEXT_NAME_CHARS = 4_096
@@ -185,6 +189,11 @@ class ExecutionResultSummary:
     total_tokens: int | None
     plan_fingerprint: str | None = None
     response_model: str | None = None
+    response_json_type: str | None = field(default=None, repr=False)
+    response_json_key_hash_types: tuple[tuple[str, str], ...] | None = field(
+        default=None,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         _normalize_result_model(self.model, require_canonical=True)
@@ -209,6 +218,18 @@ class ExecutionResultSummary:
         _parse_usage_value("prompt_tokens", self.prompt_tokens)
         _parse_usage_value("completion_tokens", self.completion_tokens)
         _parse_usage_value("total_tokens", self.total_tokens)
+        if self.response_json_type is not None and self.response_json_type not in _JSON_TYPES:
+            raise ArtifactError("execution result summary contains an invalid JSON value type")
+        if self.response_json_type != "object":
+            if self.response_json_key_hash_types is not None:
+                raise ArtifactError(
+                    "execution result summary JSON key types require a top-level object"
+                )
+        elif self.response_json_key_hash_types is not None:
+            normalized_key_types = _normalize_response_json_key_hash_types(
+                self.response_json_key_hash_types
+            )
+            object.__setattr__(self, "response_json_key_hash_types", normalized_key_types)
 
     def to_payload(self) -> dict[str, Any]:
         """Return a JSON-compatible result summary without response text."""
@@ -239,8 +260,19 @@ class ExecutionResultPolicy:
     max_prompt_tokens: int | None = None
     max_completion_tokens: int | None = None
     max_total_tokens: int | None = None
+    response_format: str | None = None
+    required_json_keys: tuple[str, ...] = ()
+    allowed_json_keys: tuple[str, ...] | None = None
+    json_key_types: tuple[tuple[str, str], ...] = ()
+    schema_version: int = 1
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.schema_version, int)
+            or isinstance(self.schema_version, bool)
+            or self.schema_version not in (1, 2)
+        ):
+            raise ArtifactError("execution result policy schema version must be 1 or 2")
         if self.expected_model is not None:
             _normalize_result_model(self.expected_model, require_canonical=True)
         _require_optional_limit(
@@ -260,6 +292,48 @@ class ExecutionResultPolicy:
                 minimum=0,
                 maximum=MAX_RESULT_POLICY_TOKENS,
             )
+        if self.response_format is not None and self.response_format != "json-object":
+            raise ArtifactError("execution result policy response format must be json-object")
+
+        required_json_keys = _normalize_policy_json_keys(
+            self.required_json_keys,
+            label="required JSON keys",
+        )
+        allowed_json_keys = (
+            None
+            if self.allowed_json_keys is None
+            else _normalize_policy_json_keys(
+                self.allowed_json_keys,
+                label="allowed JSON keys",
+            )
+        )
+        json_key_types = _normalize_policy_json_key_types(self.json_key_types)
+        object.__setattr__(self, "required_json_keys", required_json_keys)
+        object.__setattr__(self, "allowed_json_keys", allowed_json_keys)
+        object.__setattr__(self, "json_key_types", json_key_types)
+
+        structural_rules = bool(
+            self.response_format is not None
+            or required_json_keys
+            or allowed_json_keys is not None
+            or json_key_types
+        )
+        if self.schema_version == 1 and structural_rules:
+            raise ArtifactError(
+                "execution result policy JSON structure rules require schema version 2"
+            )
+        if structural_rules and self.response_format != "json-object":
+            raise ArtifactError(
+                "execution result policy JSON key rules require response_format json-object"
+            )
+        if allowed_json_keys is not None:
+            allowed = set(allowed_json_keys)
+            implied_required = set(required_json_keys)
+            implied_required.update(key for key, _ in json_key_types)
+            if not implied_required.issubset(allowed):
+                raise ArtifactError(
+                    "execution result policy required or typed JSON keys must be allowed"
+                )
 
 
 @dataclass(frozen=True, slots=True)
@@ -725,6 +799,38 @@ def enforce_execution_result_summary_policy(
                 f"execution result {label} is {actual:,}; the configured maximum is {maximum:,}"
             )
 
+    if policy.response_format == "json-object":
+        if summary.response_json_type != "object" or summary.response_json_key_hash_types is None:
+            raise ArtifactError("execution result response is not a valid bounded JSON object")
+        actual_key_types = dict(summary.response_json_key_hash_types)
+        required_keys = set(policy.required_json_keys)
+        required_keys.update(key for key, _ in policy.json_key_types)
+        missing_keys = sorted(
+            key for key in required_keys if _sha256_text(key) not in actual_key_types
+        )
+        if missing_keys:
+            raise ArtifactError(
+                "execution result JSON object is missing required keys: " + ", ".join(missing_keys)
+            )
+        if policy.allowed_json_keys is not None:
+            allowed_key_hashes = {_sha256_text(key) for key in policy.allowed_json_keys}
+            unexpected_count = len(actual_key_types.keys() - allowed_key_hashes)
+            if unexpected_count:
+                raise ArtifactError(
+                    "execution result JSON object contains "
+                    f"{unexpected_count:,} key(s) outside the approved allowlist"
+                )
+        for key, expected_type in policy.json_key_types:
+            actual_type = actual_key_types[_sha256_text(key)]
+            matches = actual_type == expected_type or (
+                expected_type == "number" and actual_type == "integer"
+            )
+            if not matches:
+                raise ArtifactError(
+                    f"execution result JSON key {key!r} has type {actual_type}; "
+                    f"expected {expected_type}"
+                )
+
 
 def verify_execution_result(
     artifact: RequestArtifact,
@@ -1035,6 +1141,10 @@ def _parse_usage_value(label: str, value: object) -> int | None:
 
 def _summarize_execution_result(result: ExecutionResult) -> ExecutionResultSummary:
     response_bytes = _utf8_size(result.response_text, label="execution result response text")
+    response_json_type, response_json_key_hash_types = _summarize_response_json(
+        result.response_text,
+        response_bytes=response_bytes,
+    )
     return ExecutionResultSummary(
         model=result.model,
         response_chars=len(result.response_text),
@@ -1045,7 +1155,154 @@ def _summarize_execution_result(result: ExecutionResult) -> ExecutionResultSumma
         total_tokens=result.total_tokens,
         plan_fingerprint=result.plan_fingerprint,
         response_model=result.response_model,
+        response_json_type=response_json_type,
+        response_json_key_hash_types=response_json_key_hash_types,
     )
+
+
+_JSON_TYPES = frozenset({"array", "boolean", "integer", "null", "number", "object", "string"})
+
+
+class _DuplicateResponseJsonKeyError(ValueError):
+    """Internal signal for an ambiguous JSON response object."""
+
+
+def _summarize_response_json(
+    response_text: str,
+    *,
+    response_bytes: int,
+) -> tuple[str | None, tuple[tuple[str, str], ...] | None]:
+    if response_bytes > MAX_STRUCTURED_RESPONSE_BYTES:
+        return None, None
+    try:
+        value = json.loads(
+            response_text,
+            object_pairs_hook=_reject_duplicate_response_json_keys,
+            parse_constant=_reject_nonfinite_response_json_number,
+        )
+    except (json.JSONDecodeError, UnicodeError, ValueError, RecursionError):
+        return None, None
+
+    value_type = _json_value_type(value)
+    if value_type != "object":
+        return value_type, None
+    if not isinstance(value, dict) or len(value) > MAX_STRUCTURED_RESPONSE_KEYS:
+        return "object", None
+    return "object", tuple(
+        sorted((_sha256_text(key), _json_value_type(item)) for key, item in value.items())
+    )
+
+
+def _json_value_type(value: object) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    raise ArtifactError("execution result contains an unsupported JSON value type")
+
+
+def _reject_duplicate_response_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    decoded: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in decoded:
+            raise _DuplicateResponseJsonKeyError
+        decoded[key] = value
+    return decoded
+
+
+def _reject_nonfinite_response_json_number(value: str) -> None:
+    raise ValueError(f"non-finite JSON number: {value}")
+
+
+def _normalize_response_json_key_hash_types(
+    value: object,
+) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, tuple):
+        raise ArtifactError("execution result summary JSON key types must be a tuple")
+    decoded: dict[str, str] = {}
+    for item in value:
+        if not isinstance(item, tuple) or len(item) != 2:
+            raise ArtifactError("execution result summary JSON key types are invalid")
+        key_hash, item_type = item
+        if not _is_sha256(key_hash) or not isinstance(item_type, str):
+            raise ArtifactError("execution result summary JSON key types are invalid")
+        if key_hash in decoded or item_type not in _JSON_TYPES:
+            raise ArtifactError("execution result summary JSON key types are invalid")
+        decoded[key_hash] = item_type
+    return tuple(sorted(decoded.items()))
+
+
+def _normalize_policy_json_keys(value: object, *, label: str) -> tuple[str, ...]:
+    if not isinstance(value, tuple):
+        raise ArtifactError(f"execution result policy {label} must be a tuple")
+    if len(value) > MAX_RESULT_POLICY_JSON_KEYS:
+        raise ArtifactError(
+            f"execution result policy {label} cannot exceed {MAX_RESULT_POLICY_JSON_KEYS:,} entries"
+        )
+    normalized: set[str] = set()
+    for key in value:
+        _validate_policy_json_key(key, label=label)
+        if key in normalized:
+            raise ArtifactError(f"execution result policy {label} cannot contain duplicates")
+        normalized.add(key)
+    return tuple(sorted(normalized))
+
+
+def _normalize_policy_json_key_types(
+    value: object,
+) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, tuple):
+        raise ArtifactError("execution result policy JSON key types must be a tuple")
+    if len(value) > MAX_RESULT_POLICY_JSON_KEYS:
+        raise ArtifactError(
+            "execution result policy JSON key types cannot exceed "
+            f"{MAX_RESULT_POLICY_JSON_KEYS:,} entries"
+        )
+    normalized: dict[str, str] = {}
+    for item in value:
+        if not isinstance(item, tuple) or len(item) != 2:
+            raise ArtifactError(
+                "execution result policy JSON key types must contain key/type pairs"
+            )
+        key, item_type = item
+        _validate_policy_json_key(key, label="JSON key types")
+        if key in normalized:
+            raise ArtifactError("execution result policy JSON key types cannot contain duplicates")
+        if not isinstance(item_type, str) or item_type not in _JSON_TYPES:
+            choices = ", ".join(sorted(_JSON_TYPES))
+            raise ArtifactError(f"execution result policy JSON key type must be one of: {choices}")
+        normalized[key] = item_type
+    return tuple(sorted(normalized.items()))
+
+
+def _validate_policy_json_key(value: object, *, label: str) -> None:
+    if not isinstance(value, str) or not value:
+        raise ArtifactError(f"execution result policy {label} entries must be non-empty strings")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ArtifactError(
+            f"execution result policy {label} entries must be valid Unicode"
+        ) from exc
+    if len(encoded) > MAX_RESULT_POLICY_JSON_KEY_BYTES:
+        raise ArtifactError(
+            f"execution result policy {label} entries cannot exceed "
+            f"{MAX_RESULT_POLICY_JSON_KEY_BYTES:,} UTF-8 bytes"
+        )
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
+        raise ArtifactError(
+            f"execution result policy {label} entries cannot contain control characters"
+        )
 
 
 def _optional_delta(base: int | None, target: int | None) -> int | None:

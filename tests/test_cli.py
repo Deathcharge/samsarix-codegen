@@ -752,6 +752,104 @@ def test_verify_execution_cli_enforces_and_records_an_approved_policy(
     assert "Private provider response" not in captured.out
 
 
+def test_verify_execution_cli_enforces_structured_policy_without_values(
+    tmp_path: Path, capsys
+) -> None:
+    artifact = create_request_artifact(
+        build_messages(PromptRequest(Task.DEBUG, "Private structured instruction")), ()
+    )
+    plan = create_execution_plan(
+        artifact,
+        ProviderConfig("https://models.example.com/v1", "model-a", max_output_tokens=64),
+    )
+    private_response = json.dumps(
+        {
+            "diagnosis": "Private diagnosis",
+            "evidence": ["Private evidence"],
+            "next_step": "Private next step",
+        },
+        separators=(",", ":"),
+    )
+    policy = ExecutionResultPolicy(
+        response_format="json-object",
+        required_json_keys=("diagnosis", "evidence", "next_step"),
+        allowed_json_keys=("diagnosis", "evidence", "next_step"),
+        json_key_types=(
+            ("diagnosis", "string"),
+            ("evidence", "array"),
+            ("next_step", "string"),
+        ),
+        schema_version=2,
+    )
+    request_path = tmp_path / "request.json"
+    plan_path = tmp_path / "plan.json"
+    result_path = tmp_path / "result.json"
+    policy_path = tmp_path / "policy.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+    result_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult(private_response),
+            model=plan.model,
+            plan_fingerprint=plan.fingerprint,
+        ),
+        encoding="utf-8",
+    )
+    policy_path.write_text(render_execution_result_policy(policy), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--policy",
+            str(policy_path),
+            "--format",
+            "json",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["schema_version"] == 3
+    assert payload["result"]["response_structure"] == {
+        "format": "json-object",
+        "top_level_keys": 3,
+    }
+    for private in ("Private diagnosis", "Private evidence", "Private next step"):
+        assert private not in captured.out
+
+    result_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult('{"diagnosis":"Private diagnosis"}'),
+            model=plan.model,
+            plan_fingerprint=plan.fingerprint,
+        ),
+        encoding="utf-8",
+    )
+    failed_exit = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--policy",
+            str(policy_path),
+        ]
+    )
+    failed = capsys.readouterr()
+
+    assert failed_exit == 5
+    assert failed.out == ""
+    assert "missing required keys" in failed.err
+    assert "Private diagnosis" not in failed.err
+
+
 def test_verify_execution_cli_rejects_policy_bypass_and_policy_failure(
     tmp_path: Path, capsys
 ) -> None:

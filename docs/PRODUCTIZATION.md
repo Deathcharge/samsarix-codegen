@@ -136,10 +136,10 @@ Research references:
     exact model label, actual UTF-8 response size, and reported token ceilings. Missing usage rejects
     a configured token rule; output contracts remain unchanged and no evaluator/network authority
     is added.
-18. **Reusable policy without discovery.** Execution-result policy schema version 1 stores one
-    bounded, strict set of deterministic result rules. Operators must pass its path explicitly;
-    file rules cannot mix with flags, and no remote lookup, code execution, or hidden precedence is
-    introduced.
+18. **Reusable policy without discovery.** Execution-result policy schema version 2 stores one
+    bounded, strict set of deterministic metadata, resource, and optional top-level JSON-object
+    rules. Operators must pass its path explicitly; file rules cannot mix with flags, and no remote
+    lookup, code execution, or hidden precedence is introduced. Version 1 remains compatible.
 19. **Reviewed execution intent.** Execution-plan schema version 1 binds one request fingerprint to
     canonical endpoint, model, whole-second timeout, estimated-input ceiling, and output ceiling.
     The plan is credential-free, explicit, bounded, internally fingerprinted, and independently
@@ -150,10 +150,15 @@ Research references:
     provider-reported response model. Plan-backed execution populates the link automatically.
     `verify-execution` validates the full request/plan/result chain, requested model, input budget,
     any reported completion usage, and an optional separately approved result-policy fingerprint
-    offline. Evidence schema version 2 emits exact passing policy rules plus response hash/size
-    rather than content; version 1 remains bundled. Legacy result version 1 remains parseable. This
+    offline. Evidence schema version 3 emits exact passing policy rules, response hash/size, and
+    only a structured response format/key count rather than response-derived names or values;
+    versions 1 and 2 remain bundled. Legacy result version 1 remains parseable. This
     is local integrity and deterministic-policy evidence, not signed approval or provider
     attestation.
+21. **Machine-consumable response gate.** A version 2 policy can require bounded valid JSON, a
+    top-level object, required/allowed top-level keys, and JSON value types. Duplicate keys and
+    non-finite numbers fail. This dependency-free offline check is deliberately narrower than
+    recursive JSON Schema validation and does not score correctness or quality.
 
 ## Assumptions
 
@@ -227,6 +232,7 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add offline request/result linkage verification without reproducing either content body.
 - [x] Add deterministic post-result model, size, and reported-usage gates for CI.
 - [x] Add a versioned, checked-in execution-result policy contract for repeatable team CI rules.
+- [x] Add bounded JSON-object shape gates and privacy-minimal structure evidence for downstream CI.
 - [x] Add a versioned execution-plan contract so approval covers the request and exact non-secret
   provider/budget intent across the credential boundary.
 - [x] Bind plan-backed results to that approval and verify the complete request/plan/result chain
@@ -300,6 +306,8 @@ Final command evidence is recorded in the **Final verification** section after e
   single-result paths, with missing usage rejected whenever its limit is configured.
 - Added a versioned execution-result policy document, standalone Draft 2020-12 schema, typed
   parse/render/load API, checked-in example, and explicit no-override CLI behavior.
+- Added result-policy version 2 top-level JSON-object gates, evidence version 3 structure counts,
+  checked-in offline fixtures, and installed-wheel failure-path coverage without response values.
 - Added versioned execution plans, offline plan creation/verification, a typed public API, standalone
   plan and verification schemas, a checked-in example, and exact no-override plan-backed execution.
 - Added result schema version 2 with plan linkage and separate requested/response model labels,
@@ -362,6 +370,9 @@ required for local evaluation and none was performed.
   reported usage, or missing usage needed by a configured token rule before emitting normal output.
 - Policy documents are explicitly selected, bounded to 64 KiB, require an active rule, reject
   duplicate/unknown/null fields, and keep JSON integers within the cross-language safe range.
+- Structured policy enforcement parses at most 1 MiB of response JSON, caps top-level width,
+  rejects duplicate keys and non-finite numbers, hashes response-derived key names internally, and
+  exposes only format/key-count evidence after all approved rules pass.
 - Execution plans are explicitly selected files bounded to 64 KiB. They reject duplicate/unknown
   fields, noncanonical values, invalid endpoint settings, plan/request fingerprint drift, and input
   budget excess before client construction. Provider/budget flags cannot override them, and only
@@ -387,6 +398,8 @@ required for local evaluation and none was performed.
   provider/model-specific and intentionally not fabricated.
 - Result model labels and usage remain unauthenticated provider-envelope data; policy checks do not
   prove authorship, normalize tokenization, or establish monetary cost or response quality.
+- A valid top-level JSON shape does not prove nested application-schema conformance, semantic
+  correctness, safety, or usefulness; downstream consumers still need domain validation.
 - A committed policy can reveal approved model labels and becomes part of repository governance;
   Samsarix does not discover, fetch, merge, or remotely update it.
 - A plan can reveal endpoint topology, model names, and capacity choices. Its unkeyed fingerprint is
@@ -716,6 +729,32 @@ assertion initially treated optional development-extra requirements as unconditi
 the corrected marker-aware check confirmed all five requirements are gated by the `dev` extra.
 Neither harness event was treated as a product pass.
 
+### Structured-response policy follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing across 16 source files, the source
+release gate, installed self-check, and all 361 tests. Result-policy schema version 2 adds bounded
+valid JSON-object parsing, reviewed top-level required/allowed keys and value types, duplicate-key
+and non-finite-number rejection, and exact canonical fingerprints while preserving version 1
+parsing. Execution evidence advances to version 3 and exposes only response format and top-level
+key count after structural success; response-derived key names, key hashes, and values remain out
+of public payloads and renderings.
+
+The source-built sdist and wheel passed Twine and the fail-closed distribution audit. A fresh
+zero-dependency virtual environment installed only that wheel, reported no broken requirements,
+and resolved Samsarix outside the checkout. Its self-check passed all 13 public contract selectors,
+and the installed CLI reproduced the exact checked-in version 3 evidence fixture. Under
+`PYTHONOPTIMIZE=1`, the installed smoke made exactly one local fixture request, enforced the
+structured policy, rejected metadata and missing-key policies offline with empty normal output,
+omitted private response values, and made no additional request on either failure. Exact final
+distribution digests belong in the pull-request evidence because recording them in the source
+distribution would change the digest.
+
+Current official Promptfoo assertion/JSON guidance and Braintrust scorer guidance both treat
+deterministic format validation as a normal evaluation/CI capability. Samsarix deliberately takes
+a narrower dependency-free position: top-level structural readiness within the existing approved
+request/plan/result chain, not recursive JSON Schema validation, model grading, or a correctness
+claim. The linked sources and inference are recorded in `docs/COMPETITIVE_STRATEGY.md`.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -740,7 +779,9 @@ review-first artifact workflow, offline review/comparison, request/result linkag
 versioned result-policy tools, credential-free reviewed execution plans, portable
 request/plan/result evidence,
 reusable explicit context manifests, independent JSON contracts, and an operator-run provider
-conformance check; each has local clean-package evidence recorded above.
+conformance check. Version 2 structured-result policies and version 3 privacy-minimal evidence now
+cover machine-consumable CI handoffs; each capability has local clean-package evidence recorded
+above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release
 tag, and approval of the publishing environment. The usefulness claim remains gated on the
 three-developer pilot, and live provider certification remains optional unless the owner advertises

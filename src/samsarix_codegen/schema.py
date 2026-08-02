@@ -40,10 +40,10 @@ _SCHEMA_FILES = {
     ContractSchema.RESULT_COMPARISON: "execution-result-comparison-v2.schema.json",
     ContractSchema.PROVIDER_CHECK: "provider-check-v1.schema.json",
     ContractSchema.CONTEXT_MANIFEST: "context-manifest-v1.schema.json",
-    ContractSchema.RESULT_POLICY: "execution-result-policy-v1.schema.json",
+    ContractSchema.RESULT_POLICY: "execution-result-policy-v2.schema.json",
     ContractSchema.EXECUTION_PLAN: "execution-plan-v1.schema.json",
     ContractSchema.EXECUTION_PLAN_VERIFICATION: "execution-plan-verification-v1.schema.json",
-    ContractSchema.EXECUTION_EVIDENCE: "execution-evidence-verification-v2.schema.json",
+    ContractSchema.EXECUTION_EVIDENCE: "execution-evidence-verification-v3.schema.json",
     ContractSchema.SELF_CHECK: "self-check-v1.schema.json",
 }
 

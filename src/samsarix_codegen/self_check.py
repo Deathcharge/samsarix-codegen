@@ -51,8 +51,8 @@ SELF_CHECK_INSTRUCTION = (
     "Review greet for correctness, edge cases, and maintainability. Return concise findings."
 )
 SELF_CHECK_RESPONSE = (
-    "Synthetic offline fixture: greet strips surrounding whitespace, rejects blank names, and "
-    "should be tested for both behaviors."
+    '{"diagnosis":"Null dereference","evidence":["trace line 42"],'
+    '"next_step":"Guard the optional value"}'
 )
 EXPECTED_REQUEST_FINGERPRINT = (
     "sha256:4c04cb6a6352ef10b09403b8f5b7da03e71dbfd278606fc25edb5274c3399d59"
@@ -61,10 +61,10 @@ EXPECTED_PLAN_FINGERPRINT = (
     "sha256:7d53d859b13986da8efcf8122fd060d07c34b91f34908d1ac4f89a1187c5df95"
 )
 EXPECTED_RESPONSE_FINGERPRINT = (
-    "sha256:0e7f7114c7721470a498c106ec93f961e49855039964243a1f2eba11a7925fc0"
+    "sha256:d10517f83c16d86209750ef9c9101cf06770a9df1b8f7a8386293921f7c3f7e5"
 )
 EXPECTED_POLICY_FINGERPRINT = (
-    "sha256:7e603aa13e31a93aa73d5e03fd77be9248114cd1d721d77ab05db242260e2dab"
+    "sha256:56f31e83efb5caa3e806b0eba3735009ac1387003fa5888b9a78e774a6218578"
 )
 EXPECTED_CONTRACTS = (
     "request",
@@ -227,6 +227,15 @@ def run_self_check() -> SelfCheckReport:
             result_policy=ExecutionResultPolicy(
                 expected_model="example-review-model",
                 max_response_bytes=256,
+                response_format="json-object",
+                required_json_keys=("diagnosis", "evidence", "next_step"),
+                allowed_json_keys=("diagnosis", "evidence", "next_step"),
+                json_key_types=(
+                    ("diagnosis", "string"),
+                    ("evidence", "array"),
+                    ("next_step", "string"),
+                ),
+                schema_version=2,
             ),
             expected_policy_fingerprint=EXPECTED_POLICY_FINGERPRINT,
         )
@@ -239,6 +248,11 @@ def run_self_check() -> SelfCheckReport:
             evidence.result.response_sha256,
             EXPECTED_RESPONSE_FINGERPRINT,
             label="response fingerprint",
+        )
+        _require_equal(
+            evidence.response_structure,
+            {"format": "json-object", "top_level_keys": 3},
+            label="response structure",
         )
     except SelfCheckError:
         raise

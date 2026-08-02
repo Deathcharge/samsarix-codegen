@@ -35,6 +35,8 @@ Its product promise is narrower and testable:
     label reported by the provider.
 15. Fingerprint one strict result policy before execution, then enforce and record that exact policy
     in the same content-omitting offline evidence gate as the approved request and plan.
+16. Require a bounded JSON object with approved top-level keys and types when a downstream machine
+    must consume the response, without exposing response-derived fields or values in evidence.
 
 ## Evidence from adjacent products
 
@@ -99,7 +101,10 @@ The evaluation category validates demand for repeatable model comparisons:
   instructions can be sensitive. The GenAI conventions are still evolving, so Samsarix does not
   claim wire-level OpenTelemetry compatibility.
 - [Promptfoo assertions and metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs/)
-  support deterministic checks plus token, cost, and latency thresholds, while its
+  support deterministic checks—including valid JSON and optional JSON Schema validation—plus
+  token, cost, and latency thresholds. Its
+  [JSON evaluation guide](https://www.promptfoo.dev/docs/guides/evaluate-json/) treats structured
+  output validation as a first-class evaluation workflow, while its
   [CI/CD guidance](https://www.promptfoo.dev/docs/integrations/ci-cd/) frames them as quality and
   cost-control gates.
 - [Promptfoo configuration](https://www.promptfoo.dev/docs/configuration/guide/) can load shared
@@ -108,6 +113,9 @@ The evaluation category validates demand for repeatable model comparisons:
   regression detection in CI/CD, and its
   [custom reporters](https://www.braintrust.dev/docs/evaluate/run-evaluations) can determine whether
   an evaluation process succeeds.
+- [Braintrust scorers](https://www.braintrust.dev/docs/evaluate/write-scorers) include format
+  validation and custom pass/fail thresholds, further validating the demand for deterministic
+  response-shape gates alongside semantic scoring.
 - [Braintrust evaluation parameters](https://www.braintrust.dev/docs/evaluate/write-parameters) are
   reusable and versioned across evaluations and environments, validating demand for stable team
   configuration independently of evaluation code.
@@ -135,7 +143,9 @@ primitive.
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
 portable, dependency-free approval chain: a deterministic request, a credential-free plan, a
 plan-bound result, an optional separately fingerprinted deterministic policy, and an offline
-verifier that emits only operational metadata and a response hash/size. It also compares two
+verifier that emits only operational metadata and a response hash/size. Policy version 2 adds a
+narrower alternative to full JSON Schema evaluation: bounded valid JSON-object parsing and
+top-level required/allowed/type rules, with no runtime dependency or second model call. It also compares two
 bounded same-request results without datasets, scorers, hosted traces, or another model call. The
 single policy-bound chain is an inference from adjacent CI quality-gate demand—such as Promptfoo's
 threshold assertions and CI failure controls—not a claim that local hashes provide authenticated
@@ -199,7 +209,7 @@ authorship or protect files from an actor who can rewrite both.
 
 For plan-backed runs, retain all three artifacts and optionally an explicit result policy, then run
 `verify-execution`. The result records the reviewed plan fingerprint, requested model, and
-provider-reported response model separately. Evidence schema version 2 verifies every local
+provider-reported response model separately. Evidence schema version 3 verifies every local
 linkage plus the plan's input and reported-output budgets; when a policy is supplied, it also
 requires its separately approved fingerprint, enforces every rule, and records the exact rules.
 Neither prompt nor response is reproduced. The record remains forgeable by an actor who can rewrite
@@ -214,6 +224,15 @@ available for ad hoc checks. CI gets a nonzero artifact exit before archiving th
 content-omitting record. Missing usage fails when its ceiling matters. This is a deterministic
 contract/cost guard, not a semantic evaluator: it does not establish response quality, pricing,
 provider authenticity, or cross-provider tokenizer equivalence.
+
+### Machine-consumable CI handoff
+
+Require result-policy version 2 when a later CI step expects a JSON object such as a diagnosis,
+evidence list, and next action. The gate rejects malformed or duplicate-keyed JSON, a non-object
+top level, missing or unapproved keys, and wrong top-level value types before the response reaches
+that consumer. Evidence retains only the approved policy, response hash/size, format, and key count;
+it does not copy response-derived names or values. This is structural readiness, not recursive JSON
+Schema validation or proof that the diagnosis is correct.
 
 ### Repeatable project review
 
@@ -250,6 +269,8 @@ every installed-wheel CI job.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.
 - No claim that result hashes, length, or provider-reported usage evaluate response quality.
+- No claim that bounded top-level JSON shape validation proves semantic correctness, safety, or
+  conformance to a recursive application schema.
 - No claim that a consistent request/plan/result/policy chain is a signed approval, provider receipt,
   or attestation.
 - No claim that a token ceiling proves a monetary budget unless the operator separately maps the

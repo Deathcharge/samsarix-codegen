@@ -17,8 +17,10 @@ to exact non-secret provider settings and budgets across an offline-to-credentia
 execution-time override precedence. Plan-backed result schema version 2 now carries that reviewed
 plan fingerprint, and offline execution verification validates the full request/plan/result chain
 plus requested-model and reported-output-budget consistency without content disclosure. Evidence
-schema version 2 can also bind and enforce one separately approved result-policy fingerprint in the
-same fail-closed command. A checked-in offline request/plan/synthetic-result/policy chain now makes
+schema version 3 can also bind and enforce one separately approved result-policy fingerprint in the
+same fail-closed command. Result-policy schema version 2 optionally requires a bounded JSON object
+with reviewed top-level keys and types, while evidence exposes only its format and key count. A
+checked-in offline request/plan/synthetic-result/policy chain now makes
 that verifier runnable from a clone without credentials, a provider process, or network access.
 An installed-package self-check reproduces the same deterministic chain and validates every
 bundled contract before a pilot participant selects project context or configures a provider.
@@ -62,6 +64,9 @@ Current hardening backlog:
 - Exact-model, UTF-8 response-byte, and reported-token limits can now fail closed in CI through
   either single-result path. A strict versioned file can carry the same rules across team workflows;
   neither form authenticates usage or scores quality.
+- Result-policy version 2 can additionally reject invalid, duplicate-keyed, non-object, over-wide,
+  or top-level shape-incompatible JSON offline. This is a bounded machine-consumability gate, not
+  recursive JSON Schema validation or a semantic correctness score.
 - Strict versioned context manifests make repeated component reviews portable without automatic
   repository discovery, glob expansion, or a second path-loading boundary.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented

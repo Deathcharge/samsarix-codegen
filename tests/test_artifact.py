@@ -18,6 +18,7 @@ from samsarix_codegen import verify_execution_result as public_verify_execution_
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
     MAX_RESULT_BYTES,
+    MAX_STRUCTURED_RESPONSE_BYTES,
     ExecutionResult,
     ExecutionResultComparison,
     ExecutionResultInspection,
@@ -367,6 +368,164 @@ def test_execution_result_policy_accepts_exact_limits_and_public_api() -> None:
         )
         is None
     )
+
+
+def test_execution_result_policy_enforces_bounded_json_object_shape() -> None:
+    artifact = make_artifact()
+    result = ExecutionResult(
+        artifact.fingerprint,
+        "model-a",
+        json.dumps(
+            {
+                "next_step": "Guard the optional value",
+                "diagnosis": "Null dereference",
+                "confidence": 1,
+                "evidence": ["trace line 42"],
+            },
+            separators=(",", ":"),
+        ),
+        None,
+        None,
+        None,
+    )
+    policy = ExecutionResultPolicy(
+        response_format="json-object",
+        required_json_keys=("diagnosis", "evidence", "next_step"),
+        allowed_json_keys=("confidence", "diagnosis", "evidence", "next_step"),
+        json_key_types=(
+            ("confidence", "number"),
+            ("diagnosis", "string"),
+            ("evidence", "array"),
+            ("next_step", "string"),
+        ),
+        schema_version=2,
+    )
+
+    assert enforce_execution_result_policy(result, policy) is None
+    summary = inspect_execution_result(result).summary
+    assert summary.response_json_type == "object"
+    assert len(summary.response_json_key_hash_types or ()) == 4
+    assert all(
+        key_hash.startswith("sha256:") for key_hash, _ in summary.response_json_key_hash_types or ()
+    )
+    assert "diagnosis" not in repr(summary)
+    assert not any(
+        key_hash in repr(summary) for key_hash, _ in summary.response_json_key_hash_types or ()
+    )
+    assert "diagnosis" not in json.dumps(summary.to_payload())
+
+
+@pytest.mark.parametrize(
+    ("response", "policy", "match"),
+    [
+        (
+            "not JSON",
+            ExecutionResultPolicy(response_format="json-object", schema_version=2),
+            "not a valid bounded JSON object",
+        ),
+        (
+            "[]",
+            ExecutionResultPolicy(response_format="json-object", schema_version=2),
+            "not a valid bounded JSON object",
+        ),
+        (
+            '{"answer": 1, "answer": 2}',
+            ExecutionResultPolicy(response_format="json-object", schema_version=2),
+            "not a valid bounded JSON object",
+        ),
+        (
+            '{"answer": NaN}',
+            ExecutionResultPolicy(response_format="json-object", schema_version=2),
+            "not a valid bounded JSON object",
+        ),
+        (
+            '{"answer": "ok"}',
+            ExecutionResultPolicy(
+                response_format="json-object",
+                required_json_keys=("evidence",),
+                schema_version=2,
+            ),
+            "missing required keys: evidence",
+        ),
+        (
+            '{"answer": "ok", "private_extra": true}',
+            ExecutionResultPolicy(
+                response_format="json-object",
+                allowed_json_keys=("answer",),
+                schema_version=2,
+            ),
+            r"1 key\(s\) outside the approved allowlist",
+        ),
+        (
+            '{"answer": 7}',
+            ExecutionResultPolicy(
+                response_format="json-object",
+                json_key_types=(("answer", "string"),),
+                schema_version=2,
+            ),
+            "has type integer; expected string",
+        ),
+    ],
+)
+def test_execution_result_policy_rejects_invalid_json_shape(
+    response: str,
+    policy: ExecutionResultPolicy,
+    match: str,
+) -> None:
+    result = ExecutionResult(make_artifact().fingerprint, "model-a", response, None, None, None)
+
+    with pytest.raises(ArtifactError, match=match):
+        enforce_execution_result_policy(result, policy)
+
+
+def test_structural_policy_errors_omit_response_derived_names_and_values() -> None:
+    result = ExecutionResult(
+        make_artifact().fingerprint,
+        "model-a",
+        '{"answer":"Private value","private_extra":"Private detail"}',
+        None,
+        None,
+        None,
+    )
+
+    with pytest.raises(ArtifactError) as captured:
+        enforce_execution_result_policy(
+            result,
+            ExecutionResultPolicy(
+                response_format="json-object",
+                allowed_json_keys=("answer",),
+                schema_version=2,
+            ),
+        )
+
+    message = str(captured.value)
+    assert "1 key(s) outside the approved allowlist" in message
+    for private in ("private_extra", "Private value", "Private detail"):
+        assert private not in message
+
+
+def test_structured_result_policy_fails_closed_for_oversize_or_wide_objects() -> None:
+    policy = ExecutionResultPolicy(response_format="json-object", schema_version=2)
+    oversized = ExecutionResult(
+        make_artifact().fingerprint,
+        "model-a",
+        json.dumps({"value": "x" * MAX_STRUCTURED_RESPONSE_BYTES}),
+        None,
+        None,
+        None,
+    )
+    wide = ExecutionResult(
+        make_artifact().fingerprint,
+        "model-a",
+        json.dumps({f"key-{index}": index for index in range(257)}),
+        None,
+        None,
+        None,
+    )
+
+    for result in (oversized, wide):
+        with pytest.raises(ArtifactError, match="not a valid bounded JSON object"):
+            enforce_execution_result_policy(result, policy)
 
 
 @pytest.mark.parametrize(

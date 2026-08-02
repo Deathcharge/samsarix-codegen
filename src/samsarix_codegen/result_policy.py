@@ -11,17 +11,27 @@ import json
 from pathlib import Path
 from typing import Any
 
-from samsarix_codegen.artifact import ExecutionResultPolicy
+from samsarix_codegen.artifact import (
+    MAX_RESULT_POLICY_JSON_KEYS,
+    ExecutionResultPolicy,
+)
 from samsarix_codegen.errors import ArtifactError
 
-RESULT_POLICY_SCHEMA_VERSION = 1
+LATEST_RESULT_POLICY_SCHEMA_VERSION = 2
+SUPPORTED_RESULT_POLICY_SCHEMA_VERSIONS = (1, 2)
 MAX_RESULT_POLICY_BYTES = 64 * 1024
-_POLICY_FIELDS = (
+_METADATA_POLICY_FIELDS = (
     "expected_model",
     "max_response_bytes",
     "max_prompt_tokens",
     "max_completion_tokens",
     "max_total_tokens",
+)
+_STRUCTURED_POLICY_FIELDS = (
+    "response_format",
+    "required_json_keys",
+    "allowed_json_keys",
+    "json_key_types",
 )
 
 
@@ -30,7 +40,7 @@ class _DuplicatePolicyKeyError(ValueError):
 
 
 def parse_execution_result_policy(raw: str | bytes) -> ExecutionResultPolicy:
-    """Parse one bounded, exact execution-result policy version 1 document."""
+    """Parse one bounded execution-result policy version 1 or 2 document."""
 
     text = _decode_policy_document(raw)
     try:
@@ -43,22 +53,28 @@ def parse_execution_result_policy(raw: str | bytes) -> ExecutionResultPolicy:
 
     if not isinstance(decoded, dict):
         raise ArtifactError("execution result policy must be a JSON object")
-    allowed_fields = {"schema_version", *_POLICY_FIELDS}
-    if "schema_version" not in decoded or not set(decoded).issubset(allowed_fields):
-        raise ArtifactError("execution result policy fields do not match schema version 1")
-
+    if "schema_version" not in decoded:
+        raise ArtifactError("execution result policy fields do not match a supported schema")
     schema_version = decoded.get("schema_version")
     if (
         not isinstance(schema_version, int)
         or isinstance(schema_version, bool)
-        or schema_version != RESULT_POLICY_SCHEMA_VERSION
+        or schema_version not in SUPPORTED_RESULT_POLICY_SCHEMA_VERSIONS
     ):
         raise ArtifactError(
-            f"unsupported execution result policy schema: {schema_version!r}; "
-            f"expected {RESULT_POLICY_SCHEMA_VERSION}"
+            f"unsupported execution result policy schema: {schema_version!r}; expected 1 or 2"
         )
 
-    configured_fields = [field for field in _POLICY_FIELDS if field in decoded]
+    policy_fields = _METADATA_POLICY_FIELDS + (
+        _STRUCTURED_POLICY_FIELDS if schema_version == 2 else ()
+    )
+    allowed_fields = {"schema_version", *policy_fields}
+    if "schema_version" not in decoded or not set(decoded).issubset(allowed_fields):
+        raise ArtifactError(
+            f"execution result policy fields do not match schema version {schema_version}"
+        )
+
+    configured_fields = [field for field in policy_fields if field in decoded]
     if not configured_fields:
         raise ArtifactError("execution result policy must configure at least one rule")
     null_fields = [field for field in configured_fields if decoded[field] is None]
@@ -68,12 +84,33 @@ def parse_execution_result_policy(raw: str | bytes) -> ExecutionResultPolicy:
             + ", ".join(null_fields)
         )
 
+    required_json_keys = _parse_json_key_list(
+        decoded.get("required_json_keys"),
+        label="required_json_keys",
+        allow_empty=False,
+    )
+    allowed_json_keys = (
+        None
+        if "allowed_json_keys" not in decoded
+        else _parse_json_key_list(
+            decoded.get("allowed_json_keys"),
+            label="allowed_json_keys",
+            allow_empty=True,
+        )
+    )
+    json_key_types = _parse_json_key_types(decoded.get("json_key_types"))
+
     return ExecutionResultPolicy(
         expected_model=decoded.get("expected_model"),
         max_response_bytes=decoded.get("max_response_bytes"),
         max_prompt_tokens=decoded.get("max_prompt_tokens"),
         max_completion_tokens=decoded.get("max_completion_tokens"),
         max_total_tokens=decoded.get("max_total_tokens"),
+        response_format=decoded.get("response_format"),
+        required_json_keys=required_json_keys,
+        allowed_json_keys=allowed_json_keys,
+        json_key_types=json_key_types,
+        schema_version=schema_version,
     )
 
 
@@ -174,14 +211,56 @@ def _decode_policy_document(raw: str | bytes) -> str:
 def _policy_payload(policy: ExecutionResultPolicy) -> dict[str, object]:
     if not isinstance(policy, ExecutionResultPolicy):
         raise ArtifactError("execution result policy requires a validated policy")
-    payload: dict[str, object] = {"schema_version": RESULT_POLICY_SCHEMA_VERSION}
-    for field in _POLICY_FIELDS:
+    payload: dict[str, object] = {"schema_version": policy.schema_version}
+    for field in _METADATA_POLICY_FIELDS:
         value = getattr(policy, field)
         if value is not None:
             payload[field] = value
+    if policy.response_format is not None:
+        payload["response_format"] = policy.response_format
+    if policy.required_json_keys:
+        payload["required_json_keys"] = list(policy.required_json_keys)
+    if policy.allowed_json_keys is not None:
+        payload["allowed_json_keys"] = list(policy.allowed_json_keys)
+    if policy.json_key_types:
+        payload["json_key_types"] = dict(policy.json_key_types)
     if len(payload) == 1:
         raise ArtifactError("execution result policy must configure at least one rule")
     return payload
+
+
+def _parse_json_key_list(
+    value: object,
+    *,
+    label: str,
+    allow_empty: bool,
+) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ArtifactError(f"execution result policy {label} must be a JSON array")
+    if not value and not allow_empty:
+        raise ArtifactError(f"execution result policy {label} cannot be empty")
+    if len(value) > MAX_RESULT_POLICY_JSON_KEYS:
+        raise ArtifactError(
+            f"execution result policy {label} cannot exceed {MAX_RESULT_POLICY_JSON_KEYS:,} entries"
+        )
+    return tuple(value)
+
+
+def _parse_json_key_types(value: object) -> tuple[tuple[str, str], ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, dict):
+        raise ArtifactError("execution result policy json_key_types must be a JSON object")
+    if not value:
+        raise ArtifactError("execution result policy json_key_types cannot be empty")
+    if len(value) > MAX_RESULT_POLICY_JSON_KEYS:
+        raise ArtifactError(
+            "execution result policy json_key_types cannot exceed "
+            f"{MAX_RESULT_POLICY_JSON_KEYS:,} entries"
+        )
+    return tuple(value.items())
 
 
 def _is_sha256(value: object) -> bool:

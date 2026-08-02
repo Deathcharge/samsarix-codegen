@@ -42,7 +42,7 @@ def test_self_check_matches_the_checked_in_offline_chain(monkeypatch) -> None:
         (REPOSITORY_ROOT / "examples/execution-plan-v1.json").read_text(encoding="utf-8")
     )
     example_evidence = json.loads(
-        (REPOSITORY_ROOT / "examples/execution-evidence-v2.json").read_text(encoding="utf-8")
+        (REPOSITORY_ROOT / "examples/execution-evidence-v3.json").read_text(encoding="utf-8")
     )
 
     assert (
@@ -69,7 +69,8 @@ def test_self_check_renderers_are_content_omitting() -> None:
     assert "self-check passed" in rendered_text
     assert "Network: not attempted; no provider called." in rendered_text
     assert SELF_CHECK_SOURCE not in rendered_text + rendered_json
-    assert "Synthetic offline fixture" not in rendered_text + rendered_json
+    assert "Null dereference" not in rendered_text + rendered_json
+    assert "trace line 42" not in rendered_text + rendered_json
     assert json.loads(rendered_json) == report.to_dict()
 
 

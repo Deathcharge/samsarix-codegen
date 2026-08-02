@@ -17,6 +17,14 @@ from pathlib import Path
 from typing import Any
 
 CLI_TIMEOUT_SECONDS = 120
+FIXTURE_RESPONSE = json.dumps(
+    {
+        "diagnosis": "Private fixture diagnosis",
+        "evidence": ["Private fixture trace"],
+        "next_step": "Private fixture action",
+    },
+    separators=(",", ":"),
+)
 
 
 class FixtureHandler(BaseHTTPRequestHandler):
@@ -35,7 +43,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
         response = json.dumps(
             {
                 "model": "fixture-model-2026-08",
-                "choices": [{"message": {"content": "Fixture response"}}],
+                "choices": [{"message": {"content": FIXTURE_RESPONSE}}],
                 "usage": {
                     "prompt_tokens": 23,
                     "completion_tokens": 2,
@@ -103,10 +111,18 @@ def main() -> int:
             policy_path.write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
+                        "schema_version": 2,
                         "expected_model": "fixture-model",
-                        "max_response_bytes": 64,
+                        "max_response_bytes": 256,
                         "max_total_tokens": 25,
+                        "response_format": "json-object",
+                        "required_json_keys": ["diagnosis", "evidence", "next_step"],
+                        "allowed_json_keys": ["diagnosis", "evidence", "next_step"],
+                        "json_key_types": {
+                            "diagnosis": "string",
+                            "evidence": "array",
+                            "next_step": "string",
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -243,7 +259,7 @@ def main() -> int:
                 "result omitted the provider-reported model",
             )
             require(
-                result["response"]["text"] == "Fixture response",
+                result["response"]["text"] == FIXTURE_RESPONSE,
                 "provider response was not normalized",
             )
             require(result["usage"]["total_tokens"] == 25, "provider usage was not normalized")
@@ -272,7 +288,7 @@ def main() -> int:
                 environment=environment,
             )
             evidence_payload = json.loads(evidence.stdout)
-            require(evidence_payload["schema_version"] == 2, "evidence did not use version 2")
+            require(evidence_payload["schema_version"] == 3, "evidence did not use version 3")
             require(
                 evidence_payload["plan_fingerprint"] == plan_fingerprint,
                 "execution evidence does not reference the exact plan",
@@ -290,13 +306,27 @@ def main() -> int:
                 "execution evidence omitted the enforced result-policy rule",
             )
             require(
+                evidence_payload["result"]["response_structure"]
+                == {"format": "json-object", "top_level_keys": 3},
+                "execution evidence omitted the validated response structure",
+            )
+            require(
                 b"Private fixture instruction" not in evidence.stdout,
                 "execution evidence disclosed the private instruction",
             )
             require(
-                b"Fixture response" not in evidence.stdout,
+                FIXTURE_RESPONSE.encode() not in evidence.stdout,
                 "execution evidence disclosed the provider response",
             )
+            for private_value in (
+                b"Private fixture diagnosis",
+                b"Private fixture trace",
+                b"Private fixture action",
+            ):
+                require(
+                    private_value not in evidence.stdout,
+                    "execution evidence disclosed a provider response value",
+                )
 
             failing_policy_path = root / "failing-result-policy.json"
             failing_policy_path.write_text(
@@ -320,6 +350,39 @@ def main() -> int:
             require(
                 len(FixtureHandler.requests) == 1,
                 "offline result-policy failure caused an additional provider request",
+            )
+
+            failing_structure_path = root / "failing-structure-policy.json"
+            failing_structure_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "response_format": "json-object",
+                        "required_json_keys": ["missing_key"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            rejected_structure = run_cli(
+                [
+                    "verify-execution",
+                    str(request_path),
+                    str(plan_path),
+                    str(result_path),
+                    "--policy",
+                    str(failing_structure_path),
+                ],
+                cwd=root,
+                environment=environment,
+                expected_exit=5,
+            )
+            require(
+                rejected_structure.stdout == b"",
+                "failed response-structure policy produced normal output",
+            )
+            require(
+                len(FixtureHandler.requests) == 1,
+                "offline response-structure failure caused an additional provider request",
             )
 
             received = FixtureHandler.requests[0]
