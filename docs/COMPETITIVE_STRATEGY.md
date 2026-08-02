@@ -40,6 +40,9 @@ The mature agent category already offers capabilities Samsarix should not try to
 
 - [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md) supports CI,
   stdin, sandbox policies, JSONL events, and schema-constrained outputs.
+- [Codex CLI diagnostics](https://learn.chatgpt.com/docs/developer-commands?surface=cli) include a
+  `doctor` command for installation and runtime troubleshooting, reinforcing that an install-level
+  preflight is a normal CLI expectation.
 - [Claude Code's CLI](https://code.claude.com/docs/en/cli-reference) supports
   non-interactive operation, structured output, turn limits, sessions, and permission modes.
 - [Continue CLI](https://docs.continue.dev/cli/headless-mode) supports headless pipelines, rules,
@@ -221,6 +224,12 @@ Run the checked-in request, plan, synthetic result, and evidence fixture through
 every supported CI platform. This gives evaluators one complete artifact-linkage journey without a
 provider account, local model download, network request, or ambiguous fake-provider claim; live
 quality and compatibility remain separate operator evidence.
+
+After installation, `self-check` provides the smaller preflight: it loads each bundled contract,
+checks its declared draft/object shape, and reproduces that deterministic evidence path without
+reading project files. Its versioned report contains package/runtime metadata and content-omitting
+fingerprints, explicitly records that no network or provider call occurred, and is validated in
+every installed-wheel CI job.
 
 ## Defensible product constraints
 

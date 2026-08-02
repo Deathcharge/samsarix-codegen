@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samsarix.com/schemas/codegen/self-check-v1.schema.json",
+  "title": "Samsarix Codegen installed-package self-check",
+  "description": "Content-omitting evidence that an installed package reproduced its bundled offline contract chain without a provider call.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "package_version", "runtime", "checks", "network"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"const": "passed"},
+    "package_version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python_implementation", "python_version"],
+      "properties": {
+        "python_implementation": {"type": "string", "minLength": 1},
+        "python_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"}
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundled_contracts", "request_round_trip", "plan_round_trip", "result_round_trip", "execution_evidence"],
+      "properties": {
+        "bundled_contracts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "count"],
+          "properties": {
+            "status": {"const": "passed"},
+            "count": {"type": "integer", "minimum": 1, "maximum": 1000}
+          }
+        },
+        "request_round_trip": {"$ref": "#/$defs/fingerprinted_check"},
+        "plan_round_trip": {"$ref": "#/$defs/fingerprinted_check"},
+        "result_round_trip": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "response_sha256"],
+          "properties": {
+            "status": {"const": "passed"},
+            "response_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "execution_evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "passed"}}
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempted", "provider_called"],
+      "properties": {
+        "attempted": {"const": false},
+        "provider_called": {"const": false}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "fingerprinted_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "fingerprint"],
+      "properties": {
+        "status": {"const": "passed"},
+        "fingerprint": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

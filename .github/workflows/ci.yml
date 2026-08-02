@@ -43,6 +43,9 @@ jobs:
           python -m pip install --force-reinstall --no-deps "$wheel"
           python -m pip check
           samsarix-codegen --version
+          samsarix-codegen self-check --format json > self-check.json
+          samsarix-codegen schema self-check > self-check.schema.json
+          python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('self-check.schema.json', encoding='utf-8')); payload=json.load(open('self-check.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload); assert payload['network'] == {'attempted': False, 'provider_called': False}"
           samsarix-codegen build "Explain this function" --task explain --file examples/sample.py > prompt.md
           grep -q "def greet" prompt.md
           samsarix-codegen build "Review the context loader" --task review --context-manifest examples/review-context-v1.json --format json > manifest-request.json

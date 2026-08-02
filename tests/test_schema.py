@@ -55,6 +55,7 @@ from samsarix_codegen.prompt import build_messages
 from samsarix_codegen.provider_check import ProviderCheckReport, render_provider_check
 from samsarix_codegen.result_policy import render_execution_result_policy
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
+from samsarix_codegen.self_check import run_self_check
 
 
 def make_artifact(instruction: str, content: str = "print('hello')\n"):
@@ -171,6 +172,7 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     execution_evidence_payload = verify_execution_evidence(
         base, execution_plan, plan_bound_result
     ).to_payload()
+    self_check_payload = run_self_check().to_dict()
 
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
@@ -196,6 +198,7 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     Draft202012Validator(load_contract_schema("execution-evidence")).validate(
         execution_evidence_payload
     )
+    Draft202012Validator(load_contract_schema("self-check")).validate(self_check_payload)
 
 
 @pytest.mark.parametrize(

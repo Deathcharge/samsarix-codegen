@@ -45,6 +45,7 @@ REQUIRED_SCHEMAS = (
     "execution-result-verification-v2.schema.json",
     "provider-check-v1.schema.json",
     "request-artifact-v2.schema.json",
+    "self-check-v1.schema.json",
 )
 REQUIRED_SDIST_PATHS = (
     ".gitattributes",
@@ -71,6 +72,7 @@ REQUIRED_SDIST_PATHS = (
     "docs/RELEASING.md",
     "docs/REQUEST_ARTIFACT.md",
     "docs/RESULT_POLICY.md",
+    "docs/SELF_CHECK.md",
     "examples/README.md",
     "examples/execution-plan-v1.json",
     "examples/execution-request-v2.json",
@@ -87,14 +89,17 @@ REQUIRED_SDIST_PATHS = (
     "src/samsarix_codegen/execution_plan.py",
     "src/samsarix_codegen/execution_evidence.py",
     "src/samsarix_codegen/provider_check.py",
+    "src/samsarix_codegen/self_check.py",
     "src/samsarix_codegen/py.typed",
     "tests/test_release.py",
+    "tests/test_self_check.py",
     "tests/test_pilot_check.py",
 )
 REQUIRED_WHEEL_PATHS = (
     "samsarix_codegen/__init__.py",
     "samsarix_codegen/execution_evidence.py",
     "samsarix_codegen/provider_check.py",
+    "samsarix_codegen/self_check.py",
     "samsarix_codegen/py.typed",
 )
 
