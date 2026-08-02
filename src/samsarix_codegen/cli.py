@@ -21,12 +21,14 @@ from samsarix_codegen.artifact import (
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
+    inspect_execution_result,
     parse_execution_result,
     parse_request_artifact,
     render_artifact_comparison,
     render_artifact_summary,
     render_execution_result,
     render_execution_result_comparison,
+    render_execution_result_inspection,
     render_request_artifact,
     require_fingerprint,
 )
@@ -109,6 +111,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="summary, fingerprint, or exact stored prompt format (default: text)",
     )
 
+    inspect_result_command = subparsers.add_parser(
+        "inspect-result",
+        help="validate and summarize one execution result without showing its response",
+    )
+    inspect_result_command.add_argument(
+        "result", metavar="PATH", help="execution-result path, or - for stdin"
+    )
+    inspect_result_command.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="content-omitting inspection output format (default: text)",
+    )
+
     compare_command = subparsers.add_parser(
         "compare", help="compare two validated request artifacts without showing prompt contents"
     )
@@ -172,6 +188,11 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                 _write_stdout(render_markdown(artifact.messages))
             else:
                 _write_stdout(render_artifact_summary(artifact, output_format=args.format))
+            return 0
+        if args.command == "inspect-result":
+            result = _read_execution_result(args.result, input_stream)
+            inspection = inspect_execution_result(result)
+            _write_stdout(render_execution_result_inspection(inspection, output_format=args.format))
             return 0
         if args.command == "compare":
             if args.base == "-" and args.target == "-":

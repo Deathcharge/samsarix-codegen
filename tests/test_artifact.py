@@ -5,22 +5,30 @@ import json
 
 import pytest
 
-from samsarix_codegen import render_execution_result as public_render_execution_result
+from samsarix_codegen import (
+    inspect_execution_result as public_inspect_execution_result,
+)
+from samsarix_codegen import (
+    render_execution_result as public_render_execution_result,
+)
 from samsarix_codegen.artifact import (
     MAX_ARTIFACT_BYTES,
     MAX_RESULT_BYTES,
     ExecutionResult,
     ExecutionResultComparison,
+    ExecutionResultInspection,
     ExecutionResultSummary,
     compare_execution_results,
     compare_request_artifacts,
     create_request_artifact,
+    inspect_execution_result,
     parse_execution_result,
     parse_request_artifact,
     render_artifact_comparison,
     render_artifact_summary,
     render_execution_result,
     render_execution_result_comparison,
+    render_execution_result_inspection,
     render_request_artifact,
     require_fingerprint,
 )
@@ -232,6 +240,40 @@ def test_execution_result_comparison_public_values_fail_closed() -> None:
     summary = ExecutionResultSummary("model", 1, 1, fingerprint, None, None, None)
     with pytest.raises(ArtifactError, match="invalid request fingerprint"):
         ExecutionResultComparison("invalid", summary, summary)
+
+    with pytest.raises(ArtifactError, match="invalid request fingerprint"):
+        ExecutionResultInspection("invalid", summary)
+
+
+def test_execution_result_inspection_is_typed_content_omitting_metadata() -> None:
+    artifact = make_artifact()
+    result = parse_execution_result(
+        render_execution_result(
+            artifact,
+            ChatResult("secret α", prompt_tokens=10, completion_tokens=None, total_tokens=12),
+            model="model-a",
+        )
+    )
+
+    inspection = inspect_execution_result(result)
+    text = render_execution_result_inspection(inspection)
+    payload = json.loads(render_execution_result_inspection(inspection, output_format="json"))
+
+    assert inspection == public_inspect_execution_result(result)
+    assert payload["request_fingerprint"] == artifact.fingerprint
+    assert payload["summary"]["model"] == "model-a"
+    assert payload["summary"]["response"]["chars"] == len("secret α")
+    assert payload["summary"]["response"]["bytes"] == len("secret α".encode())
+    assert payload["summary"]["response"]["sha256"].startswith("sha256:")
+    assert payload["summary"]["usage"]["completion_tokens"] is None
+    assert "Completion tokens: not reported" in text
+    assert "secret α" not in text
+    assert "secret α" not in json.dumps(payload, ensure_ascii=False)
+
+    with pytest.raises(ArtifactError, match="requires a validated execution result"):
+        inspect_execution_result(object())  # type: ignore[arg-type]
+    with pytest.raises(ArtifactError, match="format must be"):
+        render_execution_result_inspection(inspection, output_format="yaml")
 
 
 def test_execution_result_comparison_is_same_request_and_content_omitting() -> None:

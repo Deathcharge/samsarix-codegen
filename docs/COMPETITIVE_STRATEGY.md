@@ -103,6 +103,13 @@ Execute the same artifact against two operator-chosen OpenAI-compatible endpoint
 reviewed message payload; the comparison omits response bodies and does not claim provider
 authenticity, quality, tokenizer equivalence, or authorship.
 
+### Content-omitting run evidence
+
+Validate a stored execution result with `inspect-result` and retain a schema-valid metadata record
+before a comparison partner exists. CI can record the request link, model label, response size/hash,
+and reported usage without copying the response into ordinary job logs. This is validation and
+provenance-adjacent bookkeeping, not response evaluation or provider authentication.
+
 ### Repeatable project review
 
 Commit a small versioned context manifest for a component's implementation, public contract, and
@@ -115,7 +122,7 @@ shell history or repository discovery.
 - No automatic repository crawl in the core path.
 - No implicit manifest lookup, glob expansion, ignore-file interpretation, or conditional include.
 - No file writes, patch application, shell execution, or tool loop.
-- No implicit network request from `build` or `inspect`.
+- No implicit network request from `build`, `inspect`, or `inspect-result`.
 - No automatic retry or provider fallback.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.

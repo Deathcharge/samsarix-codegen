@@ -18,11 +18,11 @@ schema validation + offline inspect + fingerprint approval
 execute --expect-fingerprint
             |
             v
-one bounded provider request -> result JSON -> offline compare-results
+one bounded provider request -> result JSON -> offline inspect-result / compare-results
 ```
 
-`build`, `inspect`, `compare`, and `compare-results` never make a network request. `execute` does
-not read source files; it sends the validated `messages` stored in the artifact.
+`build`, `inspect`, `inspect-result`, `compare`, and `compare-results` never make a network request.
+`execute` does not read source files; it sends the validated `messages` stored in the artifact.
 
 `inspect --format markdown` renders those exact stored messages for human review after validation;
 it does not rebuild them from files. Because that view contains the full prompt, handle it with the
@@ -102,9 +102,9 @@ unkeyed hash. Use external access controls or signing when authenticity is requi
 ```
 
 The endpoint and API key are intentionally absent. Usage values remain `null` when the provider does
-not return valid non-negative integers. `parse_execution_result()` and `compare-results` enforce
-the exact fields, schema version, fingerprint syntax, canonical model label, non-empty UTF-8
-response, usage types, and size limit before comparison.
+not return valid non-negative integers. `parse_execution_result()`, `inspect-result`, and
+`compare-results` enforce the exact fields, schema version, fingerprint syntax, canonical model
+label, non-empty UTF-8 response, usage types, and size limit before emitting metadata or comparing.
 
 ## Offline request comparison
 
@@ -120,7 +120,18 @@ their original order. Comparison schema version `1` is independent of request sc
 Both artifact paths cannot be `-` because a single stdin stream cannot supply two independently
 bounded JSON documents.
 
-## Offline result comparison
+## Offline result inspection and comparison
+
+`inspect-result RESULT` validates one execution-result envelope and emits content-omitting metadata
+in text or JSON. It reports the linked request fingerprint, operator-recorded model, response
+character/UTF-8 byte counts and SHA-256 hash, and provider usage when present. This supports
+fail-closed CI archiving and diagnostics even when there is no second run to compare. Neither form
+reproduces the response body.
+
+The inspection proves only that the stored envelope satisfies the local contract and that its
+metadata was derived from that envelope. It does not authenticate a provider, establish response
+quality, or make the unkeyed hashes signatures. A response hash can confirm a guessed response, so
+inspection records still require handling appropriate to the underlying result.
 
 `compare-results BASE TARGET` validates two execution-result envelopes and fails unless they
 reference the same request fingerprint. Its text and JSON forms report the common fingerprint,
@@ -148,6 +159,7 @@ The package bundles self-contained
 | `request` | Request artifact schema version 2 | `src/samsarix_codegen/schemas/request-artifact-v2.schema.json` |
 | `result` | Execution result schema version 1 | `src/samsarix_codegen/schemas/execution-result-v1.schema.json` |
 | `comparison` | Artifact comparison schema version 1 | `src/samsarix_codegen/schemas/artifact-comparison-v1.schema.json` |
+| `result-inspection` | Execution-result inspection schema version 1 | `src/samsarix_codegen/schemas/execution-result-inspection-v1.schema.json` |
 | `result-comparison` | Execution-result comparison schema version 1 | `src/samsarix_codegen/schemas/execution-result-comparison-v1.schema.json` |
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
 | `context-manifest` | Explicit context manifest schema version 1 | `src/samsarix_codegen/schemas/context-manifest-v1.schema.json` |
@@ -158,6 +170,7 @@ Use `samsarix-codegen schema NAME` to print one without a network request, or
 JSON Schema checks portable structure, types, bounds, required fields, and digest syntax. It cannot
 prove semantic relationships such as whether a fingerprint matches canonical content, context
 bytes sum correctly, estimates match messages, or deltas match their base/target values. Use
-`inspect`, `compare`, `compare-results`, or the corresponding Python parser for those semantic
-checks. Context manifests are input contracts rather than request/result envelopes; their
-[separate contract](CONTEXT_MANIFEST.md) defines the additional runtime path and containment rules.
+`inspect`, `inspect-result`, `compare`, `compare-results`, or the corresponding Python parser for
+those semantic checks. Context manifests are input contracts rather than request/result envelopes;
+their [separate contract](CONTEXT_MANIFEST.md) defines the additional runtime path and containment
+rules.

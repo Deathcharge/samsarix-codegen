@@ -9,7 +9,8 @@ Portfolio role: **standalone product candidate**. Develop this as a focused stan
 Current disposition: The productized default is merged and preserved by a rollback ref. Version
 `0.2.0` has merged deterministic request-artifact and offline review/comparison workflows.
 Versioned machine-readable contracts, explicitly invoked context manifests, an operator-run
-provider conformance check, and offline same-request result comparison are implemented milestones.
+provider conformance check, offline single-result inspection, and same-request result comparison
+are implemented milestones.
 A gated release workflow can build and attest without publishing; PyPI owner setup, publication,
 pilot validation, and flagship adoption remain separate decisions.
 
@@ -36,6 +37,8 @@ Current hardening backlog:
   package-verified for the review-tools follow-up.
 - Strict execution-result parsing and content-omitting same-request comparison are implemented for
   reproducible provider experiments; they intentionally do not score output quality.
+- Content-omitting single-result inspection is implemented for fail-closed CI evidence before a
+  comparison partner exists; it intentionally does not authenticate or score a response.
 - Strict versioned context manifests make repeated component reviews portable without automatic
   repository discovery, glob expansion, or a second path-loading boundary.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented
