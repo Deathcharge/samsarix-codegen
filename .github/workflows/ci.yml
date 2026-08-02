@@ -75,7 +75,7 @@ jobs:
             --max-estimated-input-tokens 50000 \
             --policy examples/result-policy-v1.json \
             --expect-policy-fingerprint "$policy_fingerprint" > execution-plan.json
-          plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json --format fingerprint)"
+          plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json --policy examples/result-policy-v1.json --format fingerprint)"
           test "${plan_fingerprint#sha256:}" != "$plan_fingerprint"
           test "${#plan_fingerprint}" -eq 71
           samsarix-codegen verify-plan request.json execution-plan.json \
