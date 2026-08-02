@@ -5,17 +5,152 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO, ClassVar
 
 from samsarix_codegen.errors import ContextError
 from samsarix_codegen.models import ContextFile
 
 DEFAULT_MAX_FILES = 20
+DEFAULT_MAX_MANIFESTS = 20
 DEFAULT_MAX_TOTAL_BYTES = 200_000
 DEFAULT_MAX_FILE_BYTES = 100_000
+CONTEXT_MANIFEST_SCHEMA_VERSION = 1
+MAX_CONTEXT_MANIFEST_BYTES = 64 * 1024
+MAX_CONTEXT_PATH_CHARS = 4_096
 MAX_STDIN_NAME_CHARS = 200
+
+
+class _DuplicateManifestKeyError(ValueError):
+    """Internal signal for an ambiguous JSON object."""
+
+
+@dataclass(frozen=True, slots=True)
+class ContextManifest:
+    """A portable, explicitly invoked allowlist of context files."""
+
+    files: tuple[str, ...]
+    schema_version: ClassVar[int] = CONTEXT_MANIFEST_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.files, tuple) or not self.files:
+            raise ContextError("context manifest files must be a non-empty tuple")
+        if len(self.files) > DEFAULT_MAX_FILES:
+            raise ContextError(f"context manifest may contain at most {DEFAULT_MAX_FILES} files")
+        seen: set[str] = set()
+        for index, path in enumerate(self.files):
+            if not isinstance(path, str):
+                raise ContextError(f"context manifest file {index} must be a string")
+            _validate_manifest_path(path, index=index)
+            if path in seen:
+                raise ContextError(f"context manifest contains duplicate file path: {path}")
+            seen.add(path)
+        rendered_size = len(_render_context_manifest_files(self.files).encode("utf-8"))
+        if rendered_size > MAX_CONTEXT_MANIFEST_BYTES:
+            raise ContextError(
+                f"context manifest exceeds the {MAX_CONTEXT_MANIFEST_BYTES:,}-byte limit"
+            )
+
+    def to_payload(self) -> dict[str, object]:
+        """Return the stable JSON-compatible manifest payload."""
+
+        return {"schema_version": self.schema_version, "files": list(self.files)}
+
+
+def parse_context_manifest(raw: str | bytes) -> ContextManifest:
+    """Parse one bounded, exact context-manifest version 1 document."""
+
+    if isinstance(raw, bytes):
+        if len(raw) > MAX_CONTEXT_MANIFEST_BYTES:
+            raise ContextError(
+                f"context manifest exceeds the {MAX_CONTEXT_MANIFEST_BYTES:,}-byte limit"
+            )
+        if b"\x00" in raw:
+            raise ContextError("binary context manifests are not supported")
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ContextError("context manifest is not valid UTF-8") from exc
+    else:
+        try:
+            encoded = raw.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ContextError("context manifest text is not valid Unicode") from exc
+        if len(encoded) > MAX_CONTEXT_MANIFEST_BYTES:
+            raise ContextError(
+                f"context manifest exceeds the {MAX_CONTEXT_MANIFEST_BYTES:,}-byte limit"
+            )
+        text = raw
+
+    try:
+        decoded: Any = json.loads(text, object_pairs_hook=_reject_duplicate_manifest_keys)
+    except _DuplicateManifestKeyError as exc:
+        raise ContextError(str(exc)) from exc
+    except json.JSONDecodeError as exc:
+        raise ContextError(f"context manifest is not valid JSON: {exc.msg}") from exc
+    if not isinstance(decoded, dict):
+        raise ContextError("context manifest must be a JSON object")
+    if set(decoded) != {"schema_version", "files"}:
+        raise ContextError("context manifest fields do not match schema version 1")
+
+    schema_version = decoded.get("schema_version")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version != CONTEXT_MANIFEST_SCHEMA_VERSION
+    ):
+        raise ContextError(
+            f"unsupported context manifest schema: {schema_version!r}; "
+            f"expected {CONTEXT_MANIFEST_SCHEMA_VERSION}"
+        )
+
+    files = decoded.get("files")
+    if not isinstance(files, list) or not files:
+        raise ContextError("context manifest files must be a non-empty array")
+    if len(files) > DEFAULT_MAX_FILES:
+        raise ContextError(f"context manifest may contain at most {DEFAULT_MAX_FILES} files")
+
+    return ContextManifest(files=tuple(files))
+
+
+def render_context_manifest(manifest: ContextManifest) -> str:
+    """Render a context manifest deterministically."""
+
+    return _render_context_manifest_files(manifest.files)
+
+
+def load_context_manifest(
+    path: str | Path,
+    *,
+    root: str | Path = ".",
+) -> ContextManifest:
+    """Load a bounded context manifest that resolves within ``root``."""
+
+    project_root = _resolve_root(root)
+    resolved, relative = _resolve_contained_file(path, project_root, label="context manifest")
+    try:
+        size = resolved.stat().st_size
+    except OSError as exc:
+        raise ContextError(f"cannot inspect context manifest {relative.as_posix()}: {exc}") from exc
+    if size > MAX_CONTEXT_MANIFEST_BYTES:
+        raise ContextError(
+            f"context manifest {relative.as_posix()} is {size:,} bytes; "
+            f"the limit is {MAX_CONTEXT_MANIFEST_BYTES:,}"
+        )
+    try:
+        with resolved.open("rb") as handle:
+            raw = handle.read(MAX_CONTEXT_MANIFEST_BYTES + 1)
+    except OSError as exc:
+        raise ContextError(f"cannot read context manifest {relative.as_posix()}: {exc}") from exc
+    if len(raw) > MAX_CONTEXT_MANIFEST_BYTES:
+        raise ContextError(
+            f"context manifest {relative.as_posix()} exceeds the "
+            f"{MAX_CONTEXT_MANIFEST_BYTES:,}-byte limit while being read"
+        )
+    return parse_context_manifest(raw)
 
 
 def load_context_files(
@@ -47,24 +182,10 @@ def load_context_files(
     total_bytes = 0
 
     for raw_path in requested:
-        candidate = Path(raw_path)
-        if not candidate.is_absolute():
-            candidate = project_root / candidate
-
-        try:
-            resolved = candidate.resolve(strict=True)
-        except (OSError, RuntimeError) as exc:
-            raise ContextError(f"cannot resolve context file {raw_path!s}: {exc}") from exc
-
-        try:
-            relative = resolved.relative_to(project_root)
-        except ValueError as exc:
-            raise ContextError(f"context file escapes the project root: {raw_path!s}") from exc
+        resolved, relative = _resolve_contained_file(raw_path, project_root, label="context file")
 
         if resolved in seen:
             continue
-        if not resolved.is_file():
-            raise ContextError(f"context path is not a regular file: {raw_path!s}")
 
         try:
             size = resolved.stat().st_size
@@ -153,3 +274,78 @@ def _resolve_root(root: str | Path) -> Path:
     if not resolved.is_dir():
         raise ContextError(f"project root is not a directory: {root!s}")
     return resolved
+
+
+def _resolve_contained_file(
+    path: str | Path,
+    project_root: Path,
+    *,
+    label: str,
+) -> tuple[Path, Path]:
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = project_root / candidate
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ContextError(f"cannot resolve {label} {path!s}: {exc}") from exc
+    try:
+        relative = resolved.relative_to(project_root)
+    except ValueError as exc:
+        raise ContextError(f"{label} escapes the project root: {path!s}") from exc
+    if not resolved.is_file():
+        raise ContextError(f"{label} is not a regular file: {path!s}")
+    return resolved, relative
+
+
+def _validate_manifest_path(path: str, *, index: int) -> None:
+    label = f"context manifest file {index}"
+    if not path:
+        raise ContextError(f"{label} cannot be blank")
+    if len(path) > MAX_CONTEXT_PATH_CHARS:
+        raise ContextError(f"{label} exceeds the {MAX_CONTEXT_PATH_CHARS:,}-character limit")
+    if path != path.strip():
+        raise ContextError(f"{label} cannot have leading or trailing whitespace")
+    if any(ord(character) < 32 or ord(character) == 127 for character in path):
+        raise ContextError(f"{label} cannot contain control characters")
+    try:
+        path.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ContextError(f"{label} must be valid Unicode") from exc
+    if "\\" in path:
+        raise ContextError(f"{label} must use forward slashes")
+    if path.startswith("/"):
+        raise ContextError(f"{label} must be relative to --root")
+    if any(character in '<>:"|?*' for character in path):
+        raise ContextError(f"{label} contains a path character that is not portable")
+    parts = path.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ContextError(f"{label} cannot contain empty, dot, or parent segments")
+    if any(part.endswith((" ", ".")) for part in parts):
+        raise ContextError(f"{label} contains a segment with a non-portable ending")
+    reserved = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{value}" for value in range(1, 10)),
+        *(f"LPT{value}" for value in range(1, 10)),
+    }
+    if any(part.split(".", 1)[0].upper() in reserved for part in parts):
+        raise ContextError(f"{label} contains a reserved path segment")
+
+
+def _reject_duplicate_manifest_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    decoded: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in decoded:
+            raise _DuplicateManifestKeyError(
+                f"context manifest contains a duplicate JSON field: {key}"
+            )
+        decoded[key] = value
+    return decoded
+
+
+def _render_context_manifest_files(files: tuple[str, ...]) -> str:
+    payload = {"schema_version": CONTEXT_MANIFEST_SCHEMA_VERSION, "files": list(files)}
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"

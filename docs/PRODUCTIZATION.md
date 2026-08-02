@@ -39,7 +39,8 @@ The target user is a developer who wants to give an AI model a small, explicit s
 without granting file-write or shell access. The primary journey is:
 
 1. Install the package from the repository.
-2. Run `samsarix-codegen build` with a task, instruction, and explicit files or bounded stdin.
+2. Run `samsarix-codegen build` with a task, instruction, explicit files, explicitly invoked
+   context manifests, or bounded stdin.
 3. Inspect the generated Markdown or schema-versioned JSON artifact without a network call.
 4. Record the artifact fingerprint as an approval object, then use `execute --expect-fingerprint`
    against a local or hosted OpenAI-compatible endpoint.
@@ -58,7 +59,10 @@ Research references:
 
 - <https://aider.chat/docs/repomap.html>
 - <https://aider.chat/docs/usage/modes.html>
-- <https://docs.anthropic.com/en/docs/claude-code/cli-usage>
+- <https://code.claude.com/docs/en/cli-reference>
+- <https://code.claude.com/docs/en/memory>
+- <https://aider.chat/docs/config/options.html>
+- <https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions>
 - <https://docs.ollama.com/api/openai-compatibility>
 - <https://packaging.python.org/en/latest/guides/writing-pyproject-toml/>
 - <https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/>
@@ -77,8 +81,9 @@ Research references:
    point replace two malformed Python wheels and one broken Node package.
 2. **Offline first.** `build` is the credential-free primary journey and shares the exact message
    builder used by `run`.
-3. **Explicit context.** Only repeated `--file` values are read; resolved paths must remain under
-   `--root`. UTF-8, file-count, per-file, total-byte, and NUL checks bound data handling.
+3. **Explicit context.** Only repeated `--file` values, entries from explicitly invoked context
+   manifests, and named stdin are read; resolved paths must remain under `--root`. UTF-8,
+   file-count, per-file, total-byte, and NUL checks bound data handling.
 4. **One network contract.** The standard-library client implements non-streaming OpenAI-compatible
    `/chat/completions`, applies a timeout and response-size cap, and never retries automatically.
 5. **Credential hygiene.** API keys are accepted only from `SAMSARIX_API_KEY`; endpoint URLs reject
@@ -112,6 +117,11 @@ Research references:
 15. **Structural result comparison.** Strict parsing and a shared request fingerprint let operators
     compare model labels, response equality, UTF-8 sizes, hashes, and reported token usage offline.
     The comparison omits response bodies and is not a quality score or provider-authenticity proof.
+16. **Reusable context without discovery.** Context-manifest schema version 1 stores one portable
+    root-relative file allowlist. Manifests are bounded, exact, explicitly named, independently
+    schema-validatable, and composable. They flow into the existing contained loader and do not add
+    globs, ignore rules, implicit lookup, or a second request provenance format; the resulting
+    artifact records the effective context content and hashes.
 
 ## Assumptions
 
@@ -176,7 +186,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add a deterministic local provider fixture and an operator-run conformance command.
 - [ ] Record results for any provider/model Samsarix chooses to support explicitly.
 - [x] Add bounded, explicitly named stdin context for staged diffs and selected log excerpts.
-- [ ] Consider ignore-file-based discovery only if explicit-input ergonomics prove insufficient;
+- [x] Add strict, versioned, explicitly invoked context manifests for repeatable file allowlists.
+- [ ] Consider ignore-file-based discovery only if manifests and direct inputs prove insufficient;
   retain visible budgets and path boundaries.
 - [x] Add dry-runnable release verification, provenance, and gated Trusted Publishing automation.
 - [x] Add strict same-request execution-result comparison without reproducing response contents.
@@ -189,7 +200,7 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] `build`, `inspect`, `compare`, `compare-results`, `execute`, `run`, `schema`, and
   `provider-check` commands with useful help and version behavior.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
-- [x] Safe explicit context loader and portable Markdown/JSON renderers.
+- [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
 - [x] Unit and local HTTP integration tests covering success and ordinary failures.
 - [x] Example input, changelog, contribution guidance, new-user README, and CI.
@@ -226,14 +237,18 @@ Final command evidence is recorded in the **Final verification** section after e
   collects usability signals without collecting prompts, source, logs, responses, or credentials.
 - Added strict execution-result parsing, same-request content-omitting comparison, and a standalone
   versioned schema for downstream CI consumers.
+- Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
+  installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
   full-SHA-pinned Actions, provenance attestations, gated Trusted Publishing, immutable-ready GitHub
   release assembly, and a recovery runbook.
 
 ## Deferred work and rationale
 
-- Streaming, tool calls, automated edits, and repository maps would materially expand risk and move
-  the product into direct competition with mature agents; they are unnecessary for the first wedge.
+- Streaming, tool calls, automated edits, repository maps, and automatic file discovery would
+  materially expand risk and move the product into direct competition with mature agents; they are
+  unnecessary for the first wedge. Explicit manifests address repeated-selection ergonomics without
+  crossing that boundary.
 - A VS Code extension is deferred because there is no evidence that maintaining two distributions
   improves adoption before the CLI is validated.
 - Conversation persistence is deferred to avoid storing source or model data without a validated need
@@ -257,8 +272,8 @@ required for local evaluation and none was performed.
 
 ### Trust boundaries
 
-- CLI arguments, environment configuration, selected file/stdin contents, request artifacts,
-  endpoint responses, and model output are untrusted inputs.
+- CLI arguments, environment configuration, context manifests, selected file/stdin contents,
+  request artifacts, endpoint responses, and model output are untrusted inputs.
 - The invoking developer is trusted to choose a project root, files, model, and endpoint.
 - The model receives only explicit context, but embedded prompt injection can still influence output.
 - Generated output is never executed or written by Samsarix Codegen.
@@ -268,6 +283,9 @@ required for local evaluation and none was performed.
 ### Controls
 
 - Resolved-path containment prevents ordinary traversal and symlink escape from `--root`.
+- Context manifests are explicitly invoked, root-contained, limited to 64 KiB and 20 entries, and
+  reject ambiguous fields, non-portable paths, traversal segments, and duplicate entries; no path
+  syntax is expanded as a glob.
 - UTF-8/NUL checks reject accidental binary or opaque inputs.
 - Count, byte, character, token, timeout, and response caps prevent unbounded local/API work.
 - Remote plaintext transport and URL credentials are rejected; Python's default TLS verification is
@@ -281,6 +299,8 @@ required for local evaluation and none was performed.
 
 - Local filesystem state can change between validation and read; this is a local trusted-operator
   utility, not a multi-tenant file service.
+- A checked-in manifest can become stale or expose repository structure. Missing or escaped paths
+  fail closed, but selecting sensitive root-contained files remains an operator/reviewer decision.
 - Prompt injection and insecure generated code require human review; system wording is defense in
   depth, not a security boundary.
 - OpenAI-compatible implementations can vary. Provider contract failures are surfaced without trying
@@ -451,6 +471,26 @@ comparison, schema enum, and render API were also exercised. Exact final distrib
 attached to the corresponding pull request because recording them inside the sdist would change the
 sdist digest.
 
+### Context-manifest follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing, and 161 tests in 24.64 seconds.
+The repository-built sdist and wheel passed Twine and the fail-closed release audit. The extracted
+sdist imported its own source path, then passed formatting, lint, strict typing, and the same 161
+tests. Its isolated wheel rebuild was Twine-valid and visibly included the new
+context-manifest schema. A dependency-free fresh environment installed the audited repository
+wheel, reported no broken requirements, built a three-file request through the checked-in manifest,
+exported a valid Draft 2020-12 manifest schema, and exercised the typed parse/render/schema API.
+Exact final distribution digests are attached to the corresponding pull request because recording
+them inside the sdist would change the sdist digest.
+
+Two combined clean-room wrappers exceeded their time bounds after completing earlier checkpoints:
+the first reached the fresh-wheel stage, and the final one reached unusually slow Windows virtual-
+environment creation. Verification resumed against each exact artifact pair and reran every
+unreturned stage separately. A first extracted rebuild requested `--no-isolation` and failed
+because the host Python did not expose `setuptools.build_meta` globally; rerunning with the
+project's declared isolated build path succeeded. None of these harness events was treated as a
+product pass.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -471,8 +511,9 @@ sdist digest.
 
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
-review-first artifact workflow, offline review/comparison tools, independent JSON contracts, and an
-operator-run provider conformance check; each has local clean-package evidence recorded above.
+review-first artifact workflow, offline review/comparison tools, reusable explicit context
+manifests, independent JSON contracts, and an operator-run provider conformance check; each has
+local clean-package evidence recorded above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release
 tag, and approval of the publishing environment. The usefulness claim remains gated on the
 three-developer pilot, and live provider certification remains optional unless the owner advertises

@@ -18,6 +18,7 @@ from samsarix_codegen.artifact import (
     render_request_artifact,
 )
 from samsarix_codegen.cli import main
+from samsarix_codegen.context import ContextManifest
 from samsarix_codegen.errors import ConfigurationError
 from samsarix_codegen.models import ChatResult, ContextFile, PromptRequest, Task
 from samsarix_codegen.prompt import build_messages
@@ -82,6 +83,9 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
             output_format="json",
         )
     )
+    context_manifest_payload = ContextManifest(
+        files=("src/app.py", "tests/test_app.py")
+    ).to_payload()
 
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
     Draft202012Validator(load_contract_schema("result")).validate(result_payload)
@@ -90,6 +94,25 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
         result_comparison_payload
     )
     Draft202012Validator(load_contract_schema("provider-check")).validate(provider_check_payload)
+    Draft202012Validator(load_contract_schema("context-manifest")).validate(
+        context_manifest_payload
+    )
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        ["src/app.py", "src/app.py"],
+        ["../secret.py"],
+        ["src\\app.py"],
+        ["/absolute.py"],
+    ],
+)
+def test_context_manifest_schema_rejects_unsafe_or_duplicate_paths(files: list[str]) -> None:
+    payload = {"schema_version": 1, "files": files}
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(load_contract_schema("context-manifest")).validate(payload)
 
 
 def test_request_schema_rejects_contract_drift() -> None:

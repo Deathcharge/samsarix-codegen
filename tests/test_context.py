@@ -1,12 +1,21 @@
 # Copyright 2026 Samsarix LLC
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 
-from samsarix_codegen.context import load_context_files, load_stream_context
+from samsarix_codegen.context import (
+    MAX_CONTEXT_MANIFEST_BYTES,
+    ContextManifest,
+    load_context_files,
+    load_context_manifest,
+    load_stream_context,
+    parse_context_manifest,
+    render_context_manifest,
+)
 from samsarix_codegen.errors import ContextError
 
 
@@ -126,3 +135,141 @@ def test_rejects_invalid_stream_context(name: str, body: bytes, match: str) -> N
 def test_enforces_stream_context_byte_limit() -> None:
     with pytest.raises(ContextError, match="remaining 4-byte limit"):
         load_stream_context("input", BytesIO(b"12345"), max_bytes=4)
+
+
+def test_context_manifest_round_trips_as_an_exact_versioned_contract() -> None:
+    manifest = ContextManifest(files=("src/app.py", "tests/test_app.py"))
+
+    rendered = render_context_manifest(manifest)
+    reparsed = parse_context_manifest(rendered.encode("utf-8"))
+
+    assert reparsed == manifest
+    assert json.loads(rendered) == {
+        "schema_version": 1,
+        "files": ["src/app.py", "tests/test_app.py"],
+    }
+
+
+def test_loads_context_manifest_relative_to_the_same_root(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "review-context.json"
+    manifest_path.write_text(
+        render_context_manifest(ContextManifest(files=("src/app.py",))), encoding="utf-8"
+    )
+
+    manifest = load_context_manifest("review-context.json", root=tmp_path)
+
+    assert manifest.files == ("src/app.py",)
+
+
+def test_context_manifest_must_be_contained_by_root(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    outside = tmp_path / "context.json"
+    outside.write_text('{"schema_version": 1, "files": ["app.py"]}', encoding="utf-8")
+
+    with pytest.raises(ContextError, match="context manifest escapes the project root"):
+        load_context_manifest(outside, root=root)
+
+
+@pytest.mark.parametrize(
+    ("raw", "match"),
+    [
+        (b"\xff", "not valid UTF-8"),
+        (b"{}\x00", "binary context manifests"),
+        ('{"schema_version": 1, "files": ["\ud800"]}', "not valid Unicode"),
+        ("not json", "not valid JSON"),
+        ("[]", "must be a JSON object"),
+        ('{"schema_version": 1}', "fields do not match"),
+        (
+            '{"schema_version": 1, "schema_version": 1, "files": ["app.py"]}',
+            "duplicate JSON field",
+        ),
+        ('{"schema_version": true, "files": ["app.py"]}', "unsupported"),
+        ('{"schema_version": 2, "files": ["app.py"]}', "unsupported"),
+        ('{"schema_version": 1, "files": []}', "non-empty array"),
+        ('{"schema_version": 1, "files": [1]}', "must be a string"),
+        (
+            '{"schema_version": 1, "files": ["app.py", "app.py"]}',
+            "duplicate file path",
+        ),
+    ],
+)
+def test_rejects_invalid_context_manifest_documents(raw: str | bytes, match: str) -> None:
+    with pytest.raises(ContextError, match=match):
+        parse_context_manifest(raw)
+
+
+@pytest.mark.parametrize(
+    ("path", "match"),
+    [
+        ("", "cannot be blank"),
+        (" app.py", "leading or trailing whitespace"),
+        ("app.py ", "leading or trailing whitespace"),
+        ("src\\app.py", "forward slashes"),
+        ("/src/app.py", "relative to --root"),
+        ("C:/src/app.py", "not portable"),
+        ("src/../secret.txt", "parent segments"),
+        ("src/./app.py", "dot"),
+        ("src//app.py", "empty"),
+        ("src/app?.py", "not portable"),
+        ("src/trailing./app.py", "non-portable ending"),
+        ("src/NUL.txt", "reserved path segment"),
+        ("src/line\nbreak.py", "control characters"),
+        ("\ud800", "valid Unicode"),
+    ],
+)
+def test_rejects_nonportable_manifest_paths(path: str, match: str) -> None:
+    raw = json.dumps({"schema_version": 1, "files": [path]})
+
+    with pytest.raises(ContextError, match=match):
+        parse_context_manifest(raw)
+
+
+def test_context_manifest_byte_limit_applies_before_json_decode() -> None:
+    raw = b" " * (MAX_CONTEXT_MANIFEST_BYTES + 1)
+
+    with pytest.raises(ContextError, match="byte limit"):
+        parse_context_manifest(raw)
+
+
+def test_context_manifest_size_uses_the_exact_public_rendering() -> None:
+    near_limit_files = tuple(f"{index:02d}-{'a' * 3260}.py" for index in range(20))
+    manifest = ContextManifest(files=near_limit_files)
+    rendered = render_context_manifest(manifest)
+
+    assert len(rendered.encode("utf-8")) <= MAX_CONTEXT_MANIFEST_BYTES
+    assert parse_context_manifest(rendered) == manifest
+
+    oversized_files = tuple(f"{index:02d}-{'a' * 3261}.py" for index in range(20))
+    payload = {"schema_version": 1, "files": list(oversized_files)}
+    compact_size = len(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+
+    assert compact_size <= MAX_CONTEXT_MANIFEST_BYTES
+    with pytest.raises(ContextError, match="byte limit"):
+        ContextManifest(files=oversized_files)
+
+
+def test_manifest_bounded_read_does_not_depend_only_on_stat_size(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest_path = tmp_path / "growing.json"
+    manifest_path.write_bytes(b" " * (MAX_CONTEXT_MANIFEST_BYTES + 1))
+    actual_mode = manifest_path.stat().st_mode
+
+    class StaleStat:
+        st_size = 1
+        st_mode = actual_mode
+
+    original_stat = Path.stat
+
+    def stale_stat(self, *args, **kwargs):
+        if self == manifest_path:
+            return StaleStat()
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", stale_stat)
+
+    with pytest.raises(ContextError, match="while being read"):
+        load_context_manifest(manifest_path, root=tmp_path)

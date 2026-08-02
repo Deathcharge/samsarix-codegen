@@ -19,6 +19,8 @@ Its product promise is narrower and testable:
    sending reviewed source or logs.
 8. Compare two same-request result envelopes offline without reproducing either response or
    pretending structural evidence is a quality score.
+9. Reuse checked-in file selections through explicitly invoked manifests without granting
+   repository-discovery or glob authority.
 
 ## Evidence from adjacent products
 
@@ -26,7 +28,7 @@ The mature agent category already offers capabilities Samsarix should not try to
 
 - [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md) supports CI,
   stdin, sandbox policies, JSONL events, and schema-constrained outputs.
-- [Claude Code's CLI](https://docs.anthropic.com/en/docs/claude-code/cli-usage) supports
+- [Claude Code's CLI](https://code.claude.com/docs/en/cli-reference) supports
   non-interactive operation, structured output, turn limits, sessions, and permission modes.
 - [Continue CLI](https://docs.continue.dev/cli/headless-mode) supports headless pipelines, rules,
   JSON output, sessions, and opt-in editing or shell tools.
@@ -44,6 +46,22 @@ The context-packing category is also established:
   digests.
 - [Aider's repository map](https://aider.chat/docs/repomap.html) selects important symbols from a
   repository to give its editing agent wider context.
+
+Persistent project context is also common, but usually broader or more implicit than this product's
+approval boundary:
+
+- [Aider's options](https://aider.chat/docs/config/options.html) accept repeatable editable and
+  read-only files, while its [in-chat commands](https://aider.chat/docs/usage/commands.html) can save
+  commands that reconstruct a session's selected files.
+- [Claude Code memory](https://code.claude.com/docs/en/memory) loads project instruction files and
+  path-scoped rules into sessions.
+- [GitHub Copilot repository instructions](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions)
+  can apply repository-wide, path-specific, and agent instruction files.
+
+Those workflows validate repeated team context. Samsarix context manifests serve a narrower use
+case: an operator must name the manifest, its entries are a finite portable allowlist contained by
+one root, and the resulting exact file contents are compiled into the same bounded fingerprinted
+artifact used for approval.
 
 The evaluation category validates demand for repeatable model comparisons:
 
@@ -85,9 +103,17 @@ Execute the same artifact against two operator-chosen OpenAI-compatible endpoint
 reviewed message payload; the comparison omits response bodies and does not claim provider
 authenticity, quality, tokenizer equivalence, or authorship.
 
+### Repeatable project review
+
+Commit a small versioned context manifest for a component's implementation, public contract, and
+tests. Developers and CI can invoke the same allowlist, add an explicit task-specific file, inspect
+the effective content hashes and budget, and compare rebuilt artifacts without relying on local
+shell history or repository discovery.
+
 ## Defensible product constraints
 
 - No automatic repository crawl in the core path.
+- No implicit manifest lookup, glob expansion, ignore-file interpretation, or conditional include.
 - No file writes, patch application, shell execution, or tool loop.
 - No implicit network request from `build` or `inspect`.
 - No automatic retry or provider fallback.
@@ -103,4 +129,4 @@ authenticity, quality, tokenizer equivalence, or authorship.
    endpoints Samsarix chooses to support explicitly.
 3. Configure the implemented trusted-publishing/attestation pipeline, reserve the package, and
    execute the documented release and rollback verification.
-4. Only after pilot evidence: consider opt-in streaming, ignore-aware manifests, or editor hooks.
+4. Only after pilot evidence: consider opt-in streaming, ignore-aware discovery, or editor hooks.

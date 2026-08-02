@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "files": [
+    "src/samsarix_codegen/context.py",
+    "src/samsarix_codegen/prompt.py",
+    "tests/test_context.py"
+  ]
+}

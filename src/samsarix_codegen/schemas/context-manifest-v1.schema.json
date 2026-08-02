@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samsarix.com/schemas/codegen/context-manifest-v1.schema.json",
+  "title": "Samsarix Codegen context manifest",
+  "description": "An explicitly invoked, portable allowlist of context files relative to one project root.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "files"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096,
+        "pattern": "^(?!/)(?!.*[<>:\"|?*\\\\])(?!.*//)(?!\\.\\.?$)(?!\\.\\.?/)(?!.*\\/\\.\\.?$)(?!.*\\/\\.\\.?\\/)(?!.*[\\u0000-\\u001F\\u007F])(?!\\s)(?!.*\\s$)(?!.*(?:^|/)[^/]*[ .](?:/|$)).+$"
+      }
+    }
+  }
+}

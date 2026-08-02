@@ -45,6 +45,10 @@ jobs:
           samsarix-codegen --version
           samsarix-codegen build "Explain this function" --task explain --file examples/sample.py > prompt.md
           grep -q "def greet" prompt.md
+          samsarix-codegen build "Review the context loader" --task review --context-manifest examples/review-context-v1.json --format json > manifest-request.json
+          grep -q '"name": "src/samsarix_codegen/context.py"' manifest-request.json
+          samsarix-codegen schema context-manifest > context-manifest.schema.json
+          python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('context-manifest.schema.json', encoding='utf-8')); payload=json.load(open('examples/review-context-v1.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
           printf 'diff --git a/app.py b/app.py\n+enabled = True\n' |
             samsarix-codegen build "Review this change" --task review --stdin-name staged.diff --format json > request.json
           fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
