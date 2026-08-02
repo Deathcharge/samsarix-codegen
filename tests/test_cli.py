@@ -415,6 +415,188 @@ def test_inspect_and_execute_reviewed_artifact(tmp_path: Path, capsys, monkeypat
     assert payload["usage"]["total_tokens"] == 23
 
 
+@pytest.mark.parametrize("output_format", ["text", "json"])
+def test_execute_enforces_approved_policy_before_emitting_response(
+    output_format: str, tmp_path: Path, capsys, monkeypatch
+) -> None:
+    artifact = create_request_artifact(
+        build_messages(PromptRequest(Task.REVIEW, "Return the reviewed finding")), ()
+    )
+    artifact_path = tmp_path / "request.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    policy = ExecutionResultPolicy(
+        expected_model="policy-model",
+        max_total_tokens=20,
+        response_format="json-object",
+        required_json_keys=("summary", "safe"),
+        allowed_json_keys=("summary", "safe"),
+        json_key_types=(("summary", "string"), ("safe", "boolean")),
+        schema_version=2,
+    )
+    policy_path = tmp_path / "result-policy.json"
+    policy_path.write_text(render_execution_result_policy(policy), encoding="utf-8")
+    expected_policy_fingerprint = fingerprint_execution_result_policy(policy)
+    calls = 0
+
+    def fake_complete(self, messages):
+        nonlocal calls
+        calls += 1
+        assert tuple(messages) == artifact.messages
+        return ChatResult('{"summary":"approved","safe":true}', 8, 4, 12)
+
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fake_complete)
+
+    exit_code = main(
+        [
+            "execute",
+            str(artifact_path),
+            "--expect-fingerprint",
+            artifact.fingerprint,
+            "--model",
+            "policy-model",
+            "--format",
+            output_format,
+            "--policy",
+            str(policy_path),
+            "--expect-policy-fingerprint",
+            expected_policy_fingerprint,
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert calls == 1
+    if output_format == "json":
+        assert json.loads(captured.out)["response"]["text"] == (
+            '{"summary":"approved","safe":true}'
+        )
+    else:
+        assert captured.out == '{"summary":"approved","safe":true}\n'
+
+
+@pytest.mark.parametrize(
+    ("policy_contents", "approval_args", "expected_exit", "expected_error"),
+    [
+        (None, ["--expect-policy-fingerprint", "sha256:" + "0" * 64], 2, "requires --policy"),
+        (None, ["--policy", "-"], 2, "requires a file path"),
+        (None, ["--policy", "{policy}"], 5, "not a regular file"),
+        ("not-json", ["--policy", "{policy}"], 5, "not valid JSON"),
+        (
+            '{"schema_version":1,"expected_model":"policy-model"}',
+            [
+                "--policy",
+                "{policy}",
+                "--expect-policy-fingerprint",
+                "sha256:" + "0" * 64,
+            ],
+            5,
+            "does not match the expected fingerprint",
+        ),
+    ],
+)
+def test_execute_policy_approval_failures_happen_before_provider_construction(
+    policy_contents: str | None,
+    approval_args: list[str],
+    expected_exit: int,
+    expected_error: str,
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    artifact = create_request_artifact(build_messages(PromptRequest(Task.REVIEW, "Review")), ())
+    artifact_path = tmp_path / "request.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    policy_path = tmp_path / "result-policy.json"
+    if policy_contents is not None:
+        policy_path.write_text(policy_contents, encoding="utf-8")
+    resolved_args = [str(policy_path) if value == "{policy}" else value for value in approval_args]
+
+    class FailIfConstructed:
+        def __init__(self, config):
+            raise AssertionError("policy approval must complete before provider construction")
+
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient", FailIfConstructed)
+
+    exit_code = main(["execute", str(artifact_path), "--model", "policy-model", *resolved_args])
+
+    captured = capsys.readouterr()
+    assert exit_code == expected_exit
+    assert captured.out == ""
+    assert expected_error in captured.err
+
+
+@pytest.mark.parametrize(
+    ("policy", "response", "expected_error"),
+    [
+        (
+            ExecutionResultPolicy(expected_model="approved-model"),
+            "private model mismatch response",
+            "does not match the expected model",
+        ),
+        (
+            ExecutionResultPolicy(
+                response_format="json-object",
+                required_json_keys=("summary", "safe"),
+                allowed_json_keys=("summary", "safe"),
+                schema_version=2,
+            ),
+            '{"summary":"private response value","unapproved":"private extra value"}',
+            "missing required keys: safe",
+        ),
+        (
+            ExecutionResultPolicy(max_total_tokens=9),
+            "private over-budget response",
+            "total token usage is 10",
+        ),
+    ],
+)
+def test_execute_policy_failure_suppresses_response_without_retry(
+    policy: ExecutionResultPolicy,
+    response: str,
+    expected_error: str,
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    artifact = create_request_artifact(
+        build_messages(PromptRequest(Task.REVIEW, "Private policy request")), ()
+    )
+    artifact_path = tmp_path / "request.json"
+    policy_path = tmp_path / "result-policy.json"
+    artifact_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    policy_path.write_text(render_execution_result_policy(policy), encoding="utf-8")
+    calls = 0
+
+    def fake_complete(self, messages):
+        nonlocal calls
+        calls += 1
+        return ChatResult(response, 5, 5, 10)
+
+    monkeypatch.setattr("samsarix_codegen.cli.OpenAIChatClient.complete", fake_complete)
+
+    exit_code = main(
+        [
+            "execute",
+            str(artifact_path),
+            "--model",
+            "requested-model",
+            "--format",
+            "json",
+            "--policy",
+            str(policy_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert calls == 1
+    assert captured.out == ""
+    assert expected_error in captured.err
+    assert response not in captured.err
+    assert "private response value" not in captured.err
+    assert "private extra value" not in captured.err
+
+
 def test_execute_rejects_unapproved_or_tampered_artifact(tmp_path: Path, capsys) -> None:
     request = PromptRequest(Task.REVIEW, "Review this")
     artifact = create_request_artifact(build_messages(request), request.files)

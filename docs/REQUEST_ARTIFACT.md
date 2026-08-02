@@ -15,10 +15,10 @@ explicit files / bounded stdin
 schema validation + offline inspect + request fingerprint approval
             |
             v
-create-plan + offline plan verification/approval
+create-plan + offline plan/policy verification and approval
             |
             v
-execute --plan -> one bounded provider request
+execute --plan --policy -> one bounded provider request + output gate
             |
             v
 plan-bound result JSON -> offline verify-execution
@@ -192,6 +192,12 @@ schema-exportable, and independently parseable. It requires at least one active 
 unknown, duplicate, or null fields. File rules cannot be mixed with inline policy flags, so there is
 no hidden override order.
 
+`execute` accepts the same explicit policy file plus `--expect-policy-fingerprint`, but not the
+ad hoc inline policy flags. It validates the file and approval before provider-client construction,
+makes one request, and admits the normal response to stdout only after the normalized result passes.
+Rejection after the response leaves stdout empty and never retries; it does not erase the provider
+request or its possible cost.
+
 Policy schema version `2` can additionally require a bounded valid JSON object, required and
 allowed top-level keys, and top-level JSON value types. It rejects duplicate keys at any depth and
 non-finite numbers. This is a structural machine-consumability gate, not recursive JSON Schema
@@ -199,9 +205,9 @@ validation or semantic evaluation. Evidence version `3` records only the approve
 response format and top-level key count; response-derived key names and values remain omitted.
 
 Every configured rule must pass before the command emits its normal inspection or verification
-record. A configured token ceiling fails closed when the provider omitted that field. The gates are
-local, make no network request, preserve the existing content-omitting output contracts, and return
-artifact exit code `5` on rejection. They do not authenticate model labels or usage, normalize
+record. A configured token ceiling fails closed when the provider omitted that field. The offline
+inspection and verification gates make no network request and preserve the existing
+content-omitting output contracts; all policy failures return artifact exit code `5`. They do not authenticate model labels or usage, normalize
 tokenizers between providers, estimate price, or evaluate response correctness or quality.
 
 `compare-results BASE TARGET` validates two execution-result envelopes and fails unless they

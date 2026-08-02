@@ -91,6 +91,8 @@ jobs:
             --disable-pip-version-check --no-deps dist/*.whl
           "${RUNNER_TEMP}/release-venv/bin/python" -m pip check
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" --version
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" self-check --format json \
+            > "${RUNNER_TEMP}/self-check.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema provider-check \
             > "${RUNNER_TEMP}/provider-check.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema result-comparison \
@@ -107,6 +109,10 @@ jobs:
             > "${RUNNER_TEMP}/execution-plan.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema execution-plan-verification \
             > "${RUNNER_TEMP}/execution-plan-verification.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema execution-evidence \
+            > "${RUNNER_TEMP}/execution-evidence.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema self-check \
+            > "${RUNNER_TEMP}/self-check.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
             "from samsarix_codegen import ProviderCheckReport; assert ProviderCheckReport('fixture', 64, 1).status == 'passed'"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \

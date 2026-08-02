@@ -37,6 +37,8 @@ Its product promise is narrower and testable:
     in the same content-omitting offline evidence gate as the approved request and plan.
 16. Require a bounded JSON object with approved top-level keys and types when a downstream machine
     must consume the response, without exposing response-derived fields or values in evidence.
+17. Apply that separately approved policy inside the one-request `execute` boundary, after response
+    normalization but before normal stdout, so CI cannot accidentally omit a second gating command.
 
 ## Evidence from adjacent products
 
@@ -109,6 +111,8 @@ The evaluation category validates demand for repeatable model comparisons:
   cost-control gates.
 - [Promptfoo configuration](https://www.promptfoo.dev/docs/configuration/guide/) can load shared
   default test configuration from external files across projects, validating the team-reuse need.
+  Its [output formats](https://www.promptfoo.dev/docs/configuration/outputs/) also preserve
+  pass/fail and failure-reason distinctions for automated consumers.
 - [Braintrust evaluations](https://www.braintrust.dev/docs/evaluate) are designed for automated
   regression detection in CI/CD, and its
   [custom reporters](https://www.braintrust.dev/docs/evaluate/run-evaluations) can determine whether
@@ -119,6 +123,10 @@ The evaluation category validates demand for repeatable model comparisons:
 - [Braintrust evaluation parameters](https://www.braintrust.dev/docs/evaluate/write-parameters) are
   reusable and versioned across evaluations and environments, validating demand for stable team
   configuration independently of evaluation code.
+- [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+  can require provider-side conformance to a supplied JSON Schema for supported models. Samsarix's
+  local top-level gate is intentionally less expressive but remains provider-neutral and does not
+  require that optional wire feature.
 
 Provider/model configuration is itself a repeatability concern in adjacent products:
 
@@ -145,7 +153,9 @@ portable, dependency-free approval chain: a deterministic request, a credential-
 plan-bound result, an optional separately fingerprinted deterministic policy, and an offline
 verifier that emits only operational metadata and a response hash/size. Policy version 2 adds a
 narrower alternative to full JSON Schema evaluation: bounded valid JSON-object parsing and
-top-level required/allowed/type rules, with no runtime dependency or second model call. It also compares two
+top-level required/allowed/type rules, with no runtime dependency or second model call. `execute`
+can apply the separately fingerprinted policy after its one provider response and before stdout,
+making the deterministic gate operational rather than dependent on a later shell step. It also compares two
 bounded same-request results without datasets, scorers, hosted traces, or another model call. The
 single policy-bound chain is an inference from adjacent CI quality-gate demand—such as Promptfoo's
 threshold assertions and CI failure controls—not a claim that local hashes provide authenticated
@@ -217,20 +227,22 @@ the whole chain and does not prove which provider infrastructure served the requ
 
 ### Fail-closed CI result policy
 
-After a credential-bearing job writes a result envelope, require the approved model label and hard
-response-byte or provider-reported token ceilings with `inspect-result` or `verify-result`. Commit a
-versioned policy file when developers and CI must share the exact rules; one-run flags remain
-available for ad hoc checks. CI gets a nonzero artifact exit before archiving the normal
-content-omitting record. Missing usage fails when its ceiling matters. This is a deterministic
-contract/cost guard, not a semantic evaluator: it does not establish response quality, pricing,
-provider authenticity, or cross-provider tokenizer equivalence.
+Pass the exact approved policy to `execute` when downstream output must fail closed immediately;
+the file and optional approval fingerprint are checked before network access, and the normalized
+response is checked before normal stdout. A failed response gets a nonzero artifact exit, empty
+stdout, and no retry, although its single completed provider request may still be billable. Retain
+successful JSON output and use `inspect-result`, `verify-result`, or `verify-execution` for offline
+archiving and evidence. One-run flags remain available only on the offline single-result commands.
+Missing usage fails when its ceiling matters. This is a deterministic contract/cost guard, not a
+semantic evaluator: it does not establish response quality, pricing, provider authenticity, or
+cross-provider tokenizer equivalence.
 
 ### Machine-consumable CI handoff
 
 Require result-policy version 2 when a later CI step expects a JSON object such as a diagnosis,
 evidence list, and next action. The gate rejects malformed or duplicate-keyed JSON, a non-object
-top level, missing or unapproved keys, and wrong top-level value types before the response reaches
-that consumer. For the structured response, evidence retains only the format and key count; it does
+top level, missing or unapproved keys, and wrong top-level value types before `execute` emits the
+response to that consumer. For the structured response, evidence retains only the format and key count; it does
 not copy response-derived names or values. The full evidence record also includes the approved
 policy and content-omitting chain metadata. This is structural readiness, not recursive JSON
 Schema validation or proof that the diagnosis is correct.

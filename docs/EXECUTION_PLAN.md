@@ -62,6 +62,8 @@ export SAMSARIX_API_KEY="your-provider-key"
 samsarix-codegen execute request.json \
   --plan execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy result-policy.json \
+  --expect-policy-fingerprint "$policy_fingerprint" \
   --format json > result.json
 
 samsarix-codegen verify-execution request.json execution-plan.json result.json \
@@ -72,8 +74,11 @@ samsarix-codegen verify-execution request.json execution-plan.json result.json \
 ```
 
 `create-plan` and `verify-plan` never make a network request. `execute --plan` validates the request,
-the plan's internal fingerprint, request linkage, estimated-input budget, and optional separately
-approved plan fingerprint before constructing the client. It then makes one non-streaming request.
+the plan's internal fingerprint, request linkage, estimated-input budget, optional separately
+approved plan fingerprint, explicit result policy, and optional separately approved policy
+fingerprint before constructing the client. It then makes one non-streaming request, normalizes the
+result, and enforces the policy before emitting normal output. If the response fails, stdout stays
+empty and there is no retry, but the completed provider request may still be billable.
 The plan-backed JSON result records the exact plan fingerprint. `verify-execution` uses that field
 to validate the complete request/plan/result chain later without network access or content
 disclosure. When an explicit result policy is supplied, it also requires the exact separately

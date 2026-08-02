@@ -20,7 +20,8 @@ plus requested-model and reported-output-budget consistency without content disc
 schema version 3 can also bind and enforce one separately approved result-policy fingerprint in the
 same fail-closed command. Result-policy schema version 2 optionally requires a bounded JSON object
 with reviewed top-level keys and types, while response-structure evidence exposes only its format
-and key count. A
+and key count. The credentialed `execute` boundary can now preflight that exact policy approval,
+make one request, and suppress normal output without retry when the normalized response fails. A
 checked-in offline request/plan/synthetic-result/policy chain now makes
 that verifier runnable from a clone without credentials, a provider process, or network access.
 An installed-package self-check reproduces the same deterministic chain and validates every
@@ -68,6 +69,9 @@ Current hardening backlog:
 - Result-policy version 2 can additionally reject invalid, duplicate-keyed, non-object, over-wide,
   or top-level shape-incompatible JSON offline. This is a bounded machine-consumability gate, not
   recursive JSON Schema validation or a semantic correctness score.
+- Exact policy approval and enforcement now run directly inside `execute`: preflight failures make
+  no request, while post-response failures make no retry and emit no normal output. The completed
+  request may still be billable, so this is an output-admission gate rather than cost prevention.
 - Strict versioned context manifests make repeated component reviews portable without automatic
   repository discovery, glob expansion, or a second path-loading boundary.
 - Draft 2020-12 request, result, and comparison schemas plus offline schema export are implemented

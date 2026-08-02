@@ -78,6 +78,7 @@ from samsarix_codegen.provider_check import (
 from samsarix_codegen.result_policy import (
     fingerprint_execution_result_policy,
     load_execution_result_policy,
+    require_execution_result_policy_fingerprint,
 )
 from samsarix_codegen.schema import ContractSchema, render_contract_schema
 from samsarix_codegen.self_check import render_self_check, run_self_check
@@ -313,6 +314,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--expect-plan-fingerprint",
         help="fail unless --plan matches this previously approved sha256 fingerprint",
     )
+    execute_command.add_argument(
+        "--policy",
+        metavar="PATH",
+        help="enforce one explicit versioned result-policy before emitting the response",
+    )
+    execute_command.add_argument(
+        "--expect-policy-fingerprint",
+        help="fail unless --policy matches this previously approved sha256 fingerprint",
+    )
     _add_estimated_input_budget(execute_command, defer_default=True)
     _add_provider_arguments(execute_command, defer_defaults=True)
 
@@ -387,13 +397,10 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             plan = _load_execution_plan(args.plan)
             artifact = _read_artifact(args.artifact, input_stream)
             result = _read_execution_result(args.result, input_stream)
-            policy = None
-            if args.policy is not None:
-                if args.policy == "-":
-                    raise ConfigurationError("--policy requires a file path and cannot read stdin")
-                policy = load_execution_result_policy(args.policy)
-            elif args.expect_policy_fingerprint is not None:
-                raise ConfigurationError("--expect-policy-fingerprint requires --policy")
+            policy = _load_explicit_result_policy(
+                args.policy,
+                args.expect_policy_fingerprint,
+            )
             evidence = verify_execution_evidence(
                 artifact,
                 plan,
@@ -430,6 +437,10 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             return 0
         if args.command == "execute":
             artifact = _read_artifact(args.artifact, input_stream)
+            result_policy = _load_explicit_result_policy(
+                args.policy,
+                args.expect_policy_fingerprint,
+            )
             plan_fingerprint: str | None = None
             if args.plan is not None:
                 _reject_execution_plan_overrides(args)
@@ -462,6 +473,7 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                 config,
                 output_format=args.format,
                 plan_fingerprint=plan_fingerprint,
+                result_policy=result_policy,
             )
         raise AssertionError(f"unhandled command: {args.command}")
     except KeyboardInterrupt:
@@ -498,6 +510,7 @@ def _execute_artifact(
     *,
     output_format: str,
     plan_fingerprint: str | None = None,
+    result_policy: ExecutionResultPolicy | None = None,
 ) -> int:
     print(
         f"Request {artifact.fingerprint}: ~{artifact.estimated_input_tokens:,} input tokens, "
@@ -506,15 +519,23 @@ def _execute_artifact(
         file=sys.stderr,
     )
     result = OpenAIChatClient(config).complete(artifact.messages)
-    if output_format == "json":
-        _write_stdout(
-            render_execution_result(
-                artifact,
-                result,
-                model=config.model,
-                plan_fingerprint=plan_fingerprint,
-            )
+    rendered_result: str | None = None
+    if output_format == "json" or result_policy is not None:
+        rendered_result = render_execution_result(
+            artifact,
+            result,
+            model=config.model,
+            plan_fingerprint=plan_fingerprint,
         )
+    if result_policy is not None:
+        if rendered_result is None:
+            raise AssertionError("policy enforcement requires a rendered execution result")
+        execution_result = parse_execution_result(rendered_result)
+        enforce_execution_result_policy(execution_result, result_policy)
+    if output_format == "json":
+        if rendered_result is None:
+            raise AssertionError("JSON output requires a rendered execution result")
+        _write_stdout(rendered_result)
     else:
         _write_stdout(result.text.rstrip() + "\n")
     if result.total_tokens is not None:
@@ -700,11 +721,7 @@ def _enforce_result_policy(result: ExecutionResult, args: argparse.Namespace) ->
         args.max_total_tokens,
     )
     if args.policy is not None:
-        if args.policy == "-":
-            raise ConfigurationError("--policy requires a file path and cannot read from stdin")
-        if any(value is not None for value in inline_values):
-            raise ConfigurationError("--policy cannot be combined with inline result-policy flags")
-        policy = load_execution_result_policy(args.policy)
+        policy = _load_result_policy_file(args.policy, inline_values=inline_values)
     else:
         policy = ExecutionResultPolicy(
             expected_model=args.expect_model,
@@ -714,6 +731,32 @@ def _enforce_result_policy(result: ExecutionResult, args: argparse.Namespace) ->
             max_total_tokens=args.max_total_tokens,
         )
     enforce_execution_result_policy(result, policy)
+
+
+def _load_explicit_result_policy(
+    policy_path: str | None,
+    expected_fingerprint: str | None,
+) -> ExecutionResultPolicy | None:
+    if policy_path is None:
+        if expected_fingerprint is not None:
+            raise ConfigurationError("--expect-policy-fingerprint requires --policy")
+        return None
+    policy = _load_result_policy_file(policy_path)
+    if expected_fingerprint is not None:
+        require_execution_result_policy_fingerprint(policy, expected_fingerprint)
+    return policy
+
+
+def _load_result_policy_file(
+    policy_path: str,
+    *,
+    inline_values: Sequence[object] = (),
+) -> ExecutionResultPolicy:
+    if policy_path == "-":
+        raise ConfigurationError("--policy requires a file path and cannot read from stdin")
+    if any(value is not None for value in inline_values):
+        raise ConfigurationError("--policy cannot be combined with inline result-policy flags")
+    return load_execution_result_policy(policy_path)
 
 
 def _provider_config_from_args(
