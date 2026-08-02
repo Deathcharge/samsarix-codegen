@@ -422,7 +422,11 @@ def require_execution_plan_result_policy(
     plan: ExecutionPlan,
     result_policy: ExecutionResultPolicy | None,
 ) -> str | None:
-    """Require an exact policy file when a reviewed plan binds its fingerprint."""
+    """Require a bound policy and check any supplied policy against the plan's model.
+
+    A plan without a policy fingerprint accepts an omitted policy, but a supplied policy's
+    ``expected_model`` must still match ``plan.model``.
+    """
 
     if not isinstance(plan, ExecutionPlan):
         raise ArtifactError("result policy verification requires a validated execution plan")

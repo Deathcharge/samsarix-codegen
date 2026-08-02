@@ -289,7 +289,9 @@ def test_execution_plan_example_is_schema_valid_and_internally_consistent() -> N
     )
     Draft202012Validator.check_schema(v1_schema)
     Draft202012Validator(v1_schema).validate(v1_payload)
-    assert parse_execution_plan(json.dumps(v1_payload)).schema_version == 1
+    parsed_v1 = parse_execution_plan(json.dumps(v1_payload))
+    assert parsed_v1.schema_version == 1
+    assert parsed_v1.fingerprint == v1_payload["plan_fingerprint"]
 
 
 def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> None:
