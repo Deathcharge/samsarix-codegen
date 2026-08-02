@@ -29,8 +29,10 @@ from samsarix_codegen.artifact import (
     render_execution_result,
     render_execution_result_comparison,
     render_execution_result_inspection,
+    render_execution_result_verification,
     render_request_artifact,
     require_fingerprint,
+    verify_execution_result,
 )
 from samsarix_codegen.context import (
     DEFAULT_MAX_FILES,
@@ -125,6 +127,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="content-omitting inspection output format (default: text)",
     )
 
+    verify_result_command = subparsers.add_parser(
+        "verify-result",
+        help="verify one result against a request artifact without showing their contents",
+    )
+    verify_result_command.add_argument(
+        "artifact", metavar="REQUEST", help="request-artifact path, or - for stdin"
+    )
+    verify_result_command.add_argument(
+        "result", metavar="RESULT", help="execution-result path, or - for stdin"
+    )
+    verify_result_command.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="content-omitting verification output format (default: text)",
+    )
+
     compare_command = subparsers.add_parser(
         "compare", help="compare two validated request artifacts without showing prompt contents"
     )
@@ -193,6 +212,16 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             result = _read_execution_result(args.result, input_stream)
             inspection = inspect_execution_result(result)
             _write_stdout(render_execution_result_inspection(inspection, output_format=args.format))
+            return 0
+        if args.command == "verify-result":
+            if args.artifact == "-" and args.result == "-":
+                raise ArtifactError("REQUEST and RESULT cannot both read from stdin")
+            artifact = _read_artifact(args.artifact, input_stream)
+            result = _read_execution_result(args.result, input_stream)
+            verification = verify_execution_result(artifact, result)
+            _write_stdout(
+                render_execution_result_verification(verification, output_format=args.format)
+            )
             return 0
         if args.command == "compare":
             if args.base == "-" and args.target == "-":

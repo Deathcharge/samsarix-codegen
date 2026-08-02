@@ -21,6 +21,8 @@ Its product promise is narrower and testable:
    pretending structural evidence is a quality score.
 9. Reuse checked-in file selections through explicitly invoked manifests without granting
    repository-discovery or glob authority.
+10. Verify a stored result against a concrete request artifact and emit local linkage metadata
+    without copying prompt or response contents into ordinary logs.
 
 ## Evidence from adjacent products
 
@@ -69,6 +71,10 @@ The evaluation category validates demand for repeatable model comparisons:
   compare up to three models in parallel with synchronized prompt context and parameter settings.
 - [LangSmith](https://docs.langchain.com/langsmith/compare-experiment-results) compares experiments,
   outputs, regressions, metrics, and full or diff views.
+- [LangSmith privacy controls](https://docs.langchain.com/langsmith/mask-inputs-outputs) can retain
+  trace metadata while hiding inputs and outputs, validating demand for content-omitting evidence.
+- [Braintrust trace inspection](https://www.braintrust.dev/docs/observe/examine-traces) treats a
+  trace as one end-to-end execution and supports navigation back to its prompt or dataset origin.
 
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
 dependency-free offline check that both bounded result envelopes reference the same reviewed
@@ -110,6 +116,12 @@ before a comparison partner exists. CI can record the request link, model label,
 and reported usage without copying the response into ordinary job logs. This is validation and
 provenance-adjacent bookkeeping, not response evaluation or provider authentication.
 
+Validate the stored request and result together with `verify-result` to confirm that the result's
+claimed request fingerprint matches a concrete, internally consistent artifact. The emitted record
+keeps only bounded request metrics and result metadata. Unlike hosted observability systems, this
+path is local and dependency-free; unlike signatures or attestations, it does not establish
+authorship or protect files from an actor who can rewrite both.
+
 ### Repeatable project review
 
 Commit a small versioned context manifest for a component's implementation, public contract, and
@@ -122,7 +134,7 @@ shell history or repository discovery.
 - No automatic repository crawl in the core path.
 - No implicit manifest lookup, glob expansion, ignore-file interpretation, or conditional include.
 - No file writes, patch application, shell execution, or tool loop.
-- No implicit network request from `build`, `inspect`, or `inspect-result`.
+- No implicit network request from `build`, `inspect`, `inspect-result`, or `verify-result`.
 - No automatic retry or provider fallback.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.

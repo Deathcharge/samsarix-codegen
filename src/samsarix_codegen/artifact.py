@@ -20,6 +20,7 @@ ARTIFACT_SCHEMA_VERSION = 2
 RESULT_SCHEMA_VERSION = 1
 COMPARISON_SCHEMA_VERSION = 1
 RESULT_INSPECTION_SCHEMA_VERSION = 1
+RESULT_VERIFICATION_SCHEMA_VERSION = 1
 RESULT_COMPARISON_SCHEMA_VERSION = 1
 MAX_ARTIFACT_BYTES = 12 * 1024 * 1024
 MAX_RESULT_BYTES = 12 * 1024 * 1024
@@ -233,6 +234,63 @@ class ExecutionResultInspection:
             "schema_version": RESULT_INSPECTION_SCHEMA_VERSION,
             "request_fingerprint": self.request_fingerprint,
             "summary": self.summary.to_payload(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionResultVerification:
+    """Content-omitting linkage metadata for one request and execution result."""
+
+    request_fingerprint: str
+    request_messages: int
+    request_context_items: int
+    request_context_bytes: int
+    request_estimated_input_tokens: int
+    result: ExecutionResultSummary
+
+    def __post_init__(self) -> None:
+        if not _is_sha256(self.request_fingerprint):
+            raise ArtifactError(
+                "execution result verification contains an invalid request fingerprint"
+            )
+        _require_bounded_integer(
+            self.request_messages,
+            label="execution result verification request messages",
+            minimum=1,
+            maximum=MAX_ARTIFACT_MESSAGES,
+        )
+        _require_bounded_integer(
+            self.request_context_items,
+            label="execution result verification request context items",
+            minimum=0,
+            maximum=MAX_ARTIFACT_CONTEXT_ITEMS,
+        )
+        _require_bounded_integer(
+            self.request_context_bytes,
+            label="execution result verification request context bytes",
+            minimum=0,
+        )
+        _require_bounded_integer(
+            self.request_estimated_input_tokens,
+            label="execution result verification estimated input tokens",
+            minimum=1,
+        )
+        if not isinstance(self.result, ExecutionResultSummary):
+            raise ArtifactError("execution result verification requires a validated result summary")
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return a stable linkage record without prompt or response text."""
+
+        return {
+            "schema_version": RESULT_VERIFICATION_SCHEMA_VERSION,
+            "request": {
+                "fingerprint": self.request_fingerprint,
+                "messages": self.request_messages,
+                "context_items": self.request_context_items,
+                "context_bytes": self.request_context_bytes,
+                "estimated_input_tokens": self.request_estimated_input_tokens,
+            },
+            "result": self.result.to_payload(),
         }
 
 
@@ -523,6 +581,62 @@ def inspect_execution_result(result: ExecutionResult) -> ExecutionResultInspecti
     )
 
 
+def verify_execution_result(
+    artifact: RequestArtifact,
+    result: ExecutionResult,
+) -> ExecutionResultVerification:
+    """Verify that one validated result references the supplied request artifact."""
+
+    if not isinstance(artifact, RequestArtifact) or not isinstance(result, ExecutionResult):
+        raise ArtifactError(
+            "execution result verification requires a validated request and execution result"
+        )
+    if not hmac.compare_digest(artifact.fingerprint, result.request_fingerprint):
+        raise ArtifactError("execution result does not reference the supplied request artifact")
+    return ExecutionResultVerification(
+        request_fingerprint=artifact.fingerprint,
+        request_messages=len(artifact.messages),
+        request_context_items=len(artifact.context),
+        request_context_bytes=artifact.context_bytes,
+        request_estimated_input_tokens=artifact.estimated_input_tokens,
+        result=_summarize_execution_result(result),
+    )
+
+
+def render_execution_result_verification(
+    verification: ExecutionResultVerification,
+    *,
+    output_format: str = "text",
+) -> str:
+    """Render content-omitting request/result linkage metadata."""
+
+    if output_format == "json":
+        return json.dumps(verification.to_payload(), ensure_ascii=False, indent=2) + "\n"
+    if output_format != "text":
+        raise ArtifactError("execution result verification format must be text or json")
+
+    result = verification.result
+    lines = [
+        "Execution result references the supplied validated request.",
+        f"Request: {verification.request_fingerprint}",
+        f"Request messages: {verification.request_messages:,}",
+        (
+            "Request context: "
+            f"{verification.request_context_items:,} item(s), "
+            f"{verification.request_context_bytes:,} bytes"
+        ),
+        f"Estimated input: ~{verification.request_estimated_input_tokens:,} tokens",
+        f"Model: {result.model}",
+        f"Response characters: {result.response_chars:,}",
+        f"Response bytes: {result.response_bytes:,}",
+        f"Response: {result.response_sha256}",
+        f"Prompt tokens: {_format_usage_value(result.prompt_tokens)}",
+        f"Completion tokens: {_format_usage_value(result.completion_tokens)}",
+        f"Total tokens: {_format_usage_value(result.total_tokens)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def render_execution_result_inspection(
     inspection: ExecutionResultInspection,
     *,
@@ -777,6 +891,22 @@ def _optional_delta(base: int | None, target: int | None) -> int | None:
 
 def _format_usage_value(value: int | None) -> str:
     return "not reported" if value is None else f"{value:,}"
+
+
+def _require_bounded_integer(
+    value: object,
+    *,
+    label: str,
+    minimum: int,
+    maximum: int | None = None,
+) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+        if maximum is None:
+            raise ArtifactError(f"{label} must be at least {minimum:,}")
+        raise ArtifactError(f"{label} must be between {minimum:,} and {maximum:,}")
+    if maximum is not None and value > maximum:
+        raise ArtifactError(f"{label} must be between {minimum:,} and {maximum:,}")
+    return value
 
 
 def _utf8_size(value: str, *, label: str) -> int:

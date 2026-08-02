@@ -546,6 +546,64 @@ def test_inspect_result_rejects_invalid_envelope(capsys) -> None:
     assert "fields do not match schema version 1" in captured.err
 
 
+def test_verify_result_is_machine_readable_and_omits_contents(tmp_path: Path, capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review private behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    request_path = tmp_path / "request.json"
+    result_path = tmp_path / "result.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    result_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult("private provider response", 10, 3, 13),
+            model="model-a",
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["verify-result", str(request_path), str(result_path), "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["request"]["fingerprint"] == artifact.fingerprint
+    assert payload["result"]["model"] == "model-a"
+    assert payload["result"]["usage"]["total_tokens"] == 13
+    assert "Review private behavior" not in captured.out
+    assert "private provider response" not in captured.out
+
+
+def test_verify_result_rejects_mismatched_request(tmp_path: Path, capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review A")
+    other_request = PromptRequest(Task.REVIEW, "Review B")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    other_artifact = create_request_artifact(build_messages(other_request), other_request.files)
+    request_path = tmp_path / "request.json"
+    result_path = tmp_path / "result.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    result_path.write_text(
+        render_execution_result(other_artifact, ChatResult("private"), model="model-a"),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["verify-result", str(request_path), str(result_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
+    assert "does not reference the supplied request" in captured.err
+
+
+def test_verify_result_rejects_two_stdin_inputs(capsys) -> None:
+    exit_code = main(["verify-result", "-", "-"], stdin=BytesIO(b"{}"))
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
+    assert "cannot both read from stdin" in captured.err
+
+
 def test_compare_results_rejects_different_requests(tmp_path: Path, capsys) -> None:
     base_request = PromptRequest(Task.REVIEW, "Review provider A")
     target_request = PromptRequest(Task.REVIEW, "Review provider B")

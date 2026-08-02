@@ -34,6 +34,7 @@ REQUIRED_SCHEMAS = (
     "execution-result-v1.schema.json",
     "execution-result-comparison-v1.schema.json",
     "execution-result-inspection-v1.schema.json",
+    "execution-result-verification-v1.schema.json",
     "provider-check-v1.schema.json",
     "request-artifact-v2.schema.json",
 )
