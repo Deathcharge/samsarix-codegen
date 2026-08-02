@@ -47,6 +47,7 @@ REQUIRED_SCHEMAS = (
     "request-artifact-v2.schema.json",
 )
 REQUIRED_SDIST_PATHS = (
+    ".gitattributes",
     ".github/dependabot.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",

@@ -24,7 +24,9 @@ samsarix-codegen verify-result request.json result.json \
 `execution-request-v2.json`, `execution-plan-v1.json`, `execution-result-v2.json`, and
 `execution-evidence-v1.json` form one fully linked offline example. The request deterministically
 captures `sample.py`; the plan uses a localhost placeholder; the explicitly labeled synthetic
-result reports no provider model or usage. No command below contacts that endpoint:
+result reports no provider model or usage. The repository pins that input to LF in
+`.gitattributes` so the artifact is reproducible on Windows and POSIX checkouts. No command below
+contacts that endpoint:
 
 ```bash
 plan_fingerprint="$(samsarix-codegen verify-plan \
