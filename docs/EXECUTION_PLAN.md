@@ -139,6 +139,10 @@ cost because current price schedules remain external. External access controls,
 signing/attestation, endpoint governance, provider logs, and billing records remain the operator's
 responsibility when those properties matter.
 
-The checked-in [example](../examples/execution-plan-v1.json) demonstrates the standalone schema and
-canonical plan fingerprint with a placeholder request fingerprint. Create a new plan for every real
-request rather than editing that example.
+The checked-in [request](../examples/execution-request-v2.json),
+[plan](../examples/execution-plan-v1.json), [synthetic result](../examples/execution-result-v2.json),
+and [evidence](../examples/execution-evidence-v1.json) form one runnable offline chain. The test
+suite rebuilds the request from `examples/sample.py`, verifies all three artifacts through the
+public API and CLI, and requires the computed evidence to equal the checked-in record. No provider
+request produced the explicitly labeled synthetic result. Create a new plan for every real request
+rather than editing or reusing the fixture.

@@ -144,6 +144,22 @@ Plan-backed JSON execution records the exact plan fingerprint in result schema v
 `verify-execution` then validates request/plan/result linkage, the requested model, the reviewed
 budgets, and any reported completion usage offline.
 
+To exercise that entire evidence path without credentials, a running model, or network access:
+
+```bash
+plan_fingerprint="$(samsarix-codegen verify-plan \
+  examples/execution-request-v2.json examples/execution-plan-v1.json \
+  --format fingerprint)"
+samsarix-codegen verify-execution \
+  examples/execution-request-v2.json \
+  examples/execution-plan-v1.json \
+  examples/execution-result-v2.json \
+  --expect-plan-fingerprint "$plan_fingerprint"
+```
+
+The checked-in result is explicitly synthetic and has no provider-reported model or token usage.
+The command proves the local artifact and evidence contracts, not provider execution or attestation.
+
 The fingerprint detects drift; it is not a signature. Anyone able to replace an artifact can also
 recompute its unkeyed hash. See the [request artifact contract](docs/REQUEST_ARTIFACT.md) before
 using artifacts across trust boundaries.

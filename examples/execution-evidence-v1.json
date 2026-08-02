@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
-  "plan_fingerprint": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "plan_fingerprint": "sha256:7d53d859b13986da8efcf8122fd060d07c34b91f34908d1ac4f89a1187c5df95",
   "request": {
-    "fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "fingerprint": "sha256:4c04cb6a6352ef10b09403b8f5b7da03e71dbfd278606fc25edb5274c3399d59",
     "messages": 2,
-    "context_items": 0,
-    "context_bytes": 0,
-    "estimated_input_tokens": 100
+    "context_items": 1,
+    "context_bytes": 343,
+    "estimated_input_tokens": 315
   },
   "provider": {
-    "endpoint": "https://models.example.com/v1",
-    "requested_model": "reviewed-model",
-    "response_model": "served-model-2026-08",
-    "timeout_seconds": 60,
-    "max_output_tokens": 64
+    "endpoint": "http://127.0.0.1:11434/v1",
+    "requested_model": "example-review-model",
+    "response_model": null,
+    "timeout_seconds": 45,
+    "max_output_tokens": 256
   },
   "budgets": {
-    "max_estimated_input_tokens": 1000,
-    "remaining_estimated_input_tokens": 900,
-    "reported_completion_tokens": 2,
-    "remaining_reported_output_tokens": 62
+    "max_estimated_input_tokens": 5000,
+    "remaining_estimated_input_tokens": 4685,
+    "reported_completion_tokens": null,
+    "remaining_reported_output_tokens": null
   },
   "result": {
     "response": {
-      "chars": 16,
-      "bytes": 16,
-      "sha256": "sha256:5ca582488caf093309a23ba63304e784a0c73d334b1b03da248d8b04cb255efe"
+      "chars": 125,
+      "bytes": 125,
+      "sha256": "sha256:0e7f7114c7721470a498c106ec93f961e49855039964243a1f2eba11a7925fc0"
     },
     "usage": {
-      "prompt_tokens": 10,
-      "completion_tokens": 2,
-      "total_tokens": 12
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null
     }
   }
 }

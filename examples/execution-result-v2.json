@@ -1,15 +1,15 @@
 {
   "schema_version": 2,
-  "request_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "plan_fingerprint": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "model": "reviewed-model",
-  "response_model": "served-model-2026-08",
+  "request_fingerprint": "sha256:4c04cb6a6352ef10b09403b8f5b7da03e71dbfd278606fc25edb5274c3399d59",
+  "plan_fingerprint": "sha256:7d53d859b13986da8efcf8122fd060d07c34b91f34908d1ac4f89a1187c5df95",
+  "model": "example-review-model",
+  "response_model": null,
   "response": {
-    "text": "Example response"
+    "text": "Synthetic offline fixture: greet strips surrounding whitespace, rejects blank names, and should be tested for both behaviors."
   },
   "usage": {
-    "prompt_tokens": 10,
-    "completion_tokens": 2,
-    "total_tokens": 12
+    "prompt_tokens": null,
+    "completion_tokens": null,
+    "total_tokens": null
   }
 }

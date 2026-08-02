@@ -46,6 +46,8 @@ approves a first public release.
   result, with content-omitting linkage, budget, usage, response-size, and response-hash evidence.
 - A standalone Draft 2020-12 execution-evidence contract and typed public verification/rendering
   API.
+- A fully linked, reproducible offline request/plan/synthetic-result example whose rendered
+  evidence must exactly match the checked-in record in tests and the installed-wheel CI journey.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.
