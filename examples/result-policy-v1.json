@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "expected_model": "model-a",
+  "max_response_bytes": 100000,
+  "max_prompt_tokens": 10000,
+  "max_completion_tokens": 2000,
+  "max_total_tokens": 12000
+}

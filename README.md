@@ -152,7 +152,7 @@ SAMSARIX_MODEL=model-b SAMSARIX_API_BASE=https://provider-b.example/v1 \
 samsarix-codegen verify-result request.json result-a.json
 samsarix-codegen verify-result request.json result-a.json --format json > verified-run.json
 samsarix-codegen verify-result request.json result-a.json \
-  --expect-model model-a --max-response-bytes 100000 --max-total-tokens 12000
+  --policy examples/result-policy-v1.json --format json > policy-verified-run.json
 samsarix-codegen inspect-result result-a.json
 samsarix-codegen inspect-result result-a.json --format json > result-a-summary.json
 samsarix-codegen compare-results result-a.json result-b.json
@@ -168,7 +168,8 @@ response character/UTF-8 byte counts and SHA-256 hash, and available usage witho
 response. This makes a stored run fail-closed and loggable before a second run exists. Both
 `inspect-result` and `verify-result` can additionally require an exact model label and enforce hard
 response-byte, prompt-token, completion-token, and total-token ceilings. A configured token ceiling
-fails closed when that usage field was not reported.
+fails closed when that usage field was not reported. Put repeatable rules in a strict checked-in
+[execution-result policy](docs/RESULT_POLICY.md), or use the equivalent inline flags for one run.
 `compare-results` strictly validates both envelopes, refuses results with different request
 fingerprints, and reports model names, response UTF-8 sizes and SHA-256 hashes, equality, and
 available token-usage deltas without reproducing either response. It is an offline structural and
@@ -207,6 +208,7 @@ samsarix-codegen schema result-verification > execution-result-verification-v1.s
 samsarix-codegen schema result-comparison > execution-result-comparison-v1.schema.json
 samsarix-codegen schema provider-check > provider-check-v1.schema.json
 samsarix-codegen schema context-manifest > context-manifest-v1.schema.json
+samsarix-codegen schema result-policy > execution-result-policy-v1.schema.json
 ```
 
 The same files ship inside the typed Python package and are available through
@@ -287,6 +289,8 @@ reducing accidental exposure in shell history and process listings.
 - Total context defaults to 200,000 bytes and has a hard 5,000,000-byte ceiling.
 - Instructions are limited to 20,000 characters; request artifacts and execution-result envelopes
   read by offline commands are limited to 12 MiB each.
+- Explicit result-policy files are strict UTF-8 JSON no larger than 64 KiB. At least one rule is
+  required; unknown, duplicate, null, or file-plus-inline rules fail closed.
 - `--max-estimated-input-tokens` rejects a request before network access. The estimate is
   `ceil(total UTF-8 message bytes / 4)`, not provider billing data.
 - Provider output defaults to 1,024 tokens and is capped at 32,768. Network timeouts range from 1
@@ -342,8 +346,9 @@ assert parse_context_manifest(render_context_manifest(manifest)) == manifest
 `parse_execution_result()`, `inspect_execution_result()`, `verify_execution_result()`, and
 `compare_execution_results()` provide the same strict, content-omitting result metadata paths to
 typed consumers. `ExecutionResultPolicy` and `enforce_execution_result_policy()` expose the same
-deterministic post-result gates used by the CLI. Unstable implementation helpers are not exported
-from `samsarix_codegen`.
+deterministic post-result gates used by the CLI. `load_execution_result_policy()`,
+`parse_execution_result_policy()`, and `render_execution_result_policy()` expose the versioned file
+contract. Unstable implementation helpers are not exported from `samsarix_codegen`.
 
 ## Development and package verification
 
@@ -356,9 +361,9 @@ python -m pytest -ra
 python -m build
 ```
 
-CI runs these checks plus built-wheel request/result inspection, linkage verification, and
-comparison, provider-check contract, and schema smoke tests on Python 3.10 and 3.14 across Ubuntu
-and Windows. See
+CI runs these checks plus built-wheel request/result inspection, linkage verification, checked-in
+policy enforcement and schema validation, comparison, provider-check contract, and schema smoke
+tests on Python 3.10 and 3.14 across Ubuntu and Windows. See
 [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
@@ -405,6 +410,8 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - Artifact and context hashes detect drift but do not authenticate an author or reviewer.
 - Result comparisons contain response hashes, which can confirm a guessed response even though
   response text is omitted; protect comparison files according to the result sensitivity.
+- Result-policy files contain no prompt or response, but an expected model can reveal deployment
+  choices. Their limits do not authenticate provider-reported usage or prove monetary cost.
 - File contents are untrusted prompt data. Prompt injection cannot be eliminated; review every
   response.
 - Model output may be incorrect or unsafe. Samsarix Codegen never executes, applies, or persists it.

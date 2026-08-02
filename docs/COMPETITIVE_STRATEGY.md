@@ -25,6 +25,8 @@ Its product promise is narrower and testable:
     without copying prompt or response contents into ordinary logs.
 11. Let CI reject a structurally valid result on an unexpected model, excessive response size, or
     excessive/missing reported usage without sending another provider request.
+12. Let teams commit one strict, versioned result policy and apply the same reviewed limits locally
+    and in CI without implicit configuration discovery or override precedence.
 
 ## Evidence from adjacent products
 
@@ -81,10 +83,15 @@ The evaluation category validates demand for repeatable model comparisons:
   support deterministic checks plus token, cost, and latency thresholds, while its
   [CI/CD guidance](https://www.promptfoo.dev/docs/integrations/ci-cd/) frames them as quality and
   cost-control gates.
+- [Promptfoo configuration](https://www.promptfoo.dev/docs/configuration/guide/) can load shared
+  default test configuration from external files across projects, validating the team-reuse need.
 - [Braintrust evaluations](https://www.braintrust.dev/docs/evaluate) are designed for automated
   regression detection in CI/CD, and its
   [custom reporters](https://www.braintrust.dev/docs/evaluate/run-evaluations) can determine whether
   an evaluation process succeeds.
+- [Braintrust evaluation parameters](https://www.braintrust.dev/docs/evaluate/write-parameters) are
+  reusable and versioned across evaluations and environments, validating demand for stable team
+  configuration independently of evaluation code.
 
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
 dependency-free offline check that both bounded result envelopes reference the same reviewed
@@ -137,11 +144,12 @@ authorship or protect files from an actor who can rewrite both.
 ### Fail-closed CI result policy
 
 After a credential-bearing job writes a result envelope, require the approved model label and hard
-response-byte or provider-reported token ceilings with `inspect-result` or `verify-result`. CI gets a
-nonzero artifact exit before archiving the normal content-omitting record. Missing usage fails when
-its ceiling matters. This is a deterministic contract/cost guard, not a semantic evaluator: it does
-not establish response quality, pricing, provider authenticity, or cross-provider tokenizer
-equivalence.
+response-byte or provider-reported token ceilings with `inspect-result` or `verify-result`. Commit a
+versioned policy file when developers and CI must share the exact rules; one-run flags remain
+available for ad hoc checks. CI gets a nonzero artifact exit before archiving the normal
+content-omitting record. Missing usage fails when its ceiling matters. This is a deterministic
+contract/cost guard, not a semantic evaluator: it does not establish response quality, pricing,
+provider authenticity, or cross-provider tokenizer equivalence.
 
 ### Repeatable project review
 
@@ -154,6 +162,7 @@ shell history or repository discovery.
 
 - No automatic repository crawl in the core path.
 - No implicit manifest lookup, glob expansion, ignore-file interpretation, or conditional include.
+- No implicit result-policy lookup, remote configuration, or file/flag override precedence.
 - No file writes, patch application, shell execution, or tool loop.
 - No implicit network request from `build`, `inspect`, `inspect-result`, or `verify-result`.
 - No automatic retry or provider fallback.

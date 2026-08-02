@@ -128,6 +128,10 @@ Research references:
     exact model label, actual UTF-8 response size, and reported token ceilings. Missing usage rejects
     a configured token rule; output contracts remain unchanged and no evaluator/network authority
     is added.
+18. **Reusable policy without discovery.** Execution-result policy schema version 1 stores one
+    bounded, strict set of deterministic result rules. Operators must pass its path explicitly;
+    file rules cannot mix with flags, and no remote lookup, code execution, or hidden precedence is
+    introduced.
 
 ## Assumptions
 
@@ -200,6 +204,7 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] Add strict single-result inspection without reproducing response contents.
 - [x] Add offline request/result linkage verification without reproducing either content body.
 - [x] Add deterministic post-result model, size, and reported-usage gates for CI.
+- [x] Add a versioned, checked-in execution-result policy contract for repeatable team CI rules.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
@@ -209,6 +214,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - [x] `build`, `inspect`, `inspect-result`, `verify-result`, `compare`, `compare-results`, `execute`,
   `run`, `schema`, and `provider-check` commands with useful help and version behavior.
 - [x] Fail-closed post-result policy flags and a typed public enforcement API.
+- [x] Strict result-policy parsing/rendering/loading, bundled schema, example, and installed-wheel
+  CI journey.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
@@ -253,6 +260,8 @@ Final command evidence is recorded in the **Final verification** section after e
   content-omitting CI handoff evidence.
 - Added optional exact-model, UTF-8 response-byte, and reported-token policy gates to both
   single-result paths, with missing usage rejected whenever its limit is configured.
+- Added a versioned execution-result policy document, standalone Draft 2020-12 schema, typed
+  parse/render/load API, checked-in example, and explicit no-override CLI behavior.
 - Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
   installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
@@ -308,6 +317,8 @@ required for local evaluation and none was performed.
 - Count, byte, character, token, timeout, and response caps prevent unbounded local/API work.
 - Optional post-result limits reject an unexpected model, oversized UTF-8 response, excessive
   reported usage, or missing usage needed by a configured token rule before emitting normal output.
+- Policy documents are explicitly selected, bounded to 64 KiB, require an active rule, reject
+  duplicate/unknown/null fields, and keep JSON integers within the cross-language safe range.
 - Remote plaintext transport and URL credentials are rejected; Python's default TLS verification is
   retained.
 - HTTP redirects are rejected so bearer credentials cannot be forwarded to a provider-selected
@@ -329,6 +340,8 @@ required for local evaluation and none was performed.
   provider/model-specific and intentionally not fabricated.
 - Result model labels and usage remain unauthenticated provider-envelope data; policy checks do not
   prove authorship, normalize tokenization, or establish monetary cost or response quality.
+- A committed policy can reveal approved model labels and becomes part of repository governance;
+  Samsarix does not discover, fetch, merge, or remotely update it.
 - Python build frontends can reuse a local `build/` cache. The release audit rejects unexpected wheel
   roots, but local releasers should still build from a clean checkout or remove generated caches.
 
@@ -567,6 +580,23 @@ usage with exit `5`, empty stdout, and no response disclosure. The installed typ
 the same exact limits. Exact final distribution digests are attached to the corresponding pull
 request because recording them inside the sdist would change the sdist digest.
 
+### Versioned result-policy contract follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing, workflow parsing, and 224 tests.
+The source-built sdist contained the result-policy documentation, example, implementation, and
+bundled schema. Its extracted tree passed the same formatting, lint, strict typing, workflow, and
+224-test gates before producing a zero-runtime-dependency wheel. Both distributions passed Twine
+and the fail-closed release audit.
+
+A fresh virtual environment installed only that wheel and resolved Samsarix Codegen from the
+environment outside the checkout. The installed public API round-tripped and loaded an explicit
+policy, and the installed CLI exported the bundled policy schema. `verify-result` accepted an exact
+model, response-byte, and reported-token boundary with exit `0` and no response disclosure;
+`inspect-result` rejected an exceeded total-token ceiling with exit `5`, empty stdout, and no
+response disclosure. Combining a policy file with an inline rule failed as a configuration error
+with exit `2`. Exact final distribution digests are attached to the corresponding pull request
+because recording them inside the sdist would change the sdist digest.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -588,7 +618,7 @@ request because recording them inside the sdist would change the sdist digest.
 **Release candidate with named external gates.** The productized default and its `0.1.0` journey met
 the documented acceptance criteria and four-job GitHub Actions matrix. Version `0.2.0` adds the
 review-first artifact workflow, offline review/comparison, request/result linkage and deterministic
-result-policy tools,
+versioned result-policy tools,
 reusable explicit context manifests, independent JSON contracts, and an operator-run provider
 conformance check; each has local clean-package evidence recorded above.
 Public release remains gated on owner control of the PyPI project, creation of the signed release

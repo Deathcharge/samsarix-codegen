@@ -30,6 +30,8 @@ approves a first public release.
   content-omitting text/JSON evidence and a standalone Draft 2020-12 contract.
 - Optional fail-closed result policies on `inspect-result` and `verify-result` for an exact model,
   UTF-8 response bytes, and provider-reported prompt, completion, or total token ceilings.
+- A strict versioned execution-result policy file, bundled Draft 2020-12 schema, typed
+  parse/render/load API, checked-in example, and explicit `--policy` application in local/CI runs.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.

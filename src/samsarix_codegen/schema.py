@@ -24,6 +24,7 @@ class ContractSchema(str, Enum):
     RESULT_COMPARISON = "result-comparison"
     PROVIDER_CHECK = "provider-check"
     CONTEXT_MANIFEST = "context-manifest"
+    RESULT_POLICY = "result-policy"
 
 
 _SCHEMA_FILES = {
@@ -35,6 +36,7 @@ _SCHEMA_FILES = {
     ContractSchema.RESULT_COMPARISON: "execution-result-comparison-v1.schema.json",
     ContractSchema.PROVIDER_CHECK: "provider-check-v1.schema.json",
     ContractSchema.CONTEXT_MANIFEST: "context-manifest-v1.schema.json",
+    ContractSchema.RESULT_POLICY: "execution-result-policy-v1.schema.json",
 }
 
 
