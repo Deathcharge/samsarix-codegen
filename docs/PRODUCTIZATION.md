@@ -191,13 +191,14 @@ Final command evidence is recorded in the **Final verification** section after e
   retain visible budgets and path boundaries.
 - [x] Add dry-runnable release verification, provenance, and gated Trusted Publishing automation.
 - [x] Add strict same-request execution-result comparison without reproducing response contents.
+- [x] Add strict single-result inspection without reproducing response contents.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `build`, `inspect`, `compare`, `compare-results`, `execute`, `run`, `schema`, and
+- [x] `build`, `inspect`, `inspect-result`, `compare`, `compare-results`, `execute`, `run`, `schema`, and
   `provider-check` commands with useful help and version behavior.
 - [x] Task guidance for generate, explain, debug, refactor, tests, and review.
 - [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
@@ -237,6 +238,8 @@ Final command evidence is recorded in the **Final verification** section after e
   collects usability signals without collecting prompts, source, logs, responses, or credentials.
 - Added strict execution-result parsing, same-request content-omitting comparison, and a standalone
   versioned schema for downstream CI consumers.
+- Added content-omitting single-result inspection and an independent versioned schema for CI run
+  evidence before a comparison partner exists.
 - Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
   installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
@@ -480,6 +483,7 @@ tests. Its isolated wheel rebuild was Twine-valid and visibly included the new
 context-manifest schema. A dependency-free fresh environment installed the audited repository
 wheel, reported no broken requirements, built a three-file request through the checked-in manifest,
 exported a valid Draft 2020-12 manifest schema, and exercised the typed parse/render/schema API.
+
 Exact final distribution digests are attached to the corresponding pull request because recording
 them inside the sdist would change the sdist digest.
 
@@ -490,6 +494,20 @@ unreturned stage separately. A first extracted rebuild requested `--no-isolation
 because the host Python did not expose `setuptools.build_meta` globally; rerunning with the
 project's declared isolated build path succeeded. None of these harness events was treated as a
 product pass.
+
+### Single-result inspection follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing, and 166 tests. The
+repository-built sdist and wheel passed Twine and the fail-closed release audit. The extracted sdist
+then passed formatting, lint, strict typing, and the same 166 tests before producing a Twine-valid
+wheel. A dependency-free fresh environment installed the audited repository wheel, reported no
+broken requirements, ran the installed `inspect-result` command outside the checkout, exported and
+validated the result-inspection schema, and exercised the typed inspection API while asserting that
+the response body was absent from both text and JSON metadata. An initial verification command used
+Python's `-S` flag, which intentionally disables virtual-environment site-packages; the corrected
+isolated import resolved to the installed wheel and passed. Exact final distribution digests are
+attached to the corresponding pull request because recording them inside the sdist would change the
+sdist digest.
 
 ### Validation not run
 

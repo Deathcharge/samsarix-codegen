@@ -512,6 +512,40 @@ def test_compare_results_is_machine_readable_and_omits_responses(tmp_path: Path,
     assert "secret response b" not in captured.out
 
 
+def test_inspect_result_validates_stdin_and_omits_response(capsys) -> None:
+    request = PromptRequest(Task.REVIEW, "Review provider behavior")
+    artifact = create_request_artifact(build_messages(request), request.files)
+    rendered = render_execution_result(
+        artifact,
+        ChatResult("secret provider response", 10, 3, 13),
+        model="model-a",
+    )
+
+    exit_code = main(
+        ["inspect-result", "-", "--format", "json"],
+        stdin=BytesIO(rendered.encode("utf-8")),
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["request_fingerprint"] == artifact.fingerprint
+    assert payload["summary"]["model"] == "model-a"
+    assert payload["summary"]["response"]["chars"] == len("secret provider response")
+    assert payload["summary"]["usage"]["total_tokens"] == 13
+    assert "secret provider response" not in captured.out
+
+
+def test_inspect_result_rejects_invalid_envelope(capsys) -> None:
+    exit_code = main(["inspect-result", "-"], stdin=BytesIO(b"{}"))
+
+    captured = capsys.readouterr()
+    assert exit_code == 5
+    assert captured.out == ""
+    assert "fields do not match schema version 1" in captured.err
+
+
 def test_compare_results_rejects_different_requests(tmp_path: Path, capsys) -> None:
     base_request = PromptRequest(Task.REVIEW, "Review provider A")
     target_request = PromptRequest(Task.REVIEW, "Review provider B")

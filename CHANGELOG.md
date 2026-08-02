@@ -24,6 +24,8 @@ approves a first public release.
 - Strict execution-result parsing plus offline, same-request response hash/size and usage comparison
   without response-body disclosure.
 - A bundled Draft 2020-12 contract for execution-result comparisons.
+- Offline `inspect-result` validation and content-omitting metadata for a single stored result, with
+  a standalone Draft 2020-12 contract.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.

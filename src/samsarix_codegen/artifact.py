@@ -19,6 +19,7 @@ from samsarix_codegen.prompt import estimate_tokens
 ARTIFACT_SCHEMA_VERSION = 2
 RESULT_SCHEMA_VERSION = 1
 COMPARISON_SCHEMA_VERSION = 1
+RESULT_INSPECTION_SCHEMA_VERSION = 1
 RESULT_COMPARISON_SCHEMA_VERSION = 1
 MAX_ARTIFACT_BYTES = 12 * 1024 * 1024
 MAX_RESULT_BYTES = 12 * 1024 * 1024
@@ -207,6 +208,31 @@ class ExecutionResultSummary:
                 "completion_tokens": self.completion_tokens,
                 "total_tokens": self.total_tokens,
             },
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionResultInspection:
+    """Content-omitting metadata for one validated execution result envelope."""
+
+    request_fingerprint: str
+    summary: ExecutionResultSummary
+
+    def __post_init__(self) -> None:
+        if not _is_sha256(self.request_fingerprint):
+            raise ArtifactError(
+                "execution result inspection contains an invalid request fingerprint"
+            )
+        if not isinstance(self.summary, ExecutionResultSummary):
+            raise ArtifactError("execution result inspection requires a validated result summary")
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return a stable inspection record without response text."""
+
+        return {
+            "schema_version": RESULT_INSPECTION_SCHEMA_VERSION,
+            "request_fingerprint": self.request_fingerprint,
+            "summary": self.summary.to_payload(),
         }
 
 
@@ -486,6 +512,44 @@ def compare_execution_results(
     )
 
 
+def inspect_execution_result(result: ExecutionResult) -> ExecutionResultInspection:
+    """Create content-omitting metadata for one validated execution result."""
+
+    if not isinstance(result, ExecutionResult):
+        raise ArtifactError("execution result inspection requires a validated execution result")
+    return ExecutionResultInspection(
+        request_fingerprint=result.request_fingerprint,
+        summary=_summarize_execution_result(result),
+    )
+
+
+def render_execution_result_inspection(
+    inspection: ExecutionResultInspection,
+    *,
+    output_format: str = "text",
+) -> str:
+    """Render content-omitting metadata for one validated execution result."""
+
+    if output_format == "json":
+        return json.dumps(inspection.to_payload(), ensure_ascii=False, indent=2) + "\n"
+    if output_format != "text":
+        raise ArtifactError("execution result inspection format must be text or json")
+
+    summary = inspection.summary
+    lines = [
+        "Execution result is valid.",
+        f"Request: {inspection.request_fingerprint}",
+        f"Model: {summary.model}",
+        f"Response characters: {summary.response_chars:,}",
+        f"Response bytes: {summary.response_bytes:,}",
+        f"Response: {summary.response_sha256}",
+        f"Prompt tokens: {_format_usage_value(summary.prompt_tokens)}",
+        f"Completion tokens: {_format_usage_value(summary.completion_tokens)}",
+        f"Total tokens: {_format_usage_value(summary.total_tokens)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def render_execution_result_comparison(
     comparison: ExecutionResultComparison,
     *,
@@ -709,6 +773,10 @@ def _optional_delta(base: int | None, target: int | None) -> int | None:
     if base is None or target is None:
         return None
     return target - base
+
+
+def _format_usage_value(value: int | None) -> str:
+    return "not reported" if value is None else f"{value:,}"
 
 
 def _utf8_size(value: str, *, label: str) -> int:
