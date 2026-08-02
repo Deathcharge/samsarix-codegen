@@ -75,7 +75,10 @@ from samsarix_codegen.provider_check import (
     check_provider,
     render_provider_check,
 )
-from samsarix_codegen.result_policy import load_execution_result_policy
+from samsarix_codegen.result_policy import (
+    fingerprint_execution_result_policy,
+    load_execution_result_policy,
+)
 from samsarix_codegen.schema import ContractSchema, render_contract_schema
 from samsarix_codegen.self_check import render_self_check, run_self_check
 
@@ -239,10 +242,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="fail unless the plan matches this previously approved sha256 fingerprint",
     )
     verify_execution_command.add_argument(
+        "--policy",
+        metavar="PATH",
+        help="enforce and record one explicit versioned result-policy file",
+    )
+    verify_execution_command.add_argument(
+        "--expect-policy-fingerprint",
+        help="fail unless the result policy matches this previously approved sha256 fingerprint",
+    )
+    verify_execution_command.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",
         help="content-omitting evidence output format (default: text)",
+    )
+
+    fingerprint_policy_command = subparsers.add_parser(
+        "fingerprint-policy",
+        help="validate and fingerprint one explicit result-policy file without network access",
+    )
+    fingerprint_policy_command.add_argument(
+        "policy", metavar="POLICY", help="explicit execution-result-policy file path"
     )
 
     compare_command = subparsers.add_parser(
@@ -367,15 +387,28 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             plan = _load_execution_plan(args.plan)
             artifact = _read_artifact(args.artifact, input_stream)
             result = _read_execution_result(args.result, input_stream)
+            policy = None
+            if args.policy is not None:
+                if args.policy == "-":
+                    raise ConfigurationError("--policy requires a file path and cannot read stdin")
+                policy = load_execution_result_policy(args.policy)
+            elif args.expect_policy_fingerprint is not None:
+                raise ConfigurationError("--expect-policy-fingerprint requires --policy")
             evidence = verify_execution_evidence(
                 artifact,
                 plan,
                 result,
                 expected_plan_fingerprint=args.expect_plan_fingerprint,
+                result_policy=policy,
+                expected_policy_fingerprint=args.expect_policy_fingerprint,
             )
             _write_stdout(
                 render_execution_evidence_verification(evidence, output_format=args.format)
             )
+            return 0
+        if args.command == "fingerprint-policy":
+            policy = load_execution_result_policy(args.policy)
+            _write_stdout(fingerprint_execution_result_policy(policy) + "\n")
             return 0
         if args.command == "compare":
             if args.base == "-" and args.target == "-":

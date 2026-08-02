@@ -13,6 +13,7 @@ from typing import Any, ClassVar, Literal
 
 from samsarix_codegen import __version__
 from samsarix_codegen.artifact import (
+    ExecutionResultPolicy,
     create_request_artifact,
     parse_execution_result,
     parse_request_artifact,
@@ -61,6 +62,9 @@ EXPECTED_PLAN_FINGERPRINT = (
 )
 EXPECTED_RESPONSE_FINGERPRINT = (
     "sha256:0e7f7114c7721470a498c106ec93f961e49855039964243a1f2eba11a7925fc0"
+)
+EXPECTED_POLICY_FINGERPRINT = (
+    "sha256:7e603aa13e31a93aa73d5e03fd77be9248114cd1d721d77ab05db242260e2dab"
 )
 EXPECTED_CONTRACTS = (
     "request",
@@ -220,6 +224,16 @@ def run_self_check() -> SelfCheckReport:
             parsed_plan,
             result,
             expected_plan_fingerprint=EXPECTED_PLAN_FINGERPRINT,
+            result_policy=ExecutionResultPolicy(
+                expected_model="example-review-model",
+                max_response_bytes=256,
+            ),
+            expected_policy_fingerprint=EXPECTED_POLICY_FINGERPRINT,
+        )
+        _require_equal(
+            evidence.result_policy_fingerprint,
+            EXPECTED_POLICY_FINGERPRINT,
+            label="result policy fingerprint",
         )
         _require_equal(
             evidence.result.response_sha256,

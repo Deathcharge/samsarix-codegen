@@ -32,6 +32,35 @@ The fields mean:
 Every configured rule must pass. If a configured token field is absent from the result envelope,
 enforcement fails rather than treating the missing value as zero.
 
+## Pin the exact policy
+
+Validate a policy and emit its canonical fingerprint before a credential-bearing execution:
+
+```bash
+policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
+```
+
+The fingerprint is `sha256:` plus the lowercase SHA-256 digest of the policy's validated JSON
+object encoded as UTF-8 with keys sorted, no insignificant whitespace, and unescaped Unicode.
+Input indentation and field order therefore do not change the fingerprint. The schema version and
+every configured rule do change it.
+
+Use that approval with the full offline evidence gate:
+
+```bash
+samsarix-codegen verify-execution request.json execution-plan.json result.json \
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy result-policy.json \
+  --expect-policy-fingerprint "$policy_fingerprint" \
+  --format json > execution-evidence.json
+```
+
+Evidence schema version `2` includes the policy fingerprint and exact rules only after the request,
+plan, result, policy fingerprint, and every policy limit pass. With no `--policy`, the same command
+remains valid and emits `"result_policy": null`; this states that no post-result policy was applied.
+`--expect-policy-fingerprint` without `--policy` is a configuration error, so a caller cannot
+silently omit an approved gate.
+
 ## Apply one checked-in policy
 
 ```bash
@@ -67,14 +96,18 @@ Typed consumers can use the same contract:
 ```python
 from samsarix_codegen import (
     ExecutionResultPolicy,
+    fingerprint_execution_result_policy,
     load_execution_result_policy,
     parse_execution_result_policy,
     render_execution_result_policy,
+    require_execution_result_policy_fingerprint,
 )
 
 policy = ExecutionResultPolicy(expected_model="model-a", max_total_tokens=12000)
 assert parse_execution_result_policy(render_execution_result_policy(policy)) == policy
 assert load_execution_result_policy("examples/result-policy-v1.json").expected_model == "model-a"
+fingerprint = fingerprint_execution_result_policy(policy)
+assert require_execution_result_policy_fingerprint(policy, fingerprint) == fingerprint
 ```
 
 The checked-in schema validates portable structure. The Samsarix parser remains authoritative for
@@ -85,7 +118,8 @@ duplicate-field detection, exact Unicode/model rules, bounded reads, and documen
 A policy file contains limits, not credentials, prompts, source, or responses. Nevertheless, the
 model label can reveal deployment choices and should be reviewed as repository metadata.
 
-The policy does not authenticate the envelope, provider, model label, or reported usage. It does not
-normalize provider tokenizers, look up current pricing, evaluate correctness, or score response
-quality. It is a deterministic local contract/cost-shape guard. Use signatures, access controls,
-provider-side billing records, and semantic evaluation tools when those stronger properties matter.
+The policy and its unkeyed fingerprint do not authenticate an approval, envelope, provider, model
+label, or reported usage. They do not normalize provider tokenizers, look up current pricing,
+evaluate correctness, or score response quality. This is a deterministic local
+contract/cost-shape guard. Use signatures, access controls, provider-side billing records, and
+semantic evaluation tools when those stronger properties matter.

@@ -96,9 +96,31 @@ def main() -> int:
             request_path = root / "request.json"
             plan_path = root / "execution-plan.json"
             result_path = root / "result.json"
+            policy_path = root / "result-policy.json"
             environment = os.environ.copy()
             environment.pop("PYTHONPATH", None)
             environment["PYTHONNOUSERSITE"] = "1"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "expected_model": "fixture-model",
+                        "max_response_bytes": 64,
+                        "max_total_tokens": 25,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fingerprinted_policy = run_cli(
+                ["fingerprint-policy", str(policy_path)],
+                cwd=root,
+                environment=environment,
+            )
+            policy_fingerprint = fingerprinted_policy.stdout.decode().strip()
+            require(
+                policy_fingerprint.startswith("sha256:") and len(policy_fingerprint) == 71,
+                "result policy fingerprint is not canonical sha256",
+            )
 
             built = run_cli(
                 [
@@ -239,6 +261,10 @@ def main() -> int:
                     str(result_path),
                     "--expect-plan-fingerprint",
                     plan_fingerprint,
+                    "--policy",
+                    str(policy_path),
+                    "--expect-policy-fingerprint",
+                    policy_fingerprint,
                     "--format",
                     "json",
                 ],
@@ -246,6 +272,7 @@ def main() -> int:
                 environment=environment,
             )
             evidence_payload = json.loads(evidence.stdout)
+            require(evidence_payload["schema_version"] == 2, "evidence did not use version 2")
             require(
                 evidence_payload["plan_fingerprint"] == plan_fingerprint,
                 "execution evidence does not reference the exact plan",
@@ -255,12 +282,44 @@ def main() -> int:
                 "execution evidence omitted the provider-reported model",
             )
             require(
+                evidence_payload["result_policy"]["fingerprint"] == policy_fingerprint,
+                "execution evidence does not identify the exact result policy",
+            )
+            require(
+                evidence_payload["result_policy"]["rules"]["max_total_tokens"] == 25,
+                "execution evidence omitted the enforced result-policy rule",
+            )
+            require(
                 b"Private fixture instruction" not in evidence.stdout,
                 "execution evidence disclosed the private instruction",
             )
             require(
                 b"Fixture response" not in evidence.stdout,
                 "execution evidence disclosed the provider response",
+            )
+
+            failing_policy_path = root / "failing-result-policy.json"
+            failing_policy_path.write_text(
+                json.dumps({"schema_version": 1, "max_total_tokens": 24}),
+                encoding="utf-8",
+            )
+            rejected_policy = run_cli(
+                [
+                    "verify-execution",
+                    str(request_path),
+                    str(plan_path),
+                    str(result_path),
+                    "--policy",
+                    str(failing_policy_path),
+                ],
+                cwd=root,
+                environment=environment,
+                expected_exit=5,
+            )
+            require(rejected_policy.stdout == b"", "failed result policy produced normal output")
+            require(
+                len(FixtureHandler.requests) == 1,
+                "offline result-policy failure caused an additional provider request",
             )
 
             received = FixtureHandler.requests[0]

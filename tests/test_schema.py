@@ -53,7 +53,11 @@ from samsarix_codegen.models import (
 )
 from samsarix_codegen.prompt import build_messages
 from samsarix_codegen.provider_check import ProviderCheckReport, render_provider_check
-from samsarix_codegen.result_policy import render_execution_result_policy
+from samsarix_codegen.result_policy import (
+    fingerprint_execution_result_policy,
+    load_execution_result_policy,
+    render_execution_result_policy,
+)
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 from samsarix_codegen.self_check import run_self_check
 
@@ -280,10 +284,12 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
     request_path = examples / "execution-request-v2.json"
     plan_path = examples / "execution-plan-v1.json"
     result_path = examples / "execution-result-v2.json"
+    policy_path = examples / "execution-evidence-policy-v1.json"
     request = json.loads(request_path.read_text(encoding="utf-8"))
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     result = json.loads(result_path.read_text(encoding="utf-8"))
-    evidence = json.loads((examples / "execution-evidence-v1.json").read_text(encoding="utf-8"))
+    evidence = json.loads((examples / "execution-evidence-v2.json").read_text(encoding="utf-8"))
+    policy = load_execution_result_policy(policy_path)
 
     Draft202012Validator(load_contract_schema("request")).validate(request)
     Draft202012Validator(load_contract_schema("execution-plan")).validate(plan)
@@ -320,6 +326,8 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
         parsed_plan,
         parsed_result,
         expected_plan_fingerprint=plan["plan_fingerprint"],
+        result_policy=policy,
+        expected_policy_fingerprint=fingerprint_execution_result_policy(policy),
     )
     assert verification.to_payload() == evidence
 
@@ -331,6 +339,10 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
             str(result_path),
             "--expect-plan-fingerprint",
             plan["plan_fingerprint"],
+            "--policy",
+            str(policy_path),
+            "--expect-policy-fingerprint",
+            fingerprint_execution_result_policy(policy),
             "--format",
             "json",
         ]
@@ -344,6 +356,18 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
     assert evidence["result"]["response"]["sha256"] == (
         "sha256:" + hashlib.sha256(response.encode("utf-8")).hexdigest()
     )
+
+    legacy_schema = json.loads(
+        (
+            repository
+            / "src/samsarix_codegen/schemas/execution-evidence-verification-v1.schema.json"
+        ).read_text(encoding="utf-8")
+    )
+    legacy_evidence = json.loads(
+        (examples / "execution-evidence-v1.json").read_text(encoding="utf-8")
+    )
+    Draft202012Validator.check_schema(legacy_schema)
+    Draft202012Validator(legacy_schema).validate(legacy_evidence)
 
 
 @pytest.mark.parametrize(
@@ -390,6 +414,27 @@ def test_execution_plan_schema_rejects_contract_drift(mutator) -> None:
 def test_result_policy_schema_rejects_contract_drift(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         Draft202012Validator(load_contract_schema("result-policy")).validate(payload)
+
+
+@pytest.mark.parametrize(
+    "mutator",
+    [
+        lambda payload: payload.pop("result_policy"),
+        lambda payload: payload.update(result_policy={}),
+        lambda payload: payload["result_policy"].pop("fingerprint"),
+        lambda payload: payload["result_policy"]["rules"].update(unexpected=True),
+        lambda payload: payload["result_policy"]["rules"].update(expected_model=None),
+    ],
+)
+def test_execution_evidence_schema_rejects_policy_contract_drift(mutator) -> None:
+    repository = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (repository / "examples/execution-evidence-v2.json").read_text(encoding="utf-8")
+    )
+    mutator(payload)
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(load_contract_schema("execution-evidence")).validate(payload)
 
 
 @pytest.mark.parametrize(

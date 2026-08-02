@@ -22,7 +22,10 @@ from samsarix_codegen.execution_plan import (
 )
 from samsarix_codegen.models import ChatResult, PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages
-from samsarix_codegen.result_policy import render_execution_result_policy
+from samsarix_codegen.result_policy import (
+    fingerprint_execution_result_policy,
+    render_execution_result_policy,
+)
 
 EXPECTED_PROVIDER_CHECK_MESSAGES = (
     {
@@ -680,8 +683,167 @@ def test_verify_execution_cli_emits_content_omitting_chain_evidence(tmp_path: Pa
     assert payload["provider"]["requested_model"] == plan.model
     assert payload["provider"]["response_model"] == "served-model"
     assert payload["budgets"]["reported_completion_tokens"] == 3
+    assert payload["result_policy"] is None
     assert "Private execution evidence" not in captured.out
     assert "Private provider response" not in captured.out
+
+
+def test_verify_execution_cli_enforces_and_records_an_approved_policy(
+    tmp_path: Path, capsys
+) -> None:
+    artifact = create_request_artifact(
+        build_messages(PromptRequest(Task.REVIEW, "Private policy-bound evidence")), ()
+    )
+    plan = create_execution_plan(
+        artifact,
+        ProviderConfig("https://models.example.com/v1", "model-a", max_output_tokens=64),
+    )
+    result = render_execution_result(
+        artifact,
+        ChatResult("Private provider response", 10, 3, 13),
+        model=plan.model,
+        plan_fingerprint=plan.fingerprint,
+    )
+    policy = ExecutionResultPolicy(
+        expected_model="model-a",
+        max_response_bytes=100,
+        max_total_tokens=13,
+    )
+    request_path = tmp_path / "request.json"
+    plan_path = tmp_path / "plan.json"
+    result_path = tmp_path / "result.json"
+    policy_path = tmp_path / "policy.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+    result_path.write_text(result, encoding="utf-8")
+    policy_path.write_text(render_execution_result_policy(policy), encoding="utf-8")
+    expected_policy_fingerprint = fingerprint_execution_result_policy(policy)
+
+    fingerprint_exit = main(["fingerprint-policy", str(policy_path)])
+    fingerprint_output = capsys.readouterr()
+    assert fingerprint_exit == 0
+    assert fingerprint_output.err == ""
+    assert fingerprint_output.out.strip() == expected_policy_fingerprint
+
+    exit_code = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--policy",
+            str(policy_path),
+            "--expect-policy-fingerprint",
+            expected_policy_fingerprint,
+            "--format",
+            "json",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["result_policy"] == {
+        "fingerprint": expected_policy_fingerprint,
+        "rules": json.loads(render_execution_result_policy(policy)),
+    }
+    assert "Private policy-bound evidence" not in captured.out
+    assert "Private provider response" not in captured.out
+
+
+def test_verify_execution_cli_rejects_policy_bypass_and_policy_failure(
+    tmp_path: Path, capsys
+) -> None:
+    artifact = create_request_artifact(build_messages(PromptRequest(Task.REVIEW, "Review")), ())
+    plan = create_execution_plan(
+        artifact, ProviderConfig("https://models.example.com/v1", "model-a")
+    )
+    request_path = tmp_path / "request.json"
+    plan_path = tmp_path / "plan.json"
+    result_path = tmp_path / "result.json"
+    policy_path = tmp_path / "policy.json"
+    request_path.write_text(render_request_artifact(artifact), encoding="utf-8")
+    plan_path.write_text(render_execution_plan(plan), encoding="utf-8")
+    result_path.write_text(
+        render_execution_result(
+            artifact,
+            ChatResult("private"),
+            model=plan.model,
+            plan_fingerprint=plan.fingerprint,
+        ),
+        encoding="utf-8",
+    )
+    policy_path.write_text(
+        render_execution_result_policy(ExecutionResultPolicy(expected_model="other-model")),
+        encoding="utf-8",
+    )
+
+    missing_policy_exit = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--expect-policy-fingerprint",
+            "sha256:" + "0" * 64,
+        ]
+    )
+    missing_policy = capsys.readouterr()
+    assert missing_policy_exit == 2
+    assert missing_policy.out == ""
+    assert "requires --policy" in missing_policy.err
+
+    stdin_policy_exit = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--policy",
+            "-",
+        ]
+    )
+    stdin_policy = capsys.readouterr()
+    assert stdin_policy_exit == 2
+    assert stdin_policy.out == ""
+    assert "requires a file path" in stdin_policy.err
+
+    failed_policy_exit = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--policy",
+            str(policy_path),
+        ]
+    )
+    failed_policy = capsys.readouterr()
+    assert failed_policy_exit == 5
+    assert failed_policy.out == ""
+    assert "does not match the expected model" in failed_policy.err
+
+    policy_path.write_text(
+        render_execution_result_policy(ExecutionResultPolicy(expected_model="model-a")),
+        encoding="utf-8",
+    )
+    wrong_fingerprint_exit = main(
+        [
+            "verify-execution",
+            str(request_path),
+            str(plan_path),
+            str(result_path),
+            "--policy",
+            str(policy_path),
+            "--expect-policy-fingerprint",
+            "sha256:" + "0" * 64,
+        ]
+    )
+    wrong_fingerprint = capsys.readouterr()
+    assert wrong_fingerprint_exit == 5
+    assert wrong_fingerprint.out == ""
+    assert "does not match the expected fingerprint" in wrong_fingerprint.err
 
 
 def test_verify_execution_cli_rejects_unbound_result_and_two_stdin_inputs(

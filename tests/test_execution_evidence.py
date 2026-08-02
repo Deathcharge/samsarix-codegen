@@ -9,11 +9,13 @@ import pytest
 
 from samsarix_codegen import (
     ExecutionEvidenceVerification,
+    fingerprint_execution_result_policy,
     render_execution_evidence_verification,
     verify_execution_evidence,
 )
 from samsarix_codegen.artifact import (
     ExecutionResult,
+    ExecutionResultPolicy,
     create_request_artifact,
     parse_execution_result,
     render_execution_result,
@@ -75,8 +77,9 @@ def test_execution_evidence_links_chain_without_contents_and_allows_model_alias(
     payload = json.loads(rendered)
 
     assert isinstance(evidence, ExecutionEvidenceVerification)
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["plan_fingerprint"] == plan.fingerprint
+    assert payload["result_policy"] is None
     assert payload["request"]["fingerprint"] == artifact.fingerprint
     assert payload["provider"] == {
         "endpoint": plan.endpoint,
@@ -93,6 +96,73 @@ def test_execution_evidence_links_chain_without_contents_and_allows_model_alias(
     for private in ("Private review instruction", "Private provider response"):
         assert private not in text
         assert private not in rendered
+
+
+def test_execution_evidence_enforces_and_identifies_the_exact_result_policy() -> None:
+    artifact, plan, result = make_chain()
+    policy = ExecutionResultPolicy(
+        expected_model="requested-model",
+        max_response_bytes=100,
+        max_completion_tokens=12,
+    )
+    policy_fingerprint = fingerprint_execution_result_policy(policy)
+
+    evidence = verify_execution_evidence(
+        artifact,
+        plan,
+        result,
+        result_policy=policy,
+        expected_policy_fingerprint=policy_fingerprint,
+    )
+    payload = evidence.to_payload()
+    text = render_execution_evidence_verification(evidence)
+
+    assert evidence.result_policy_fingerprint == policy_fingerprint
+    assert payload["result_policy"] == {
+        "fingerprint": policy_fingerprint,
+        "rules": {
+            "schema_version": 1,
+            "expected_model": "requested-model",
+            "max_response_bytes": 100,
+            "max_completion_tokens": 12,
+        },
+    }
+    assert f"Result policy: {policy_fingerprint} (passed)" in text
+
+
+def test_execution_evidence_rejects_policy_failure_or_unapproved_policy() -> None:
+    artifact, plan, result = make_chain()
+    passing_policy = ExecutionResultPolicy(expected_model="requested-model")
+
+    with pytest.raises(ArtifactError, match="does not match the expected model"):
+        verify_execution_evidence(
+            artifact,
+            plan,
+            result,
+            result_policy=ExecutionResultPolicy(expected_model="other-model"),
+        )
+    with pytest.raises(ArtifactError, match="does not match the expected fingerprint"):
+        verify_execution_evidence(
+            artifact,
+            plan,
+            result,
+            result_policy=passing_policy,
+            expected_policy_fingerprint="sha256:" + "0" * 64,
+        )
+    with pytest.raises(ArtifactError, match="requires an explicit result policy"):
+        verify_execution_evidence(
+            artifact,
+            plan,
+            result,
+            expected_policy_fingerprint=fingerprint_execution_result_policy(passing_policy),
+        )
+    with pytest.raises(ArtifactError, match="must configure at least one rule"):
+        verify_execution_evidence(
+            artifact,
+            plan,
+            result,
+            result_policy=ExecutionResultPolicy(),
+        )
 
 
 def test_execution_evidence_accepts_missing_provider_usage_and_response_model() -> None:
@@ -161,6 +231,10 @@ def test_execution_evidence_public_values_and_renderer_fail_closed() -> None:
     with pytest.raises(ArtifactError, match="validated result summary"):
         ExecutionEvidenceVerification(  # type: ignore[arg-type]
             plan_verification, object(), artifact.fingerprint
+        )
+    with pytest.raises(ArtifactError, match="validated result policy"):
+        ExecutionEvidenceVerification(  # type: ignore[arg-type]
+            plan_verification, summary, artifact.fingerprint, object()
         )
     with pytest.raises(ArtifactError, match="invalid result request fingerprint"):
         ExecutionEvidenceVerification(plan_verification, summary, "invalid")

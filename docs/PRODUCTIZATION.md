@@ -145,12 +145,15 @@ Research references:
     The plan is credential-free, explicit, bounded, internally fingerprinted, and independently
     schema-validatable. Plan-backed execution reads only `SAMSARIX_API_KEY` at runtime and refuses
     request/provider/budget overrides rather than merging configuration layers.
-20. **Portable execution evidence.** Execution-result schema version 2 carries a nullable reviewed
-    plan fingerprint and distinguishes the requested model from the provider-reported response
-    model. Plan-backed execution populates the link automatically. `verify-execution` validates the
-    full request/plan/result chain, requested model, input budget, and any reported completion usage
-    offline, emitting response hash/size rather than content. Legacy result version 1 remains
-    parseable. This is local integrity evidence, not signed provider attestation.
+20. **Portable policy-bound execution evidence.** Execution-result schema version 2 carries a
+    nullable reviewed plan fingerprint and distinguishes the requested model from the
+    provider-reported response model. Plan-backed execution populates the link automatically.
+    `verify-execution` validates the full request/plan/result chain, requested model, input budget,
+    any reported completion usage, and an optional separately approved result-policy fingerprint
+    offline. Evidence schema version 2 emits exact passing policy rules plus response hash/size
+    rather than content; version 1 remains bundled. Legacy result version 1 remains parseable. This
+    is local integrity and deterministic-policy evidence, not signed approval or provider
+    attestation.
 
 ## Assumptions
 
@@ -228,8 +231,10 @@ Final command evidence is recorded in the **Final verification** section after e
   provider/budget intent across the credential boundary.
 - [x] Bind plan-backed results to that approval and verify the complete request/plan/result chain
   offline without reproducing prompt or response contents.
-- [x] Add a fully linked offline request/plan/synthetic-result fixture whose evidence is reproduced
-  through both the public API and installed CLI in CI.
+- [x] Canonically fingerprint one explicit result policy and bind its successful enforcement into
+  the same versioned request/plan/result evidence record.
+- [x] Add a fully linked offline request/plan/synthetic-result/policy fixture whose evidence is
+  reproduced through both the public API and installed CLI in CI.
 - [x] Add an installed-package self-check that validates every bundled contract and reproduces the
   synthetic request/plan/result/evidence path without project input or network access.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
@@ -298,8 +303,8 @@ Final command evidence is recorded in the **Final verification** section after e
 - Added versioned execution plans, offline plan creation/verification, a typed public API, standalone
   plan and verification schemas, a checked-in example, and exact no-override plan-backed execution.
 - Added result schema version 2 with plan linkage and separate requested/response model labels,
-  legacy version-1 parsing, offline three-artifact verification, a typed public API, standalone
-  evidence schema, and installed-wheel evidence-chain coverage.
+  legacy version-1 parsing, offline policy-capable chain verification, a typed public API,
+  standalone versioned evidence schemas, and installed-wheel evidence-chain coverage.
 - Added strict context manifests, a standalone schema and typed API, repeated-manifest composition,
   installed-wheel smoke coverage, and a runnable repository example.
 - Added source/tag/changelog gates, structural distribution verification, SHA-256 manifests,
@@ -681,6 +686,35 @@ both private instruction and response. The installed schemas validated the check
 evidence examples, and the installed typed API retained legacy result-version-1 parsing. Exact final
 distribution digests are attached to the corresponding pull request because recording them inside
 the source distribution would change that distribution's digest.
+
+### Policy-bound execution-evidence follow-up
+
+Python 3.14.6 source and clean extracted-sdist checks passed formatting, lint, strict typing across
+16 source files, the source release gate, and 324 tests. The final sdist contained the canonical
+result-policy fingerprint API, `fingerprint-policy` command, policy-capable evidence schema version
+2, the preserved version 1 schema/fixture, the complete policy-bound example, documentation, tests,
+CI changes, and installed smoke harness. A wheel built only from that extracted sdist and both final
+distributions passed Twine and the fail-closed distribution audit. Exact final digests are attached
+to the corresponding pull request because recording them inside the source distribution would
+change that distribution's digest.
+
+A fresh virtual environment installed only the audited wheel, reported no broken requirements and
+zero unconditional runtime dependencies, and resolved the package outside the checkout. The
+installed self-check passed its 13-contract registry and internally pinned the example result
+policy. The installed CLI reproduced the exact checked-in version 2 evidence with policy fingerprint
+`sha256:7e603aa13e31a93aa73d5e03fd77be9248114cd1d721d77ab05db242260e2dab`;
+the emitted document passed full Draft 2020-12 validation using the installed schema. The installed
+typed fingerprint/approval API passed, and the optimized installed smoke made exactly one local
+fixture request, enforced the passing policy, rejected a failing policy offline, omitted private
+instruction/response content from evidence, and made no additional request on failure.
+
+The first installed-smoke attempt exposed that the new policy arguments had been placed on the
+`verify-plan` step in the harness rather than the later `verify-execution` step. That artifact pair
+was invalidated, the journey was corrected, and every source, sdist, distribution, installation,
+schema, and one-request gate above was rerun against the final exact pair. A separate metadata
+assertion initially treated optional development-extra requirements as unconditional dependencies;
+the corrected marker-aware check confirmed all five requirements are gated by the `dev` extra.
+Neither harness event was treated as a product pass.
 
 ### Validation not run
 

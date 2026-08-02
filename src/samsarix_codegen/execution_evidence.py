@@ -12,8 +12,10 @@ from typing import Any
 
 from samsarix_codegen.artifact import (
     ExecutionResult,
+    ExecutionResultPolicy,
     ExecutionResultSummary,
     RequestArtifact,
+    enforce_execution_result_summary_policy,
     inspect_execution_result,
     verify_execution_result,
 )
@@ -23,8 +25,13 @@ from samsarix_codegen.execution_plan import (
     ExecutionPlanVerification,
     verify_execution_plan,
 )
+from samsarix_codegen.result_policy import (
+    fingerprint_execution_result_policy,
+    render_execution_result_policy,
+    require_execution_result_policy_fingerprint,
+)
 
-EXECUTION_EVIDENCE_SCHEMA_VERSION = 1
+EXECUTION_EVIDENCE_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +41,7 @@ class ExecutionEvidenceVerification:
     plan_verification: ExecutionPlanVerification
     result: ExecutionResultSummary
     result_request_fingerprint: str
+    result_policy: ExecutionResultPolicy | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.plan_verification, ExecutionPlanVerification):
@@ -61,6 +69,19 @@ class ExecutionEvidenceVerification:
             raise ArtifactError(
                 "execution result completion usage exceeds the execution-plan output limit"
             )
+        if self.result_policy is not None:
+            if not isinstance(self.result_policy, ExecutionResultPolicy):
+                raise ArtifactError("execution evidence requires a validated result policy")
+            fingerprint_execution_result_policy(self.result_policy)
+            enforce_execution_result_summary_policy(self.result, self.result_policy)
+
+    @property
+    def result_policy_fingerprint(self) -> str | None:
+        """Return the exact applied policy fingerprint, if policy enforcement was requested."""
+
+        if self.result_policy is None:
+            return None
+        return fingerprint_execution_result_policy(self.result_policy)
 
     @property
     def remaining_reported_output_tokens(self) -> int | None:
@@ -75,9 +96,18 @@ class ExecutionEvidenceVerification:
 
         plan = self.plan_verification.plan
         result_payload = self.result.to_payload()
+        policy_payload = (
+            None
+            if self.result_policy is None
+            else {
+                "fingerprint": self.result_policy_fingerprint,
+                "rules": json.loads(render_execution_result_policy(self.result_policy)),
+            }
+        )
         return {
             "schema_version": EXECUTION_EVIDENCE_SCHEMA_VERSION,
             "plan_fingerprint": plan.fingerprint,
+            "result_policy": policy_payload,
             "request": {
                 "fingerprint": plan.request_fingerprint,
                 "messages": self.plan_verification.request_messages,
@@ -113,6 +143,8 @@ def verify_execution_evidence(
     result: ExecutionResult,
     *,
     expected_plan_fingerprint: str | None = None,
+    result_policy: ExecutionResultPolicy | None = None,
+    expected_policy_fingerprint: str | None = None,
 ) -> ExecutionEvidenceVerification:
     """Validate every local linkage in one request-plan-result evidence chain."""
 
@@ -122,10 +154,17 @@ def verify_execution_evidence(
         expected_plan_fingerprint=expected_plan_fingerprint,
     )
     verify_execution_result(artifact, result)
+    if expected_policy_fingerprint is not None:
+        if result_policy is None:
+            raise ArtifactError(
+                "an expected result policy fingerprint requires an explicit result policy"
+            )
+        require_execution_result_policy_fingerprint(result_policy, expected_policy_fingerprint)
     return ExecutionEvidenceVerification(
         plan_verification=plan_verification,
         result=inspect_execution_result(result).summary,
         result_request_fingerprint=result.request_fingerprint,
+        result_policy=result_policy,
     )
 
 
@@ -148,6 +187,11 @@ def render_execution_evidence_verification(
     lines = [
         "Request, execution plan, and result form a consistent local evidence chain.",
         f"Plan: {plan.fingerprint}",
+        (
+            "Result policy: not applied"
+            if verification.result_policy is None
+            else f"Result policy: {verification.result_policy_fingerprint} (passed)"
+        ),
         f"Request: {plan.request_fingerprint}",
         (
             "Request context: "

@@ -33,6 +33,8 @@ Its product promise is narrower and testable:
 14. Carry that reviewed plan fingerprint into the stored result and verify the complete
     request/plan/result chain offline, while distinguishing the requested model from the model
     label reported by the provider.
+15. Fingerprint one strict result policy before execution, then enforce and record that exact policy
+    in the same content-omitting offline evidence gate as the approved request and plan.
 
 ## Evidence from adjacent products
 
@@ -132,11 +134,12 @@ primitive.
 
 Samsarix is not a substitute for those quality-evaluation systems. Its smaller differentiator is a
 portable, dependency-free approval chain: a deterministic request, a credential-free plan, a
-plan-bound result, and an offline verifier that emits only operational metadata and a response
-hash/size. It also compares two bounded same-request results and enforces a narrow deterministic
-envelope policy without datasets, scorers, hosted traces, or another model call. This is an
-inference from adjacent tracing practices, not a claim that local hashes provide authenticated
-telemetry.
+plan-bound result, an optional separately fingerprinted deterministic policy, and an offline
+verifier that emits only operational metadata and a response hash/size. It also compares two
+bounded same-request results without datasets, scorers, hosted traces, or another model call. The
+single policy-bound chain is an inference from adjacent CI quality-gate demand—such as Promptfoo's
+threshold assertions and CI failure controls—not a claim that local hashes provide authenticated
+telemetry or semantic evaluation.
 
 These products validate demand for automation and broad context. They also leave a useful boundary
 for teams that want a smaller approval object without granting repository discovery, shell access,
@@ -194,11 +197,13 @@ keeps only bounded request metrics and result metadata. Unlike hosted observabil
 path is local and dependency-free; unlike signatures or attestations, it does not establish
 authorship or protect files from an actor who can rewrite both.
 
-For plan-backed runs, retain all three artifacts and run `verify-execution`. The result records the
-reviewed plan fingerprint, requested model, and provider-reported response model separately. The
-offline evidence record verifies every local linkage plus the plan's input and reported-output
-budgets without reproducing the prompt or response. It remains forgeable by an actor who can
-rewrite the whole chain and does not prove which provider infrastructure served the request.
+For plan-backed runs, retain all three artifacts and optionally an explicit result policy, then run
+`verify-execution`. The result records the reviewed plan fingerprint, requested model, and
+provider-reported response model separately. Evidence schema version 2 verifies every local
+linkage plus the plan's input and reported-output budgets; when a policy is supplied, it also
+requires its separately approved fingerprint, enforces every rule, and records the exact rules.
+Neither prompt nor response is reproduced. The record remains forgeable by an actor who can rewrite
+the whole chain and does not prove which provider infrastructure served the request.
 
 ### Fail-closed CI result policy
 
@@ -219,11 +224,11 @@ shell history or repository discovery.
 
 ### Zero-account evaluation
 
-Run the checked-in request, plan, synthetic result, and evidence fixture through
+Run the checked-in request, plan, synthetic result, result policy, and evidence fixture through
 `verify-execution` from a clean clone. The same command is exercised through an installed wheel on
-every supported CI platform. This gives evaluators one complete artifact-linkage journey without a
-provider account, local model download, network request, or ambiguous fake-provider claim; live
-quality and compatibility remain separate operator evidence.
+every supported CI platform. This gives evaluators one complete policy-bound artifact-linkage
+journey without a provider account, local model download, network request, or ambiguous
+fake-provider claim; live quality and compatibility remain separate operator evidence.
 
 After installation, `self-check` provides the smaller preflight: it loads each bundled contract,
 checks its declared draft/object shape, and reproduces that deterministic evidence path without
@@ -245,7 +250,8 @@ every installed-wheel CI job.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.
 - No claim that result hashes, length, or provider-reported usage evaluate response quality.
-- No claim that a consistent request/plan/result chain is a signed provider receipt or attestation.
+- No claim that a consistent request/plan/result/policy chain is a signed approval, provider receipt,
+  or attestation.
 - No claim that a token ceiling proves a monetary budget unless the operator separately maps the
   selected model's authenticated usage to current pricing.
 

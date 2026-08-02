@@ -9,8 +9,8 @@ repository-discovery, file-write, shell, or retry authority. Samsarix Codegen ne
 executes generated code, scans a repository automatically, or retries a paid request.
 
 > **Status:** `0.2.0` release candidate. The offline review workflow, versioned execution-plan
-> handoff, request-plan-result evidence chain, one-request execution path, and content-free
-> provider conformance check are implemented and tested. The package has not been published to
+> handoff, policy-bound request-plan-result evidence chain, one-request execution path, and
+> content-free provider conformance check are implemented and tested. The package has not been published to
 > PyPI or run through the documented
 > three-developer pilot.
 
@@ -26,9 +26,11 @@ The core workflow separates request construction from credential-bearing executi
 4. Bind the request fingerprint to an exact endpoint, model, timeout, input ceiling, and output
    ceiling in a credential-free execution plan.
 5. Validate and pin the plan fingerprint offline.
-6. Send exactly that reviewed request with those reviewed settings once using `execute --plan`.
-7. Verify the request, plan, and stored result together offline without reproducing prompt or
-   response contents.
+6. Validate and pin one explicit result-policy fingerprint when CI must enforce response metadata
+   limits after execution.
+7. Send exactly that reviewed request with those reviewed settings once using `execute --plan`.
+8. Verify the request, plan, stored result, and optional exact policy together offline without
+   reproducing prompt or response contents.
 
 This makes staged-change review, CI approval handoffs, selected-log triage, and reproducible
 provider comparisons practical without a private Samsarix service or another repository.
@@ -84,6 +86,9 @@ portable path rules, limits, and trust boundary.
 
 ## Build, inspect, and execute one reviewed artifact
 
+The final gate below assumes a reviewed `result-policy.json`; start from the strict
+[versioned example](examples/result-policy-v1.json) and the [policy contract](docs/RESULT_POLICY.md).
+
 PowerShell:
 
 ```powershell
@@ -103,12 +108,15 @@ samsarix-codegen create-plan request.json `
   --max-estimated-input-tokens 50000 > execution-plan.json
 $planFingerprint = samsarix-codegen verify-plan request.json execution-plan.json `
   --format fingerprint
+$policyFingerprint = samsarix-codegen fingerprint-policy result-policy.json
 samsarix-codegen execute request.json `
   --plan execution-plan.json `
   --expect-plan-fingerprint $planFingerprint `
   --format json > result.json
 samsarix-codegen verify-execution request.json execution-plan.json result.json `
-  --expect-plan-fingerprint $planFingerprint
+  --expect-plan-fingerprint $planFingerprint `
+  --policy result-policy.json `
+  --expect-policy-fingerprint $policyFingerprint
 ```
 
 POSIX shell:
@@ -130,12 +138,15 @@ samsarix-codegen create-plan request.json \
   --max-estimated-input-tokens 50000 > execution-plan.json
 plan_fingerprint="$(samsarix-codegen verify-plan request.json execution-plan.json \
   --format fingerprint)"
+policy_fingerprint="$(samsarix-codegen fingerprint-policy result-policy.json)"
 samsarix-codegen execute request.json \
   --plan execution-plan.json \
   --expect-plan-fingerprint "$plan_fingerprint" \
   --format json > result.json
 samsarix-codegen verify-execution request.json execution-plan.json result.json \
-  --expect-plan-fingerprint "$plan_fingerprint"
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy result-policy.json \
+  --expect-policy-fingerprint "$policy_fingerprint"
 ```
 
 The Markdown view is rendered from the validated artifact's exact stored messages; it does not
@@ -147,7 +158,9 @@ before constructing a provider client, then makes one non-streaming request. The
 [execution-plan contract](docs/EXECUTION_PLAN.md) defines its no-override behavior and trust limits.
 Plan-backed JSON execution records the exact plan fingerprint in result schema version 2.
 `verify-execution` then validates request/plan/result linkage, the requested model, the reviewed
-budgets, and any reported completion usage offline.
+budgets, any reported completion usage, and an optional explicitly selected result policy offline.
+When a policy is supplied, evidence schema version 2 records its canonical fingerprint and exact
+rules only after every rule passes. See the [result-policy contract](docs/RESULT_POLICY.md).
 
 To exercise that entire evidence path without credentials, a running model, or network access:
 
@@ -155,11 +168,15 @@ To exercise that entire evidence path without credentials, a running model, or n
 plan_fingerprint="$(samsarix-codegen verify-plan \
   examples/execution-request-v2.json examples/execution-plan-v1.json \
   --format fingerprint)"
+policy_fingerprint="$(samsarix-codegen fingerprint-policy \
+  examples/execution-evidence-policy-v1.json)"
 samsarix-codegen verify-execution \
   examples/execution-request-v2.json \
   examples/execution-plan-v1.json \
   examples/execution-result-v2.json \
-  --expect-plan-fingerprint "$plan_fingerprint"
+  --expect-plan-fingerprint "$plan_fingerprint" \
+  --policy examples/execution-evidence-policy-v1.json \
+  --expect-policy-fingerprint "$policy_fingerprint"
 ```
 
 The checked-in result is explicitly synthetic and has no provider-reported model or token usage.
@@ -240,7 +257,8 @@ resource comparison, not a quality score or proof that a provider authored an en
 | `inspect` | Never | Validate and summarize an artifact, or print only its fingerprint |
 | `create-plan` | Never | Bind one request to credential-free provider settings and budgets |
 | `verify-plan` | Never | Validate request/plan linkage and emit a content-omitting record |
-| `verify-execution` | Never | Validate one request/plan/result chain without prompt or response contents |
+| `fingerprint-policy` | Never | Validate and fingerprint one explicit result-policy file |
+| `verify-execution` | Never | Validate one request/plan/result chain and optional exact policy without contents |
 | `inspect-result` | Never | Validate, policy-check, and summarize one result without its response contents |
 | `verify-result` | Never | Link and policy-check one result against a validated request without contents |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
@@ -273,7 +291,7 @@ samsarix-codegen schema context-manifest > context-manifest-v1.schema.json
 samsarix-codegen schema result-policy > execution-result-policy-v1.schema.json
 samsarix-codegen schema execution-plan > execution-plan-v1.schema.json
 samsarix-codegen schema execution-plan-verification > execution-plan-verification-v1.schema.json
-samsarix-codegen schema execution-evidence > execution-evidence-verification-v1.schema.json
+samsarix-codegen schema execution-evidence > execution-evidence-verification-v2.schema.json
 samsarix-codegen schema self-check > self-check-v1.schema.json
 ```
 
@@ -421,8 +439,10 @@ assert parse_context_manifest(render_context_manifest(manifest)) == manifest
 `compare_execution_results()` provide the same strict, content-omitting result metadata paths to
 typed consumers. `ExecutionResultPolicy` and `enforce_execution_result_policy()` expose the same
 deterministic post-result gates used by the CLI. `load_execution_result_policy()`,
-`parse_execution_result_policy()`, and `render_execution_result_policy()` expose the versioned file
-contract. Unstable implementation helpers are not exported from `samsarix_codegen`.
+`parse_execution_result_policy()`, `render_execution_result_policy()`,
+`fingerprint_execution_result_policy()`, and `require_execution_result_policy_fingerprint()`
+expose the versioned file and approval contract. Unstable implementation helpers are not exported
+from `samsarix_codegen`.
 
 `ExecutionPlan`, `create_execution_plan()`, `parse_execution_plan()`,
 `verify_execution_plan()`, and `provider_config_from_execution_plan()` expose the same
@@ -442,9 +462,9 @@ python -m build
 ```
 
 CI runs these checks plus a built-wheel request/plan handoff, one exact local-fixture plan execution,
-request/plan/result evidence verification, checked-in policy enforcement and schema validation,
-comparison, provider-check contract, and schema smoke tests on Python 3.10 and 3.14 across Ubuntu
-and Windows. See
+policy-bound request/plan/result evidence verification, checked-in policy fingerprinting and
+schema validation, comparison, provider-check contract, and schema smoke tests on Python 3.10 and
+3.14 across Ubuntu and Windows. See
 [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and the living
 [productization record](docs/PRODUCTIZATION.md). The [three-developer pilot](docs/PILOT.md) defines
@@ -479,7 +499,7 @@ instruction + explicit files / explicit manifests / named stdin
                     text or plan-bound JSON result
                                        |
                                        v
-                    offline three-artifact verification
+               offline chain + exact-policy verification
 ```
 
 The package has no runtime dependencies. The standard-library network client implements only the
@@ -496,7 +516,8 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - Result comparisons contain response hashes, which can confirm a guessed response even though
   response text is omitted; protect comparison files according to the result sensitivity.
 - Result-policy files contain no prompt or response, but an expected model can reveal deployment
-  choices. Their limits do not authenticate provider-reported usage or prove monetary cost.
+  choices. Their unkeyed fingerprints detect drift but do not authenticate approval; their limits
+  do not authenticate provider-reported usage or prove monetary cost.
 - Execution plans contain no prompt or credential, but endpoints, model names, and limits can
   reveal deployment topology. Their unkeyed fingerprints detect drift but do not authenticate a
   reviewer, provider, or endpoint.

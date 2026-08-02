@@ -233,7 +233,7 @@ The package bundles self-contained
 | `result-policy` | Execution-result policy schema version 1 | `src/samsarix_codegen/schemas/execution-result-policy-v1.schema.json` |
 | `execution-plan` | Credential-free execution plan schema version 1 | `src/samsarix_codegen/schemas/execution-plan-v1.schema.json` |
 | `execution-plan-verification` | Request/plan verification schema version 1 | `src/samsarix_codegen/schemas/execution-plan-verification-v1.schema.json` |
-| `execution-evidence` | Request/plan/result evidence schema version 1 | `src/samsarix_codegen/schemas/execution-evidence-verification-v1.schema.json` |
+| `execution-evidence` | Policy-capable request/plan/result evidence schema version 2 | `src/samsarix_codegen/schemas/execution-evidence-verification-v2.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
 `load_contract_schema()` from Python. The files are package data in both the sdist and wheel.
@@ -251,8 +251,9 @@ authority, precedence, linkage, and trust limits.
 
 The checked-in [request](../examples/execution-request-v2.json),
 [plan](../examples/execution-plan-v1.json), [synthetic result](../examples/execution-result-v2.json),
-and [execution evidence](../examples/execution-evidence-v1.json) are a fully linked offline fixture.
+[result policy](../examples/execution-evidence-policy-v1.json), and
+[execution evidence](../examples/execution-evidence-v2.json) are a fully linked offline fixture.
 Tests rebuild the request from `examples/sample.py`, validate every portable schema and canonical
-fingerprint, run the complete verifier, and require its content-omitting evidence to equal the
-checked-in record. The synthetic response is not a provider claim or an approval record for real
-work.
+request, plan, and policy fingerprint, run the complete verifier, and require its content-omitting
+evidence to equal the checked-in record. The legacy version 1 evidence schema and fixture remain
+bundled. The synthetic response is not a provider claim or an approval record for real work.

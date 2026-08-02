@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from pathlib import Path
 from typing import Any
@@ -80,13 +82,7 @@ def render_execution_result_policy(policy: ExecutionResultPolicy) -> str:
 
     if not isinstance(policy, ExecutionResultPolicy):
         raise ArtifactError("execution result policy rendering requires a validated policy")
-    payload: dict[str, object] = {"schema_version": RESULT_POLICY_SCHEMA_VERSION}
-    for field in _POLICY_FIELDS:
-        value = getattr(policy, field)
-        if value is not None:
-            payload[field] = value
-    if len(payload) == 1:
-        raise ArtifactError("execution result policy must configure at least one rule")
+    payload = _policy_payload(policy)
 
     rendered = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     try:
@@ -98,6 +94,35 @@ def render_execution_result_policy(policy: ExecutionResultPolicy) -> str:
             f"execution result policy exceeds the {MAX_RESULT_POLICY_BYTES:,}-byte safety limit"
         )
     return rendered
+
+
+def fingerprint_execution_result_policy(policy: ExecutionResultPolicy) -> str:
+    """Return a stable SHA-256 fingerprint for one validated result policy."""
+
+    payload = _policy_payload(policy)
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def require_execution_result_policy_fingerprint(
+    policy: ExecutionResultPolicy,
+    expected_fingerprint: str,
+) -> str:
+    """Return the policy fingerprint only when it matches a prior approval."""
+
+    if not _is_sha256(expected_fingerprint):
+        raise ArtifactError("expected execution result policy fingerprint is not canonical sha256")
+    actual = fingerprint_execution_result_policy(policy)
+    if not hmac.compare_digest(actual, expected_fingerprint):
+        raise ArtifactError(
+            "execution result policy fingerprint does not match the expected fingerprint"
+        )
+    return actual
 
 
 def load_execution_result_policy(path: str | Path) -> ExecutionResultPolicy:
@@ -144,6 +169,25 @@ def _decode_policy_document(raw: str | bytes) -> str:
     if "\x00" in raw:
         raise ArtifactError("binary execution result policies are not supported")
     return raw
+
+
+def _policy_payload(policy: ExecutionResultPolicy) -> dict[str, object]:
+    if not isinstance(policy, ExecutionResultPolicy):
+        raise ArtifactError("execution result policy requires a validated policy")
+    payload: dict[str, object] = {"schema_version": RESULT_POLICY_SCHEMA_VERSION}
+    for field in _POLICY_FIELDS:
+        value = getattr(policy, field)
+        if value is not None:
+            payload[field] = value
+    if len(payload) == 1:
+        raise ArtifactError("execution result policy must configure at least one rule")
+    return payload
+
+
+def _is_sha256(value: object) -> bool:
+    if not isinstance(value, str) or not value.startswith("sha256:") or len(value) != 71:
+        return False
+    return all(character in "0123456789abcdef" for character in value[7:])
 
 
 def _reject_duplicate_policy_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

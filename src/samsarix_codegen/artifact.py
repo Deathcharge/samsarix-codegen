@@ -682,23 +682,37 @@ def enforce_execution_result_policy(
         raise ArtifactError(
             "execution result policy enforcement requires a validated result and policy"
         )
-    if policy.expected_model is not None and result.model != policy.expected_model:
+    enforce_execution_result_summary_policy(_summarize_execution_result(result), policy)
+
+
+def enforce_execution_result_summary_policy(
+    summary: ExecutionResultSummary,
+    policy: ExecutionResultPolicy,
+) -> None:
+    """Fail unless validated content-omitting result metadata satisfies a policy."""
+
+    if not isinstance(summary, ExecutionResultSummary) or not isinstance(
+        policy, ExecutionResultPolicy
+    ):
         raise ArtifactError(
-            f"execution result model {result.model!r} does not match "
+            "execution result policy enforcement requires a validated result summary and policy"
+        )
+    if policy.expected_model is not None and summary.model != policy.expected_model:
+        raise ArtifactError(
+            f"execution result model {summary.model!r} does not match "
             f"the expected model {policy.expected_model!r}"
         )
 
-    response_bytes = _utf8_size(result.response_text, label="execution result response text")
-    if policy.max_response_bytes is not None and response_bytes > policy.max_response_bytes:
+    if policy.max_response_bytes is not None and summary.response_bytes > policy.max_response_bytes:
         raise ArtifactError(
-            f"execution result response is {response_bytes:,} bytes; "
+            f"execution result response is {summary.response_bytes:,} bytes; "
             f"the configured maximum is {policy.max_response_bytes:,}"
         )
 
     for label, actual, maximum in (
-        ("prompt token usage", result.prompt_tokens, policy.max_prompt_tokens),
-        ("completion token usage", result.completion_tokens, policy.max_completion_tokens),
-        ("total token usage", result.total_tokens, policy.max_total_tokens),
+        ("prompt token usage", summary.prompt_tokens, policy.max_prompt_tokens),
+        ("completion token usage", summary.completion_tokens, policy.max_completion_tokens),
+        ("total token usage", summary.total_tokens, policy.max_total_tokens),
     ):
         if maximum is None:
             continue
