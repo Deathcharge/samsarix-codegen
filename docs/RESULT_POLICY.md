@@ -91,8 +91,9 @@ samsarix-codegen execute request.json \
 ```
 
 The policy file, document shape, and optional expected fingerprint are validated before the
-provider client is constructed. A malformed, missing, stdin-selected, or fingerprint-mismatched
-policy therefore makes no provider request. After exactly one provider response, Samsarix creates
+provider client is constructed. An explicitly selected malformed, missing-file, stdin-selected, or
+fingerprint-mismatched policy therefore makes no provider request. After exactly one provider
+response, Samsarix creates
 the same normalized execution-result envelope, enforces every configured rule, and emits the
 normal text or JSON response only if all rules pass. A post-response failure returns artifact exit
 code `5`, leaves normal stdout empty, does not disclose the response through the policy error, and

@@ -46,8 +46,8 @@ without granting file-write or shell access. The primary journey is:
    binds it to an endpoint, model, timeout, input ceiling, and output ceiling.
 5. Record the plan fingerprint and, when output rules matter, a separately reviewed policy
    fingerprint; pass both approvals to `execute` in the credential-bearing boundary.
-6. Admit text output or a plan-bound structured result envelope only after the one provider
-   response passes the selected deterministic policy.
+6. When a result policy is selected, admit text output or a plan-bound structured result envelope
+   only after the one provider response passes it.
 7. Verify the request, plan, and result together offline, retaining content-omitting linkage and
    budget and exact-policy evidence.
 8. Use offline inspection, request/result verification, or same-request comparison for retained
@@ -766,9 +766,10 @@ claim. The linked sources and inference are recorded in `docs/COMPETITIVE_STRATE
 ### Policy-gated execution follow-up
 
 Python 3.14.6 source checks passed formatting, lint, strict typing across 16 source files, the
-source release gate, and all 375 tests. `execute` now accepts only one explicit versioned policy
-file and optional separately retained fingerprint. Policy absence, stdin selection, malformed
-documents, and fingerprint drift fail before provider-client construction. After one response,
+source release gate, and all 376 tests. `execute` now accepts only one explicit versioned policy
+file and optional separately retained fingerprint. An orphaned expected fingerprint, stdin
+selection, missing file, malformed document, or fingerprint drift fails before provider-client
+construction. After one response,
 the normalized result must pass model, size, reported-usage, and optional bounded JSON-object rules
 before either text or JSON is emitted. Failure returns artifact exit `5`, empty normal stdout, no
 response-value disclosure, and no retry; the one completed request may still be billable.

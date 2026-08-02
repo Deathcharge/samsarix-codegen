@@ -479,6 +479,7 @@ def test_execute_enforces_approved_policy_before_emitting_response(
     [
         (None, ["--expect-policy-fingerprint", "sha256:" + "0" * 64], 2, "requires --policy"),
         (None, ["--policy", "-"], 2, "requires a file path"),
+        (None, ["--policy", "{policy}"], 5, "not a regular file"),
         ("not-json", ["--policy", "{policy}"], 5, "not valid JSON"),
         (
             '{"schema_version":1,"expected_model":"policy-model"}',
