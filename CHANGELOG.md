@@ -47,7 +47,11 @@ approves a first public release.
 - A standalone Draft 2020-12 execution-evidence contract and typed public verification/rendering
   API.
 - Canonical result-policy fingerprints, an offline `fingerprint-policy` command, and policy-bound
-  `verify-execution` enforcement that records the exact passing policy in evidence schema version 2.
+  `verify-execution` enforcement that records the exact passing policy in execution evidence.
+- Result-policy schema version 2 with bounded JSON-object parsing, required/allowed top-level keys,
+  top-level type gates, duplicate-key rejection, and compatibility with version 1 policies.
+- Execution-evidence schema version 3 with response format and top-level key count after structured
+  policy success, without emitting response-derived key names or values.
 - A fully linked, reproducible offline request/plan/synthetic-result example whose rendered
   evidence must exactly match the checked-in record in tests and the installed-wheel CI journey.
 - An installed-package `self-check` command and standalone report schema that load every bundled
@@ -70,9 +74,9 @@ approves a first public release.
 - Execution-result rendering now rejects values outside its documented schema.
 - Result inspection, verification, and comparison records advance to schema version 2 so plan and
   response-model metadata remain visible in content-omitting workflows.
-- Execution evidence advances to schema version 2 with explicit `null` for no applied policy and a
-  fingerprint-plus-rules object when an exact result policy passes; the version 1 schema remains
-  bundled for compatibility.
+- Execution evidence advances to schema version 3 with explicit null structure when not evaluated
+  and bounded JSON-object format/key-count evidence after a version 2 policy passes; versions 1 and
+  2 remain bundled for compatibility.
 - Provider requests reject HTTP redirects so bearer credentials cannot be forwarded to a redirect
   target.
 - Provider configuration now rejects malformed public types, control characters, overlong values,

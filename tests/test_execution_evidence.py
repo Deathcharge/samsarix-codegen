@@ -31,6 +31,7 @@ def make_chain(
     result_model: str = "requested-model",
     response_model: str | None = "served-model-2026-08",
     completion_tokens: int | None = 12,
+    response_text: str = "Private provider response",
 ):
     artifact = create_request_artifact(
         build_messages(PromptRequest(Task.REVIEW, "Private review instruction")),
@@ -50,7 +51,7 @@ def make_chain(
         render_execution_result(
             artifact,
             ChatResult(
-                "Private provider response",
+                response_text,
                 prompt_tokens=30,
                 completion_tokens=completion_tokens,
                 total_tokens=None if completion_tokens is None else 30 + completion_tokens,
@@ -77,7 +78,7 @@ def test_execution_evidence_links_chain_without_contents_and_allows_model_alias(
     payload = json.loads(rendered)
 
     assert isinstance(evidence, ExecutionEvidenceVerification)
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["plan_fingerprint"] == plan.fingerprint
     assert payload["result_policy"] is None
     assert payload["request"]["fingerprint"] == artifact.fingerprint
@@ -92,6 +93,8 @@ def test_execution_evidence_links_chain_without_contents_and_allows_model_alias(
     assert payload["budgets"]["reported_completion_tokens"] == 12
     assert payload["budgets"]["remaining_reported_output_tokens"] == 52
     assert payload["result"]["response"]["sha256"].startswith("sha256:")
+    assert payload["result"]["response_structure"] is None
+    assert "Response structure: not evaluated" in text
     assert "consistent local evidence chain" in text
     for private in ("Private review instruction", "Private provider response"):
         assert private not in text
@@ -128,6 +131,66 @@ def test_execution_evidence_enforces_and_identifies_the_exact_result_policy() ->
         },
     }
     assert f"Result policy: {policy_fingerprint} (passed)" in text
+    assert payload["result"]["response_structure"] is None
+
+
+def test_execution_evidence_records_structural_policy_without_response_values() -> None:
+    private_response = json.dumps(
+        {
+            "diagnosis": "Private diagnosis",
+            "evidence": ["Private trace"],
+            "next_step": "Private action",
+        },
+        separators=(",", ":"),
+    )
+    artifact, plan, result = make_chain(response_text=private_response)
+    policy = ExecutionResultPolicy(
+        expected_model="requested-model",
+        response_format="json-object",
+        required_json_keys=("diagnosis", "evidence", "next_step"),
+        allowed_json_keys=("diagnosis", "evidence", "next_step"),
+        json_key_types=(
+            ("diagnosis", "string"),
+            ("evidence", "array"),
+            ("next_step", "string"),
+        ),
+        schema_version=2,
+    )
+    policy_fingerprint = fingerprint_execution_result_policy(policy)
+
+    evidence = verify_execution_evidence(
+        artifact,
+        plan,
+        result,
+        result_policy=policy,
+        expected_policy_fingerprint=policy_fingerprint,
+    )
+    payload = evidence.to_payload()
+    rendered = render_execution_evidence_verification(evidence, output_format="json")
+    text = render_execution_evidence_verification(evidence)
+
+    assert payload["result_policy"]["rules"]["schema_version"] == 2
+    assert payload["result"]["response_structure"] == {
+        "format": "json-object",
+        "top_level_keys": 3,
+    }
+    assert "Response structure: JSON object, 3 top-level key(s)" in text
+    for private in ("Private diagnosis", "Private trace", "Private action"):
+        assert private not in rendered
+        assert private not in text
+        assert private not in repr(evidence)
+
+
+def test_execution_evidence_rejects_structural_policy_failure() -> None:
+    artifact, plan, result = make_chain(response_text='{"diagnosis": "Private"}')
+    policy = ExecutionResultPolicy(
+        response_format="json-object",
+        required_json_keys=("diagnosis", "evidence"),
+        schema_version=2,
+    )
+
+    with pytest.raises(ArtifactError, match="missing required keys: evidence"):
+        verify_execution_evidence(artifact, plan, result, result_policy=policy)
 
 
 def test_execution_evidence_rejects_policy_failure_or_unapproved_policy() -> None:

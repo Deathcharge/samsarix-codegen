@@ -146,7 +146,7 @@ At least one participant also completes this task using a scrubbed, non-producti
 
 ```powershell
 Get-Content .\app.log -Tail 300 | samsarix-codegen build `
-  "Find the likely failure, supporting evidence, and next diagnostic" `
+  "Return one JSON object with diagnosis (string), evidence (array), and next_step (string)" `
   --task debug `
   --stdin-name app.log `
   --max-context-bytes 200000 `
@@ -170,13 +170,21 @@ samsarix-codegen verify-plan incident-request.json incident-plan.json `
   --expect-plan-fingerprint $incidentPlanFingerprint `
   --format json > incident-plan-verification.json
 Get-Content incident-plan.json
+
+@'
+{"schema_version":2,"max_response_bytes":262144,"response_format":"json-object","required_json_keys":["diagnosis","evidence","next_step"],"allowed_json_keys":["diagnosis","evidence","next_step"],"json_key_types":{"diagnosis":"string","evidence":"array","next_step":"string"}}
+'@ | Set-Content -Encoding utf8 incident-result-policy.json
+$incidentPolicyFingerprint = samsarix-codegen fingerprint-policy incident-result-policy.json
+Get-Content incident-result-policy.json
 ```
 
 Stop before execution if the exact prompt contains a secret, personal data, or context that the
 selected provider is not authorized to receive. If execution is approved, use the same
 plan-backed `execute` and `verify-execution` sequence as Session A, substituting the incident file
-names and incident plan fingerprint while reusing the same reviewed result policy and policy
-fingerprint.
+names and incident plan fingerprint, and pass `incident-result-policy.json` plus
+`$incidentPolicyFingerprint`. The version 2 policy makes the incident workflow's downstream JSON
+handoff fail closed on invalid JSON, unapproved top-level keys, or wrong top-level types. It does
+not establish that the diagnosis or next step is correct.
 
 ## Results record
 

@@ -192,6 +192,12 @@ schema-exportable, and independently parseable. It requires at least one active 
 unknown, duplicate, or null fields. File rules cannot be mixed with inline policy flags, so there is
 no hidden override order.
 
+Policy schema version `2` can additionally require a bounded valid JSON object, required and
+allowed top-level keys, and top-level JSON value types. It rejects duplicate keys at any depth and
+non-finite numbers. This is a structural machine-consumability gate, not recursive JSON Schema
+validation or semantic evaluation. Evidence version `3` records only the approved policy plus the
+response format and top-level key count; response-derived key names and values remain omitted.
+
 Every configured rule must pass before the command emits its normal inspection or verification
 record. A configured token ceiling fails closed when the provider omitted that field. The gates are
 local, make no network request, preserve the existing content-omitting output contracts, and return
@@ -230,10 +236,10 @@ The package bundles self-contained
 | `result-comparison` | Execution-result comparison schema version 2 | `src/samsarix_codegen/schemas/execution-result-comparison-v2.schema.json` |
 | `provider-check` | Provider-check report schema version 1 | `src/samsarix_codegen/schemas/provider-check-v1.schema.json` |
 | `context-manifest` | Explicit context manifest schema version 1 | `src/samsarix_codegen/schemas/context-manifest-v1.schema.json` |
-| `result-policy` | Execution-result policy schema version 1 | `src/samsarix_codegen/schemas/execution-result-policy-v1.schema.json` |
+| `result-policy` | Execution-result policy schema version 2 | `src/samsarix_codegen/schemas/execution-result-policy-v2.schema.json` |
 | `execution-plan` | Credential-free execution plan schema version 1 | `src/samsarix_codegen/schemas/execution-plan-v1.schema.json` |
 | `execution-plan-verification` | Request/plan verification schema version 1 | `src/samsarix_codegen/schemas/execution-plan-verification-v1.schema.json` |
-| `execution-evidence` | Policy-capable request/plan/result evidence schema version 2 | `src/samsarix_codegen/schemas/execution-evidence-verification-v2.schema.json` |
+| `execution-evidence` | Structured-policy-capable execution evidence schema version 3 | `src/samsarix_codegen/schemas/execution-evidence-verification-v3.schema.json` |
 
 Use `samsarix-codegen schema NAME` to print one without a network request, or
 `load_contract_schema()` from Python. The files are package data in both the sdist and wheel.
@@ -250,10 +256,11 @@ are explicitly selected input contracts; their [separate contract](EXECUTION_PLA
 authority, precedence, linkage, and trust limits.
 
 The checked-in [request](../examples/execution-request-v2.json),
-[plan](../examples/execution-plan-v1.json), [synthetic result](../examples/execution-result-v2.json),
-[result policy](../examples/execution-evidence-policy-v1.json), and
-[execution evidence](../examples/execution-evidence-v2.json) are a fully linked offline fixture.
+[plan](../examples/execution-plan-v1.json),
+[synthetic result](../examples/structured-execution-result-v2.json),
+[result policy](../examples/structured-result-policy-v2.json), and
+[execution evidence](../examples/execution-evidence-v3.json) are a fully linked offline fixture.
 Tests rebuild the request from `examples/sample.py`, validate every portable schema and canonical
 request, plan, and policy fingerprint, run the complete verifier, and require its content-omitting
-evidence to equal the checked-in record. The legacy version 1 evidence schema and fixture remain
+evidence to equal the checked-in record. Legacy evidence versions 1 and 2 remain
 bundled. The synthetic response is not a provider claim or an approval record for real work.

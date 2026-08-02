@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "expected_model": "example-review-model",
+  "max_response_bytes": 256,
+  "response_format": "json-object",
+  "required_json_keys": [
+    "diagnosis",
+    "evidence",
+    "next_step"
+  ],
+  "allowed_json_keys": [
+    "diagnosis",
+    "evidence",
+    "next_step"
+  ],
+  "json_key_types": {
+    "diagnosis": "string",
+    "evidence": "array",
+    "next_step": "string"
+  }
+}

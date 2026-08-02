@@ -31,7 +31,7 @@ from samsarix_codegen.result_policy import (
     require_execution_result_policy_fingerprint,
 )
 
-EXECUTION_EVIDENCE_SCHEMA_VERSION = 2
+EXECUTION_EVIDENCE_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +91,19 @@ class ExecutionEvidenceVerification:
             return None
         return self.plan_verification.plan.max_output_tokens - self.result.completion_tokens
 
+    @property
+    def response_structure(self) -> dict[str, object] | None:
+        """Return non-value JSON-object evidence only when a structural rule passed."""
+
+        if self.result_policy is None or self.result_policy.response_format is None:
+            return None
+        if self.result.response_json_key_hash_types is None:
+            raise ArtifactError("execution evidence is missing validated response structure")
+        return {
+            "format": self.result_policy.response_format,
+            "top_level_keys": len(self.result.response_json_key_hash_types),
+        }
+
     def to_payload(self) -> dict[str, Any]:
         """Return portable linkage evidence without prompt or response contents."""
 
@@ -132,6 +145,7 @@ class ExecutionEvidenceVerification:
             },
             "result": {
                 "response": result_payload["response"],
+                "response_structure": self.response_structure,
                 "usage": result_payload["usage"],
             },
         }
@@ -214,6 +228,14 @@ def render_execution_evidence_verification(
         ),
         f"Response characters: {result.response_chars:,}",
         f"Response bytes: {result.response_bytes:,}",
+        (
+            "Response structure: not evaluated"
+            if verification.response_structure is None
+            else (
+                "Response structure: JSON object, "
+                f"{len(result.response_json_key_hash_types or ()):,} top-level key(s)"
+            )
+        ),
         f"Response: {result.response_sha256}",
         f"Prompt tokens: {_format_optional(result.prompt_tokens)}",
         f"Total tokens: {_format_optional(result.total_tokens)}",

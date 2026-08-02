@@ -47,6 +47,22 @@ def make_policy() -> ExecutionResultPolicy:
     )
 
 
+def make_structured_policy() -> ExecutionResultPolicy:
+    return ExecutionResultPolicy(
+        expected_model="model-a",
+        max_response_bytes=100_000,
+        response_format="json-object",
+        required_json_keys=("diagnosis", "evidence", "next_step"),
+        allowed_json_keys=("diagnosis", "evidence", "next_step"),
+        json_key_types=(
+            ("diagnosis", "string"),
+            ("evidence", "array"),
+            ("next_step", "string"),
+        ),
+        schema_version=2,
+    )
+
+
 def test_result_policy_round_trips_as_an_exact_versioned_contract() -> None:
     policy = make_policy()
 
@@ -88,6 +104,41 @@ def test_result_policy_fingerprint_is_canonical_and_approval_check_is_fail_close
         require_execution_result_policy_fingerprint(policy, "sha256:" + "0" * 64)
 
 
+def test_structured_result_policy_round_trip_and_fingerprint_are_order_independent() -> None:
+    policy = make_structured_policy()
+    rendered = render_execution_result_policy(policy)
+    reordered = parse_execution_result_policy(
+        """{
+          "json_key_types": {"next_step": "string", "evidence": "array", "diagnosis": "string"},
+          "allowed_json_keys": ["next_step", "diagnosis", "evidence"],
+          "required_json_keys": ["evidence", "next_step", "diagnosis"],
+          "response_format": "json-object",
+          "max_response_bytes": 100000,
+          "expected_model": "model-a",
+          "schema_version": 2
+        }"""
+    )
+
+    assert parse_execution_result_policy(rendered) == policy
+    assert reordered == policy
+    assert fingerprint_execution_result_policy(reordered) == fingerprint_execution_result_policy(
+        policy
+    )
+    assert json.loads(rendered) == {
+        "schema_version": 2,
+        "expected_model": "model-a",
+        "max_response_bytes": 100_000,
+        "response_format": "json-object",
+        "required_json_keys": ["diagnosis", "evidence", "next_step"],
+        "allowed_json_keys": ["diagnosis", "evidence", "next_step"],
+        "json_key_types": {
+            "diagnosis": "string",
+            "evidence": "array",
+            "next_step": "string",
+        },
+    }
+
+
 def test_loads_result_policy_from_an_explicit_file(tmp_path: Path) -> None:
     policy_path = tmp_path / "result-policy.json"
     policy_path.write_text(render_execution_result_policy(make_policy()), encoding="utf-8")
@@ -111,7 +162,53 @@ def test_loads_result_policy_from_an_explicit_file(tmp_path: Path) -> None:
             "duplicate JSON field",
         ),
         ('{"schema_version": true, "expected_model": "model-a"}', "unsupported"),
-        ('{"schema_version": 2, "expected_model": "model-a"}', "unsupported"),
+        ('{"schema_version": 3, "expected_model": "model-a"}', "unsupported"),
+        (
+            '{"schema_version": 1, "response_format": "json-object"}',
+            "fields do not match schema version 1",
+        ),
+        ('{"schema_version": 2, "response_format": "json"}', "must be json-object"),
+        (
+            '{"schema_version": 2, "required_json_keys": ["answer"]}',
+            "require response_format json-object",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", "required_json_keys": []}',
+            "cannot be empty",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", '
+            '"required_json_keys": "answer"}',
+            "must be a JSON array",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", '
+            '"required_json_keys": ["answer", "answer"]}',
+            "cannot contain duplicates",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", "json_key_types": {}}',
+            "cannot be empty",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", "json_key_types": []}',
+            "must be a JSON object",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", '
+            '"json_key_types": {"answer": "string", "answer": "number"}}',
+            "duplicate JSON field",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", '
+            '"json_key_types": {"answer": "date"}}',
+            "must be one of",
+        ),
+        (
+            '{"schema_version": 2, "response_format": "json-object", '
+            '"required_json_keys": ["answer"], "allowed_json_keys": []}',
+            "must be allowed",
+        ),
         ('{"schema_version": 1}', "at least one rule"),
         ('{"schema_version": 1, "expected_model": null}', "cannot be null"),
         ('{"schema_version": 1, "expected_model": " model-a"}', "surrounding whitespace"),
@@ -144,6 +241,79 @@ def test_result_policy_rendering_rejects_empty_or_unvalidated_values() -> None:
         render_execution_result_policy(ExecutionResultPolicy())
     with pytest.raises(ArtifactError, match="requires a validated policy"):
         render_execution_result_policy(object())  # type: ignore[arg-type]
+
+
+def test_structured_policy_public_values_fail_closed() -> None:
+    invalid_policies = (
+        (
+            {"schema_version": 1, "response_format": "json-object"},
+            "JSON structure rules require schema version 2",
+        ),
+        (
+            {"schema_version": 2, "response_format": "json"},
+            "response format must be json-object",
+        ),
+        (
+            {"schema_version": 2, "required_json_keys": ("answer",)},
+            "JSON key rules require response_format json-object",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("answer", "answer"),
+            },
+            "required JSON keys cannot contain duplicates",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("line\nbreak",),
+            },
+            "required JSON keys entries cannot contain control characters",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("x" * 257,),
+            },
+            "required JSON keys entries cannot exceed 256 UTF-8 bytes",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "required_json_keys": ("answer",),
+                "allowed_json_keys": (),
+            },
+            "required or typed JSON keys must be allowed",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "response_format": "json-object",
+                "json_key_types": (("answer", "date"),),
+            },
+            "JSON key type must be one of",
+        ),
+    )
+
+    for values, match in invalid_policies:
+        with pytest.raises(ArtifactError, match=match):
+            ExecutionResultPolicy(**values)  # type: ignore[arg-type]
+
+
+def test_structured_policy_rejects_excessive_key_rules() -> None:
+    document = {
+        "schema_version": 2,
+        "response_format": "json-object",
+        "required_json_keys": [f"key-{index}" for index in range(65)],
+    }
+
+    with pytest.raises(ArtifactError, match="cannot exceed 64 entries"):
+        parse_execution_result_policy(json.dumps(document))
 
 
 def test_policy_bounded_read_does_not_depend_only_on_stat_size(tmp_path: Path, monkeypatch) -> None:
