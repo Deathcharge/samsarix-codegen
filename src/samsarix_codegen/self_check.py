@@ -30,6 +30,7 @@ from samsarix_codegen.execution_plan import (
 from samsarix_codegen.models import ChatResult, ContextFile, PromptRequest, ProviderConfig, Task
 from samsarix_codegen.prompt import build_messages
 from samsarix_codegen.result_policy import fingerprint_execution_result_policy
+from samsarix_codegen.review_report import render_review_sarif, verify_review_result
 from samsarix_codegen.schema import ContractSchema, load_contract_schema
 
 SELF_CHECK_SCHEMA_VERSION = 1
@@ -80,6 +81,8 @@ EXPECTED_CONTRACTS = (
     "execution-plan",
     "execution-plan-verification",
     "execution-evidence",
+    "review-response",
+    "review-report",
     "self-check",
 )
 _VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -255,6 +258,50 @@ def run_self_check() -> SelfCheckReport:
             evidence.response_structure,
             {"format": "json-object", "top_level_keys": 3},
             label="response structure",
+        )
+        review_request = PromptRequest(
+            task=Task.REVIEW_REPORT,
+            instruction="Return one source-located review report for greet.",
+            files=(context,),
+        )
+        review_artifact = create_request_artifact(
+            build_messages(review_request), review_request.files
+        )
+        review_response = json.dumps(
+            {
+                "schema_version": 1,
+                "summary": "One selected behavior needs visible regression coverage.",
+                "findings": [
+                    {
+                        "category": "testing",
+                        "severity": "note",
+                        "title": "Blank-name validation needs a focused test",
+                        "message": "Exercise the selected validation branch with whitespace input.",
+                        "path": "examples/sample.py",
+                        "start_line": 10,
+                        "end_line": 12,
+                    }
+                ],
+            },
+            separators=(",", ":"),
+        )
+        review_result = parse_execution_result(
+            render_execution_result(
+                review_artifact,
+                ChatResult(text=review_response),
+                model="synthetic-review-fixture",
+            )
+        )
+        review_report = verify_review_result(review_artifact, review_result)
+        review_sarif = json.loads(render_review_sarif(review_report, tool_version=__version__))
+        _require_equal(review_sarif["version"], "2.1.0", label="review SARIF version")
+        _require_equal(
+            review_sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"],
+            {
+                "artifactLocation": {"uri": "examples/sample.py"},
+                "region": {"startLine": 10, "endLine": 12},
+            },
+            label="review SARIF location",
         )
     except SelfCheckError:
         raise

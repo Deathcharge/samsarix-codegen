@@ -57,6 +57,15 @@ from samsarix_codegen.result_policy import (
     load_execution_result_policy,
     render_execution_result_policy,
 )
+from samsarix_codegen.review_report import (
+    MAX_REVIEW_FINDINGS,
+    MAX_REVIEW_LINE,
+    MAX_REVIEW_MESSAGE_CHARS,
+    MAX_REVIEW_PATH_CHARS,
+    MAX_REVIEW_SUMMARY_CHARS,
+    MAX_REVIEW_TITLE_CHARS,
+    verify_review_result,
+)
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 from samsarix_codegen.self_check import run_self_check
 
@@ -176,6 +185,29 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     execution_evidence_payload = verify_execution_evidence(
         base, execution_plan, plan_bound_result
     ).to_payload()
+    review_response_payload = {
+        "schema_version": 1,
+        "summary": "One issue needs attention.",
+        "findings": [
+            {
+                "category": "correctness",
+                "severity": "error",
+                "title": "Wrong output",
+                "message": "The selected line returns the wrong value.",
+                "path": "src/app.py",
+                "start_line": 1,
+                "end_line": 1,
+            }
+        ],
+    }
+    review_result = parse_execution_result(
+        render_execution_result(
+            base,
+            ChatResult(json.dumps(review_response_payload)),
+            model="local-model",
+        )
+    )
+    review_report_payload = verify_review_result(base, review_result).to_payload()
     self_check_payload = run_self_check().to_dict()
 
     Draft202012Validator(load_contract_schema("request")).validate(request_payload)
@@ -202,6 +234,8 @@ def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
     Draft202012Validator(load_contract_schema("execution-evidence")).validate(
         execution_evidence_payload
     )
+    Draft202012Validator(load_contract_schema("review-response")).validate(review_response_payload)
+    Draft202012Validator(load_contract_schema("review-report")).validate(review_report_payload)
     Draft202012Validator(load_contract_schema("self-check")).validate(self_check_payload)
 
 
@@ -248,6 +282,63 @@ def test_result_policy_schema_limits_match_runtime() -> None:
     assert schema["properties"]["max_response_bytes"]["maximum"] == MAX_RESULT_BYTES
     for field in ("max_prompt_tokens", "max_completion_tokens", "max_total_tokens"):
         assert schema["properties"][field]["maximum"] == MAX_RESULT_POLICY_TOKENS
+
+
+def test_review_schema_limits_match_runtime() -> None:
+    response = load_contract_schema("review-response")
+    finding = response["$defs"]["finding"]["properties"]
+
+    assert response["properties"]["summary"]["maxLength"] == MAX_REVIEW_SUMMARY_CHARS
+    assert response["properties"]["findings"]["maxItems"] == MAX_REVIEW_FINDINGS
+    assert finding["title"]["maxLength"] == MAX_REVIEW_TITLE_CHARS
+    assert finding["message"]["maxLength"] == MAX_REVIEW_MESSAGE_CHARS
+    assert finding["path"]["maxLength"] == MAX_REVIEW_PATH_CHARS
+    assert finding["start_line"]["maximum"] == MAX_REVIEW_LINE
+    assert finding["end_line"]["maximum"] == MAX_REVIEW_LINE
+
+
+def test_embedded_review_response_matches_standalone_schema() -> None:
+    response = load_contract_schema("review-response")
+    report = load_contract_schema("review-report")
+    embedded = report["$defs"]["review_response"]
+
+    for key in ("type", "additionalProperties", "required", "properties"):
+        assert embedded[key] == response[key]
+    assert report["$defs"]["finding"] == response["$defs"]["finding"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("summary", "   "),
+        ("title", "\t"),
+        ("message", "\n"),
+        ("path", "src//app.py"),
+        ("path", "src/app.py/"),
+    ],
+)
+def test_review_response_schema_rejects_noncanonical_text_and_paths(field: str, value: str) -> None:
+    payload = {
+        "schema_version": 1,
+        "summary": "One issue.",
+        "findings": [
+            {
+                "category": "correctness",
+                "severity": "warning",
+                "title": "Wrong result",
+                "message": "The selected branch returns the wrong value.",
+                "path": "src/app.py",
+                "start_line": 1,
+                "end_line": 1,
+            }
+        ],
+    }
+    target = payload if field == "summary" else payload["findings"][0]
+    assert isinstance(target, dict)
+    target[field] = value
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(load_contract_schema("review-response")).validate(payload)
 
 
 @pytest.mark.parametrize("contract", ["execution-plan", "execution-plan-verification"])
@@ -398,6 +489,37 @@ def test_checked_in_execution_chain_is_runnable_and_matches_evidence(capsys) -> 
     policy_v1 = json.loads((examples / "result-policy-v1.json").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(policy_v1_schema)
     Draft202012Validator(policy_v1_schema).validate(policy_v1)
+
+
+def test_checked_in_review_report_journey_is_runnable(capsys) -> None:
+    repository = Path(__file__).resolve().parents[1]
+    examples = repository / "examples"
+    request_path = examples / "review-request-v2.json"
+    result_path = examples / "review-execution-result-v2.json"
+    response = json.loads((examples / "review-response-v1.json").read_text(encoding="utf-8"))
+    expected_report = json.loads((examples / "review-report-v1.json").read_text(encoding="utf-8"))
+
+    Draft202012Validator(load_contract_schema("review-response")).validate(response)
+    Draft202012Validator(load_contract_schema("review-report")).validate(expected_report)
+    artifact = parse_request_artifact(request_path.read_bytes())
+    result = parse_execution_result(result_path.read_bytes())
+    assert json.loads(result.response_text) == response
+    assert verify_review_result(artifact, result).to_payload() == expected_report
+
+    report_exit = main(["export-review", str(request_path), str(result_path), "--format", "json"])
+    report_output = capsys.readouterr()
+    sarif_exit = main(["export-review", str(request_path), str(result_path), "--format", "sarif"])
+    sarif_output = capsys.readouterr()
+
+    assert report_exit == sarif_exit == 0
+    assert report_output.err == sarif_output.err == ""
+    assert json.loads(report_output.out) == expected_report
+    sarif = json.loads(sarif_output.out)
+    assert sarif["version"] == "2.1.0"
+    assert sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"] == {
+        "artifactLocation": {"uri": "examples/sample.py"},
+        "region": {"startLine": 10, "endLine": 12},
+    }
 
 
 @pytest.mark.parametrize(

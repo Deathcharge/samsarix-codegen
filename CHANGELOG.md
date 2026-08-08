@@ -68,6 +68,12 @@ approves a first public release.
 - An installed-package `self-check` command and standalone report schema that load every bundled
   contract and reproduce the synthetic evidence chain without project input, credentials, or a
   network request.
+- A dedicated `review-report` task plus strict, bounded review-response and provenance-linked
+  review-report Draft 2020-12 contracts.
+- Offline `export-review` JSON/SARIF 2.1.0 output with request/result linkage, optional approval
+  fingerprints, duplicate-key rejection, source-location bounds, and exact selected-path checks.
+- A deterministic request/synthetic-result/policy/report example that exercises the complete review
+  export through source tests, installed-wheel CI, and release readiness without a provider call.
 - Strict, versioned, explicitly invoked context manifests that compose reusable root-contained file
   allowlists without repository discovery, globs, or ignore-file interpretation.
 - A bundled Draft 2020-12 context-manifest contract, typed parse/render API, and runnable example.

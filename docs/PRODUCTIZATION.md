@@ -1,6 +1,6 @@
 # Productization Record
 
-Last updated: 2026-08-02
+Last updated: 2026-08-08
 
 ## Current repository assessment
 
@@ -171,6 +171,12 @@ Research references:
     rejects ambiguous archive/directory shapes and works after extraction. The release workflow
     uploads and attests the ZIP separately, while PyPI still receives only Python distributions.
     Provenance and internal consistency reduce setup variance; neither claims safety or adoption.
+24. **Source-located review export.** A dedicated `review-report` task requests one bounded recursive
+    JSON contract. `export-review` verifies request/result linkage, optional approval fingerprints,
+    duplicate-free nested fields, category/severity/text/line limits, and exact membership of every
+    finding path in the selected request context. It emits a provenance-linked report or SARIF 2.1.0
+    with AI-generated, low-precision rules and no invented security score. Upload remains an
+    explicit CI-owner action; structural success is not correctness or static-analysis authority.
 
 ## Assumptions
 
@@ -259,22 +265,24 @@ Final command evidence is recorded in the **Final verification** section after e
   reproduced through both the public API and installed CLI in CI.
 - [x] Add an installed-package self-check that validates every bundled contract and reproduces the
   synthetic request/plan/result/evidence path without project input or network access.
+- [x] Add a strict source-located review response/report contract and offline SARIF 2.1.0 export for
+  an explicit CI handoff without upload, repository discovery, or another model request.
 - [ ] Configure the PyPI publisher/environment, reserve the package, and execute the first release.
 - [ ] Reconsider an editor integration only after the CLI API is stable and real usage justifies it.
 
 ## Implementation checklist
 
 - [x] Standard root `pyproject.toml`, source layout, minimal public API, and console script.
-- [x] `self-check`, `build`, `inspect`, `create-plan`, `verify-plan`, `verify-execution`, `inspect-result`,
-  `verify-result`, `compare`, `compare-results`, `execute`, `run`, `schema`, and `provider-check`
-  commands with useful help and
-  version behavior.
+- [x] `self-check`, `build`, `inspect`, `create-plan`, `verify-plan`, `verify-execution`,
+  `inspect-result`, `verify-result`, `export-review`, `compare`, `compare-results`, `execute`, `run`,
+  `schema`, and `provider-check` commands with useful help and version behavior.
 - [x] Fail-closed post-result policy flags and a typed public enforcement API.
 - [x] Strict result-policy parsing/rendering/loading, bundled schema, example, and installed-wheel
   CI journey.
 - [x] Pre-network plan-bound policy approval plus post-response fail-closed enforcement on
   `execute`, with no retry and unchanged successful text/JSON output contracts.
-- [x] Task guidance for generate, explain, debug, refactor, tests, and review.
+- [x] Task guidance for generate, explain, debug, refactor, tests, prose review, and structured
+  source-located review reports.
 - [x] Safe explicit context/manifest loader and portable Markdown/JSON renderers.
 - [x] Bounded chat-completions client and structured user-facing errors.
 - [x] Unit and local HTTP integration tests covering success and ordinary failures.
@@ -450,6 +458,9 @@ if adoption exists. A subscription is not justified without demand and cost evid
   users must apply equivalent access and retention controls.
 - Execution plans omit prompt contents and credentials but can disclose deployment metadata;
   operators must govern them accordingly.
+- Review reports and SARIF intentionally retain model-generated summaries, findings, source paths,
+  and line ranges. Schema validity does not make them accurate or safe, and an explicit CI upload
+  can widen disclosure beyond the local artifact boundary.
 
 ## Pre-rebrand verification
 
@@ -841,6 +852,32 @@ provider requests for missing and wrong policy approvals and exactly one for the
 Exact final distribution digests belong in the pull-request evidence because recording them inside
 the source distribution would change the digest.
 
+### Source-located review-report follow-up
+
+Python 3.14.6 source checks passed formatting, lint, strict typing across 17 source files, workflow
+YAML parsing, all 24 bundled-schema meta-validations, documentation PowerShell parsing, the
+unreleased source gate, and all 436 tests. Review-response and review-report schema version 1 now
+constrain bounded non-empty text and canonical relative source paths, while the authoritative
+parser additionally rejects duplicate fields, non-finite numbers, resource overflow, invalid line
+ranges, duplicate findings, and any path absent from the exact request context. The checked-in
+synthetic request/result/report chain remains explicitly non-provider evidence.
+
+The source-built sdist and wheel passed Twine and the fail-closed distribution audit. The clean
+extracted sdist passed the same formatting, lint, strict typing, source-release, and 436-test gates.
+A fresh environment installed only the audited wheel with no index or dependencies, reported no
+broken requirements and zero unconditional runtime dependencies, and resolved Samsarix outside
+the checkout. Its self-check passed all 15 public contract selectors. The installed CLI reproduced
+the checked-in review report under semantic JSON equality, exported both review schemas, emitted a
+located SARIF 2.1.0 result, and completed the optimized execution-evidence smoke with exactly one
+local-fixture provider request. Exact final distribution digests belong in the pull-request
+evidence because recording them inside the source distribution would change that distribution's
+digest.
+
+Two preliminary installed-check assertions were discarded rather than counted as passes: the first
+looked for the contract count at the wrong self-check JSON path, and the second compared raw text
+after PowerShell newline normalization. The corrected checks use the documented nested field and
+semantic JSON equality; both completed successfully before this evidence was recorded.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was
@@ -868,7 +905,9 @@ request/plan/result evidence,
 reusable explicit context manifests, independent JSON contracts, and an operator-run provider
 conformance check. Version 2 structured-result policies, version 3 privacy-minimal evidence, and a
 deterministic attested evaluator kit now cover machine-consumable CI handoffs and exact-wheel pilot
-onboarding; each implemented capability has local clean-package evidence recorded above.
+onboarding. A strict source-located review contract and provenance-linked JSON/SARIF 2.1.0 export
+now give that handoff a standard, explicit CI destination without adding upload authority; each
+implemented capability has local clean-package evidence recorded above.
 Execution-plan version 2 reduces that CI handoff to one approved plan fingerprint covering the
 request, provider settings, budgets, and optional result policy while retaining version 1 parsing.
 Public release remains gated on owner control of the PyPI project, creation of the signed release

@@ -77,6 +77,15 @@ from samsarix_codegen.result_policy import (
     render_execution_result_policy,
     require_execution_result_policy_fingerprint,
 )
+from samsarix_codegen.review_report import (
+    ReviewFinding,
+    ReviewReport,
+    ReviewResponse,
+    parse_review_response,
+    render_review_report,
+    render_review_sarif,
+    verify_review_result,
+)
 from samsarix_codegen.schema import ContractSchema, load_contract_schema, render_contract_schema
 from samsarix_codegen.self_check import SelfCheckReport, render_self_check, run_self_check
 
@@ -101,6 +110,9 @@ __all__ = [
     "ProviderCheckReport",
     "RequestArtifact",
     "RequestArtifactComparison",
+    "ReviewFinding",
+    "ReviewReport",
+    "ReviewResponse",
     "SelfCheckReport",
     "Task",
     "build_messages",
@@ -123,6 +135,7 @@ __all__ = [
     "parse_execution_result_policy",
     "parse_execution_plan",
     "parse_request_artifact",
+    "parse_review_response",
     "render_artifact_comparison",
     "render_artifact_summary",
     "render_context_manifest",
@@ -137,6 +150,8 @@ __all__ = [
     "render_markdown",
     "render_provider_check",
     "render_request_artifact",
+    "render_review_report",
+    "render_review_sarif",
     "render_self_check",
     "render_contract_schema",
     "require_fingerprint",
@@ -147,4 +162,5 @@ __all__ = [
     "verify_execution_plan",
     "verify_execution_evidence",
     "verify_execution_result",
+    "verify_review_result",
 ]

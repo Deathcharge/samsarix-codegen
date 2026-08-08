@@ -29,6 +29,16 @@ TASK_GUIDANCE: Mapping[Task, str] = {
     Task.REFACTOR: "Propose a behavior-preserving refactor and explain each material change.",
     Task.TESTS: "Produce focused tests for normal, boundary, and failure behavior.",
     Task.REVIEW: "Review correctness, security, reliability, maintainability, and missing tests.",
+    Task.REVIEW_REPORT: (
+        "Return exactly one JSON object with schema_version 1, a non-empty summary string, and a "
+        "findings array. Every finding must contain exactly category, severity, title, message, "
+        "path, start_line, and end_line. Category must be correctness, security, reliability, "
+        "maintainability, or testing. Severity must be error, warning, or note. Path must exactly "
+        "match an explicitly included context path, and line numbers must be positive with "
+        "end_line not before start_line. Use an empty findings array when no source-located issue "
+        "is found. "
+        "Do not use Markdown fences or add fields."
+    ),
 }
 
 

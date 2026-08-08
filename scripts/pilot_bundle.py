@@ -39,10 +39,17 @@ _SOURCE_ASSETS = (
     "LICENSE",
     "NOTICE",
     "docs/PILOT.md",
+    "docs/REVIEW_REPORT.md",
     "docs/pilot-decision-v1.schema.json",
     "docs/pilot-kit-v1.schema.json",
     "docs/pilot-record-v1.schema.json",
     "examples/pilot-record-v1.json",
+    "examples/review-execution-result-v2.json",
+    "examples/review-report-v1.json",
+    "examples/review-request-v2.json",
+    "examples/review-response-v1.json",
+    "examples/review-result-policy-v2.json",
+    "examples/sample.py",
     "scripts/pilot_bundle.py",
     "scripts/pilot_check.py",
 )
@@ -496,7 +503,26 @@ samsarix-codegen self-check
 
 Use a fresh virtual environment if another Samsarix Codegen version is already installed.
 
-## 3. Run the protocol
+## 3. Exercise the offline review export
+
+The bundled response is explicitly synthetic and makes no provider claim. These commands validate
+the nested report contract and render one source-located SARIF file without network access:
+
+```console
+samsarix-codegen export-review \\
+  examples/review-request-v2.json \\
+  examples/review-execution-result-v2.json \\
+  --format json > review-report.json
+samsarix-codegen export-review \\
+  examples/review-request-v2.json \\
+  examples/review-execution-result-v2.json \\
+  --format sarif > review.sarif
+```
+
+`review-report.json` must equal `examples/review-report-v1.json`. Review reports and SARIF contain
+model-generated text and paths; do not upload them until their content and destination are approved.
+
+## 4. Run the protocol
 
 Follow `docs/PILOT.md`. Edit `pilot-record.json` without adding prompts, responses, source code,
 paths, logs, credentials, names, email addresses, or other free-form content. The wheel digest and

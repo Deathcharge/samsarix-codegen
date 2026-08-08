@@ -28,6 +28,13 @@ they do not prove who created or approved an artifact. Use external access contr
 authenticity across a trust boundary is required. See the README and
 `docs/REQUEST_ARTIFACT.md` for implemented limits and residual risks.
 
+Structured review reports and SARIF intentionally retain model-generated summaries, findings,
+source paths, and line ranges. Treat that output as untrusted and potentially sensitive, verify
+every finding against the cited revision, and review the destination before uploading it. Samsarix
+Codegen does not upload review output or treat schema conformance as proof of correctness,
+severity, exploitability, or provider authenticity. See `docs/REVIEW_REPORT.md` for the exact
+contract and residual risks.
+
 The bundled JSON Schemas validate envelope shape but do not authenticate content or recompute
 fingerprints, estimates, byte totals, or comparison deltas. Use `inspect`/`compare` or the Python
 parser for semantic validation; do not treat generic schema validation alone as execution approval.
