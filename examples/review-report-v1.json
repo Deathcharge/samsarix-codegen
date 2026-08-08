@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "request_fingerprint": "sha256:4e7861b2079489947be077234fb5dc1ad9e3dd08bba73379bae6217ac4714cea",
+    "plan_fingerprint": null,
+    "response_sha256": "sha256:2fd763d4590eed06883d0142fe29eb04e343093e450e441937e2bcf4710526ab"
+  },
+  "review": {
+    "schema_version": 1,
+    "summary": "The selected source shows one important behavior whose test evidence was not included.",
+    "findings": [
+      {
+        "category": "testing",
+        "severity": "note",
+        "title": "Whitespace-only rejection needs visible regression coverage",
+        "message": "The validation branch rejects an empty cleaned name, but the selected context contains no test demonstrating that spaces and tabs raise ValueError.",
+        "path": "examples/sample.py",
+        "start_line": 10,
+        "end_line": 12
+      }
+    ]
+  }
+}

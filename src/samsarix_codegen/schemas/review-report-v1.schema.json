@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.samsarix.com/codegen/review-report-v1.schema.json",
+  "title": "Samsarix Codegen provenance-linked review report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "provenance", "review"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "provenance": {"$ref": "#/$defs/provenance"},
+    "review": {"$ref": "#/$defs/review_response"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_fingerprint", "plan_fingerprint", "response_sha256"],
+      "properties": {
+        "request_fingerprint": {"$ref": "#/$defs/sha256"},
+        "plan_fingerprint": {
+          "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]
+        },
+        "response_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "review_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "summary", "findings"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 4000, "pattern": "\\S"},
+        "findings": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/finding"}
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "severity",
+        "title",
+        "message",
+        "path",
+        "start_line",
+        "end_line"
+      ],
+      "properties": {
+        "category": {
+          "enum": ["correctness", "security", "reliability", "maintainability", "testing"]
+        },
+        "severity": {"enum": ["error", "warning", "note"]},
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f\\u0085\\u2028\\u2029]+$"
+        },
+        "message": {"type": "string", "minLength": 1, "maxLength": 4000, "pattern": "\\S"},
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^(?!/)(?!.*//)(?!.*\\/$)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.(?:/|$))[^\\u0000-\\u001f\\u007f\\u0085\\u2028\\u2029]+$"
+        },
+        "start_line": {"type": "integer", "minimum": 1, "maximum": 10000000},
+        "end_line": {"type": "integer", "minimum": 1, "maximum": 10000000}
+      }
+    }
+  }
+}

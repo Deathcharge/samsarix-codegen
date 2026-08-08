@@ -52,6 +52,13 @@ jobs:
           grep -q '"name": "src/samsarix_codegen/context.py"' manifest-request.json
           samsarix-codegen schema context-manifest > context-manifest.schema.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('context-manifest.schema.json', encoding='utf-8')); payload=json.load(open('examples/review-context-v1.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
+          samsarix-codegen build \
+            "Review greet for correctness and failure behavior. Return only source-located findings." \
+            --task review-report \
+            --file examples/sample.py \
+            --max-estimated-input-tokens 5000 \
+            --format json > generated-review-request.json
+          python -c "import json; actual=json.load(open('generated-review-request.json', encoding='utf-8')); expected=json.load(open('examples/review-request-v2.json', encoding='utf-8')); assert actual == expected"
           printf 'diff --git a/app.py b/app.py\n+enabled = True\n' |
             samsarix-codegen build "Review this change" --task review --stdin-name staged.diff --format json > request.json
           fingerprint="$(samsarix-codegen inspect request.json --format fingerprint)"
@@ -99,6 +106,22 @@ jobs:
             --policy examples/structured-result-policy-v2.json \
             --format json > checked-in-execution-evidence.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('execution-evidence.schema.json', encoding='utf-8')); actual=json.load(open('checked-in-execution-evidence.json', encoding='utf-8')); expected=json.load(open('examples/execution-evidence-v3.json', encoding='utf-8')); Draft202012Validator(schema).validate(actual); assert actual == expected; assert actual['result']['response_structure'] == {'format': 'json-object', 'top_level_keys': 3}"
+          samsarix-codegen schema review-response > review-response.schema.json
+          samsarix-codegen schema review-report > review-report.schema.json
+          samsarix-codegen verify-result \
+            examples/review-request-v2.json \
+            examples/review-execution-result-v2.json \
+            --policy examples/review-result-policy-v2.json \
+            --format json > review-result-verification.json
+          samsarix-codegen export-review \
+            examples/review-request-v2.json \
+            examples/review-execution-result-v2.json \
+            --format json > generated-review-report.json
+          samsarix-codegen export-review \
+            examples/review-request-v2.json \
+            examples/review-execution-result-v2.json \
+            --format sarif > generated-review.sarif
+          python -c "import json; from jsonschema import Draft202012Validator; response_schema=json.load(open('review-response.schema.json', encoding='utf-8')); report_schema=json.load(open('review-report.schema.json', encoding='utf-8')); response=json.load(open('examples/review-response-v1.json', encoding='utf-8')); actual=json.load(open('generated-review-report.json', encoding='utf-8')); expected=json.load(open('examples/review-report-v1.json', encoding='utf-8')); sarif=json.load(open('generated-review.sarif', encoding='utf-8')); Draft202012Validator.check_schema(response_schema); Draft202012Validator(response_schema).validate(response); Draft202012Validator.check_schema(report_schema); Draft202012Validator(report_schema).validate(actual); assert actual == expected; assert sarif['version'] == '2.1.0'; assert sarif['runs'][0]['properties']['samsarix.aiGenerated'] is True; assert all(item['locations'] for item in sarif['runs'][0]['results'])"
           samsarix-codegen schema provider-check > provider-check.schema.json
           python -c "from pathlib import Path; from samsarix_codegen import ProviderCheckReport, render_provider_check; Path('provider-check.json').write_text(render_provider_check(ProviderCheckReport(model='fixture-model', max_output_tokens=64, response_chars=11), output_format='json'), encoding='utf-8')"
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('provider-check.schema.json', encoding='utf-8')); payload=json.load(open('provider-check.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"

@@ -10,7 +10,7 @@ executes generated code, scans a repository automatically, or retries a paid req
 
 > **Status:** `0.2.0` release candidate. The offline review workflow, policy-bound execution-plan
 > handoff, request-plan-result evidence chain with bounded JSON-object gates,
-> one-request execution path, and
+> source-located structured review/SARIF export, one-request execution path, and
 > content-free provider conformance check are implemented and tested. The package has not been published to
 > PyPI or run through the documented
 > three-developer pilot.
@@ -34,6 +34,8 @@ The core workflow separates request construction from credential-bearing executi
    normal output is emitted.
 8. Verify the request, plan, stored result, and optional exact policy together offline without
    reproducing prompt or response contents.
+9. For the `review-report` task, validate every nested finding against the explicitly selected
+   context paths and export a provenance-linked JSON report or SARIF 2.1.0 for an explicit CI upload.
 
 This makes staged-change review, CI approval handoffs, selected-log triage, and reproducible
 provider comparisons practical without a private Samsarix service or another repository.
@@ -215,6 +217,31 @@ and one added record so both content hashes remain visible.
 
 ## Other real workflows
 
+Turn a checked-in synthetic review result into a strict report and source-located SARIF entirely
+offline:
+
+```bash
+samsarix-codegen verify-result \
+  examples/review-request-v2.json \
+  examples/review-execution-result-v2.json \
+  --policy examples/review-result-policy-v2.json \
+  --format json > review-verification.json
+samsarix-codegen export-review \
+  examples/review-request-v2.json \
+  examples/review-execution-result-v2.json \
+  --format json > review-report.json
+samsarix-codegen export-review \
+  examples/review-request-v2.json \
+  examples/review-execution-result-v2.json \
+  --format sarif > review.sarif
+```
+
+`export-review` rejects duplicate fields, malformed or over-limit nested data, unsafe paths, paths
+not present in the validated request, invalid line ranges, linkage drift, and optional request/plan
+approval mismatches. SARIF contains the model-generated summary and findings, so it is not a
+content-omitting log artifact. The [review-report contract and CI handoff](docs/REVIEW_REPORT.md)
+cover the full real-provider workflow, GitHub upload boundary, and trust limits.
+
 Inspect a selected log excerpt without scanning or retaining the surrounding system:
 
 ```powershell
@@ -280,6 +307,7 @@ resource comparison, not a quality score or proof that a provider authored an en
 | `verify-execution` | Never | Validate a request/plan/result chain and exact metadata/shape policy without contents |
 | `inspect-result` | Never | Validate, metadata/shape-policy-check, and summarize one result without its contents |
 | `verify-result` | Never | Link and metadata/shape-policy-check one result against a request without contents |
+| `export-review` | Never | Validate a source-located review and export linked JSON or SARIF 2.1.0 |
 | `compare` | Never | Compare two validated artifacts without reproducing prompt contents |
 | `compare-results` | Never | Compare same-request results without response contents |
 | `schema` | Never | Print any bundled versioned contract JSON Schema |
@@ -311,6 +339,8 @@ samsarix-codegen schema result-policy > execution-result-policy-v2.schema.json
 samsarix-codegen schema execution-plan > execution-plan-v2.schema.json
 samsarix-codegen schema execution-plan-verification > execution-plan-verification-v2.schema.json
 samsarix-codegen schema execution-evidence > execution-evidence-verification-v3.schema.json
+samsarix-codegen schema review-response > review-response-v1.schema.json
+samsarix-codegen schema review-report > review-report-v1.schema.json
 samsarix-codegen schema self-check > self-check-v1.schema.json
 ```
 
@@ -331,6 +361,7 @@ semantic integrity checks such as recomputing fingerprints, estimates, and byte 
 | `refactor` | Behavior-preserving refactor with rationale |
 | `tests` | Normal, boundary, and failure tests |
 | `review` | Correctness, security, reliability, maintainability, and test gaps |
+| `review-report` | Strict JSON with bounded, source-located findings for report/SARIF export |
 
 ## Provider configuration
 
@@ -526,6 +557,9 @@ instruction + explicit files / explicit manifests / named stdin
                                        |
                                        v
                offline chain + exact-policy verification
+                                       |
+                                       v
+          strict review JSON or source-located SARIF export
 ```
 
 The package has no runtime dependencies. The standard-library network client implements only the
@@ -552,6 +586,9 @@ non-streaming OpenAI-compatible `/chat/completions` subset used by this workflow
 - Content-omitting execution evidence includes endpoint/model metadata and response hashes. It
   verifies local linkage, not provider authorship; protect it according to the underlying data and
   deployment sensitivity.
+- Review reports and SARIF intentionally include model-generated summaries, findings, file paths,
+  and line ranges. They are untrusted content rather than privacy-minimal evidence; review their
+  accuracy, retention, and upload destination.
 - File contents are untrusted prompt data. Prompt injection cannot be eliminated; review every
   response.
 - Model output may be incorrect or unsafe. Samsarix Codegen never executes, applies, or persists it.

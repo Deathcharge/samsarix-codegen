@@ -24,10 +24,13 @@ execute --plan --policy -> one bounded provider request + output gate
 plan-bound result JSON -> offline verify-execution
             |
             +-> verify-result / inspect-result / compare-results
+            |
+            +-> export-review -> linked review JSON / SARIF 2.1.0
 ```
 
 `build`, `inspect`, `create-plan`, `verify-plan`, `verify-execution`, `inspect-result`,
-`verify-result`, `compare`, and `compare-results` never make a network request. `execute` does not
+`verify-result`, `export-review`, `compare`, and `compare-results` never make a network request.
+`execute` does not
 read source files; it sends the
 validated `messages` stored in the artifact. The [execution-plan contract](EXECUTION_PLAN.md)
 defines how endpoint, model, timeout, input ceiling, and output ceiling can join the same approval
@@ -258,7 +261,8 @@ Use `samsarix-codegen schema NAME` to print one without a network request, or
 JSON Schema checks portable structure, types, bounds, required fields, and digest syntax. It cannot
 prove semantic relationships such as whether a fingerprint matches canonical content, context
 bytes sum correctly, estimates match messages, or deltas match their base/target values. Use
-`inspect`, `inspect-result`, `verify-result`, `verify-execution`, `compare`, `compare-results`, or
+`inspect`, `inspect-result`, `verify-result`, `verify-execution`, `export-review`, `compare`,
+`compare-results`, or
 the corresponding Python parser for those semantic checks. Context manifests are input contracts rather than
 request/result envelopes; their [separate contract](CONTEXT_MANIFEST.md) defines the additional
 runtime path and containment rules. Result policies are explicitly selected input contracts; their

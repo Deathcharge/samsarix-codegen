@@ -58,7 +58,7 @@ def test_create_is_deterministic_and_both_verifiers_accept_it(tmp_path: Path) ->
         "source_commit": COMMIT,
         "wheel_path": f"package/{WHEEL_NAME}",
         "wheel_sha256": hashlib.sha256(b"deterministic test wheel\n").hexdigest(),
-        "files": 14,
+        "files": 21,
     }
 
     extracted = tmp_path / "extracted"
@@ -73,6 +73,11 @@ def test_manifest_matches_schema_and_record_is_valid_but_not_ready(tmp_path: Pat
     with zipfile.ZipFile(archive_path) as archive:
         archive.extractall(extracted)
     root = extracted / ROOT_NAME
+
+    start = (root / "PILOT-START.md").read_text(encoding="utf-8")
+    assert "Exercise the offline review export" in start
+    assert (root / "docs/REVIEW_REPORT.md").is_file()
+    assert (root / "examples/review-report-v1.json").is_file()
 
     manifest = json.loads((root / "pilot-kit-v1.json").read_text(encoding="utf-8"))
     schema = json.loads((ROOT / "docs/pilot-kit-v1.schema.json").read_text(encoding="utf-8"))

@@ -25,6 +25,34 @@ samsarix-codegen verify-result request.json result.json \
 top-level keys plus their expected JSON value types. It remains an offline structural gate rather
 than a correctness or semantic-quality score.
 
+`review-request-v2.json`, `review-execution-result-v2.json`, `review-response-v1.json`,
+`review-result-policy-v2.json`, and `review-report-v1.json` form a second zero-network journey for
+source-located AI review output. The request uses `--task review-report` and explicitly selects
+`sample.py`; the result is labeled synthetic and reports no plan, provider model, or usage. The
+policy gates its top-level shape, while `export-review` validates every nested finding and requires
+its path to be present in the request before rendering report JSON or SARIF 2.1.0:
+
+```bash
+samsarix-codegen verify-result \
+  examples/review-request-v2.json \
+  examples/review-execution-result-v2.json \
+  --policy examples/review-result-policy-v2.json \
+  --format json > review-verification.json
+samsarix-codegen export-review \
+  examples/review-request-v2.json \
+  examples/review-execution-result-v2.json \
+  --format json > generated-review-report.json
+samsarix-codegen export-review \
+  examples/review-request-v2.json \
+  examples/review-execution-result-v2.json \
+  --format sarif > generated-review.sarif
+python -c "import json; assert json.load(open('generated-review-report.json')) == json.load(open('examples/review-report-v1.json'))"
+```
+
+The SARIF output contains model-generated text and paths and must be reviewed before an explicit
+upload. See [`docs/REVIEW_REPORT.md`](../docs/REVIEW_REPORT.md) for the real execution-plan flow and
+trust boundary.
+
 `execution-request-v2.json`, `execution-plan-v2.json`, `structured-execution-result-v2.json`,
 `structured-result-policy-v2.json`, and `execution-evidence-v3.json` form one fully linked,
 policy-bound offline example. The request deterministically captures `sample.py`; the plan uses a

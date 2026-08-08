@@ -81,6 +81,11 @@ from samsarix_codegen.result_policy import (
     load_execution_result_policy,
     require_execution_result_policy_fingerprint,
 )
+from samsarix_codegen.review_report import (
+    render_review_report,
+    render_review_sarif,
+    verify_review_result,
+)
 from samsarix_codegen.schema import ContractSchema, render_contract_schema
 from samsarix_codegen.self_check import render_self_check, run_self_check
 
@@ -213,6 +218,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="content-omitting verification output format (default: text)",
     )
     _add_result_policy_arguments(verify_result_command)
+
+    export_review_command = subparsers.add_parser(
+        "export-review",
+        help="validate one structured review result and export linked JSON or SARIF",
+    )
+    export_review_command.add_argument(
+        "artifact", metavar="REQUEST", help="request-artifact path, or - for stdin"
+    )
+    export_review_command.add_argument(
+        "result", metavar="RESULT", help="execution-result path, or - for stdin"
+    )
+    export_review_command.add_argument(
+        "--expect-fingerprint",
+        help="fail unless the request matches this previously approved sha256 fingerprint",
+    )
+    export_review_command.add_argument(
+        "--expect-plan-fingerprint",
+        help="fail unless the result records this reviewed execution-plan fingerprint",
+    )
+    export_review_command.add_argument(
+        "--format",
+        choices=("json", "sarif"),
+        default="json",
+        help="provenance-linked review report or SARIF 2.1.0 (default: json)",
+    )
 
     verify_plan_command = subparsers.add_parser(
         "verify-plan",
@@ -407,6 +437,24 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
             _write_stdout(
                 render_execution_result_verification(verification, output_format=args.format)
             )
+            return 0
+        if args.command == "export-review":
+            if args.artifact == "-" and args.result == "-":
+                raise ArtifactError("REQUEST and RESULT cannot both read from stdin")
+            artifact = _read_artifact(args.artifact, input_stream)
+            result = _read_execution_result(args.result, input_stream)
+            report = verify_review_result(
+                artifact,
+                result,
+                expected_request_fingerprint=args.expect_fingerprint,
+                expected_plan_fingerprint=args.expect_plan_fingerprint,
+            )
+            output = (
+                render_review_sarif(report, tool_version=__version__)
+                if args.format == "sarif"
+                else render_review_report(report)
+            )
+            _write_stdout(output)
             return 0
         if args.command == "verify-plan":
             plan = _load_execution_plan(args.plan)
