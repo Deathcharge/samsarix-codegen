@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -214,6 +215,10 @@ def test_verify_review_result_rejects_unselected_path_and_wrong_approvals() -> N
     finding["start_line"] = finding["end_line"] = 3
     with pytest.raises(ArtifactError, match="exceeds the selected source line count"):
         verify_review_result(artifact, _result(artifact, out_of_range))
+
+    duplicate_context = replace(artifact, context=(artifact.context[0], artifact.context[0]))
+    with pytest.raises(ArtifactError, match="duplicate names"):
+        verify_review_result(duplicate_context, selected_result)
 
     with pytest.raises(ArtifactError, match="request fingerprint does not match"):
         verify_review_result(

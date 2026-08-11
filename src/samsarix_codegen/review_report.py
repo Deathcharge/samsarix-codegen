@@ -273,6 +273,8 @@ def verify_review_result(
 
     review = parse_review_response(result.response_text)
     selected_context = {record.name: record for record in artifact.context}
+    if len(selected_context) != len(artifact.context):
+        raise ArtifactError("review request context contains duplicate names")
     for finding in review.findings:
         context = selected_context.get(finding.path)
         if context is None:

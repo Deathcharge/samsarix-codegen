@@ -90,6 +90,9 @@ def test_artifact_creation_rejects_invalid_context_metadata() -> None:
         create_request_artifact(messages, (ContextFile("bad\nname", "text", 4),))
     with pytest.raises(ArtifactError, match="non-negative"):
         create_request_artifact(messages, (ContextFile("good.txt", "text", -1),))
+    duplicate = ContextFile("same.txt", "text", 4)
+    with pytest.raises(ArtifactError, match="duplicate names"):
+        create_request_artifact(messages, (duplicate, duplicate))
 
 
 def test_artifact_can_fingerprint_source_line_counts_for_located_output() -> None:
@@ -149,6 +152,7 @@ def test_artifact_fingerprint_detects_content_drift() -> None:
         lambda payload: payload["context"].update(total_bytes=999),
         lambda payload: payload["context"]["items"][0].update(line_count=-1),
         lambda payload: payload["context"]["items"][0].update(line_count=True),
+        lambda payload: payload["context"]["items"][0].update(line_count=None),
         lambda payload: payload["context"]["items"][0].update(line_count=16),
         lambda payload: payload.update(extra=True),
     ],
@@ -158,6 +162,14 @@ def test_artifact_rejects_invalid_schema_even_if_json(mutation) -> None:
     mutation(payload)
 
     with pytest.raises(ArtifactError):
+        parse_request_artifact(json.dumps(payload))
+
+
+def test_artifact_parser_rejects_duplicate_context_names() -> None:
+    payload = json.loads(render_request_artifact(make_artifact()))
+    payload["context"]["items"].append(payload["context"]["items"][0])
+
+    with pytest.raises(ArtifactError, match="duplicate names"):
         parse_request_artifact(json.dumps(payload))
 
 

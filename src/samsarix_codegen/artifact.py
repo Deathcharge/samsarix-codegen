@@ -503,9 +503,13 @@ def create_request_artifact(
         raise ArtifactError(
             f"request artifacts may contain at most {MAX_ARTIFACT_CONTEXT_ITEMS} context items"
         )
+    context_names: set[str] = set()
     for item in context_files:
         if not _is_safe_name(item.path):
             raise ArtifactError("request artifact context item has an invalid name")
+        if item.path in context_names:
+            raise ArtifactError("request artifact context contains duplicate names")
+        context_names.add(item.path)
         if item.size_bytes < 0:
             raise ArtifactError("request artifact context item bytes must be non-negative")
     context = tuple(
@@ -1481,6 +1485,7 @@ def _parse_context(value: object) -> tuple[tuple[ContextRecord, ...], int]:
         )
 
     records: list[ContextRecord] = []
+    context_names: set[str] = set()
     for item in items:
         if not isinstance(item, dict) or set(item) not in (
             {"name", "bytes", "content_sha256"},
@@ -1490,14 +1495,18 @@ def _parse_context(value: object) -> tuple[tuple[ContextRecord, ...], int]:
         name = item.get("name")
         size_bytes = item.get("bytes")
         digest = item.get("content_sha256")
+        has_line_count = "line_count" in item
         line_count = item.get("line_count")
         if not isinstance(name, str) or not _is_safe_name(name):
             raise ArtifactError("request artifact context item has an invalid name")
+        if name in context_names:
+            raise ArtifactError("request artifact context contains duplicate names")
+        context_names.add(name)
         if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
             raise ArtifactError("request artifact context item bytes must be non-negative")
         if not isinstance(digest, str) or not _is_sha256(digest):
             raise ArtifactError("request artifact context item has an invalid content_sha256")
-        if line_count is not None and (
+        if has_line_count and (
             not isinstance(line_count, int)
             or isinstance(line_count, bool)
             or not 0 <= line_count <= size_bytes

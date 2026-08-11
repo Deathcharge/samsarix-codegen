@@ -68,9 +68,9 @@ same confidentiality controls as the JSON artifact.
 }
 ```
 
-Unknown schema versions, missing or extra fields, invalid roles, inconsistent byte totals, stale
-estimates, malformed digests, oversized artifacts, and fingerprint mismatches fail closed with exit
-code `5`.
+Unknown schema versions, missing or extra fields, invalid roles, duplicate context names,
+inconsistent byte totals, stale estimates, malformed digests, oversized artifacts, and fingerprint
+mismatches fail closed with exit code `5`.
 
 The CLI includes `line_count` in every `review-report` request context item. Library callers opt in
 with `create_request_artifact(..., include_line_counts=True)`. The field is optional in schema
