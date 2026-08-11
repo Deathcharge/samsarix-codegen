@@ -95,6 +95,10 @@ The final gate below assumes a reviewed `result-policy.json`; start from the str
 [structured example](examples/structured-result-policy-v2.json) and the
 [policy contract](docs/RESULT_POLICY.md).
 
+This general execution example intentionally uses the free-form `review` task and does not produce
+an `export-review` input. Use the dedicated `review-report` workflow below when the response must
+conform to the nested review contract and become JSON/SARIF.
+
 PowerShell:
 
 ```powershell

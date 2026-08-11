@@ -265,7 +265,9 @@ def run_self_check() -> SelfCheckReport:
             files=(context,),
         )
         review_artifact = create_request_artifact(
-            build_messages(review_request), review_request.files
+            build_messages(review_request),
+            review_request.files,
+            include_line_counts=True,
         )
         review_response = json.dumps(
             {

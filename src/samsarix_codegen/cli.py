@@ -572,7 +572,11 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
 def _handle_request_command(args: argparse.Namespace, stdin: BinaryIO) -> int:
     request = _request_from_args(args, stdin)
     messages = build_messages(request)
-    artifact = create_request_artifact(messages, request.files)
+    artifact = create_request_artifact(
+        messages,
+        request.files,
+        include_line_counts=request.task is Task.REVIEW_REPORT,
+    )
     _enforce_estimated_input_budget(artifact, args.max_estimated_input_tokens)
 
     if args.command == "build":

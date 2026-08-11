@@ -70,10 +70,17 @@ from samsarix_codegen.schema import ContractSchema, load_contract_schema, render
 from samsarix_codegen.self_check import run_self_check
 
 
-def make_artifact(instruction: str, content: str = "print('hello')\n"):
+def make_artifact(
+    instruction: str,
+    content: str = "print('hello')\n",
+    *,
+    include_line_counts: bool = False,
+):
     context = ContextFile("src/app.py", content, len(content.encode()))
     request = PromptRequest(Task.REVIEW, instruction, files=(context,))
-    return create_request_artifact(build_messages(request), request.files)
+    return create_request_artifact(
+        build_messages(request), request.files, include_line_counts=include_line_counts
+    )
 
 
 @pytest.mark.parametrize("kind", list(ContractSchema))
@@ -86,7 +93,7 @@ def test_bundled_contract_schemas_are_valid_draft_2020_12(kind: ContractSchema) 
 
 
 def test_real_outputs_conform_to_bundled_contract_schemas() -> None:
-    base = make_artifact("Review the original")
+    base = make_artifact("Review the original", include_line_counts=True)
     target = make_artifact("Review the revision", "print('revised')\n")
     result = ChatResult("Review complete", 100, 20, 120)
 
@@ -313,8 +320,10 @@ def test_embedded_review_response_matches_standalone_schema() -> None:
         ("summary", "   "),
         ("title", "\t"),
         ("message", "\n"),
+        ("path", " src/app.py"),
         ("path", "src//app.py"),
         ("path", "src/app.py/"),
+        ("path", "src/app.py "),
     ],
 )
 def test_review_response_schema_rejects_noncanonical_text_and_paths(field: str, value: str) -> None:

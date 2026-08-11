@@ -174,9 +174,11 @@ Research references:
 24. **Source-located review export.** A dedicated `review-report` task requests one bounded recursive
     JSON contract. `export-review` verifies request/result linkage, optional approval fingerprints,
     duplicate-free nested fields, category/severity/text/line limits, and exact membership of every
-    finding path in the selected request context. It emits a provenance-linked report or SARIF 2.1.0
-    with AI-generated, low-precision rules and no invented security score. Upload remains an
-    explicit CI-owner action; structural success is not correctness or static-analysis authority.
+    finding path and range in the selected request context. Review-report requests bind source line
+    counts into the request fingerprint so an annotation beyond the reviewed source fails closed.
+    It emits a provenance-linked report or SARIF 2.1.0 with AI-generated, low-precision rules and no
+    invented security score. Upload remains an explicit CI-owner action; structural success is not
+    correctness or static-analysis authority.
 
 ## Assumptions
 
@@ -856,14 +858,16 @@ the source distribution would change the digest.
 
 Python 3.14.6 source checks passed formatting, lint, strict typing across 17 source files, workflow
 YAML parsing, all 24 bundled-schema meta-validations, documentation PowerShell parsing, the
-unreleased source gate, and all 436 tests. Review-response and review-report schema version 1 now
+unreleased source gate, and all 446 tests. Review-response and review-report schema version 1 now
 constrain bounded non-empty text and canonical relative source paths, while the authoritative
 parser additionally rejects duplicate fields, non-finite numbers, resource overflow, invalid line
-ranges, duplicate findings, and any path absent from the exact request context. The checked-in
-synthetic request/result/report chain remains explicitly non-provider evidence.
+ranges, duplicate findings, any path absent from the exact request context, and any range beyond
+the fingerprint-bound source line count. Version-2 artifacts without line counts remain readable
+for existing workflows but fail closed for located review export. The checked-in synthetic
+request/result/report chain remains explicitly non-provider evidence.
 
 The source-built sdist and wheel passed Twine and the fail-closed distribution audit. The clean
-extracted sdist passed the same formatting, lint, strict typing, source-release, and 436-test gates.
+extracted sdist passed the same formatting, lint, strict typing, source-release, and 446-test gates.
 A fresh environment installed only the audited wheel with no index or dependencies, reported no
 broken requirements and zero unconditional runtime dependencies, and resolved Samsarix outside
 the checkout. Its self-check passed all 15 public contract selectors. The installed CLI reproduced

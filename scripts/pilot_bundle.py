@@ -44,6 +44,7 @@ _SOURCE_ASSETS = (
     "docs/pilot-kit-v1.schema.json",
     "docs/pilot-record-v1.schema.json",
     "examples/pilot-record-v1.json",
+    "examples/review-context-v1.json",
     "examples/review-execution-result-v2.json",
     "examples/review-report-v1.json",
     "examples/review-request-v2.json",

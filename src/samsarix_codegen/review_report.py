@@ -174,14 +174,20 @@ class ReviewReport:
             raise ArtifactError(
                 f"unsupported review report schema: {self.schema_version!r}; expected 1"
             )
-        if _SHA256_PATTERN.fullmatch(self.request_fingerprint) is None:
-            raise ArtifactError("review report request fingerprint is invalid")
         if (
-            self.plan_fingerprint is not None
-            and _SHA256_PATTERN.fullmatch(self.plan_fingerprint) is None
+            not isinstance(self.request_fingerprint, str)
+            or _SHA256_PATTERN.fullmatch(self.request_fingerprint) is None
+        ):
+            raise ArtifactError("review report request fingerprint is invalid")
+        if self.plan_fingerprint is not None and (
+            not isinstance(self.plan_fingerprint, str)
+            or _SHA256_PATTERN.fullmatch(self.plan_fingerprint) is None
         ):
             raise ArtifactError("review report plan fingerprint is invalid")
-        if _SHA256_PATTERN.fullmatch(self.response_sha256) is None:
+        if (
+            not isinstance(self.response_sha256, str)
+            or _SHA256_PATTERN.fullmatch(self.response_sha256) is None
+        ):
             raise ArtifactError("review report response fingerprint is invalid")
         if not isinstance(self.review, ReviewResponse):
             raise ArtifactError("review report requires a validated review response")
@@ -215,6 +221,8 @@ def parse_review_response(raw: str | bytes) -> ReviewResponse:
     except (json.JSONDecodeError, ValueError) as exc:
         message = exc.msg if isinstance(exc, json.JSONDecodeError) else str(exc)
         raise ArtifactError(f"review response is not valid JSON: {message}") from exc
+    except RecursionError as exc:
+        raise ArtifactError("review response is nested too deeply") from exc
     if not isinstance(decoded, dict):
         raise ArtifactError("review response must be a JSON object")
     if set(decoded) != _RESPONSE_FIELDS:
@@ -264,11 +272,22 @@ def verify_review_result(
             raise ArtifactError("review plan fingerprint does not match the expected fingerprint")
 
     review = parse_review_response(result.response_text)
-    selected_paths = {record.name for record in artifact.context}
+    selected_context = {record.name: record for record in artifact.context}
     for finding in review.findings:
-        if finding.path not in selected_paths:
+        context = selected_context.get(finding.path)
+        if context is None:
             raise ArtifactError(
                 f"review finding path was not explicitly selected in the request: {finding.path}"
+            )
+        if context.line_count is None:
+            raise ArtifactError(
+                "review request context does not record source line counts; rebuild it with "
+                "the current Samsarix Codegen version"
+            )
+        if finding.end_line > context.line_count:
+            raise ArtifactError(
+                f"review finding range exceeds the selected source line count: {finding.path} "
+                f"has {context.line_count:,} line(s)"
             )
     return ReviewReport(
         request_fingerprint=artifact.fingerprint,

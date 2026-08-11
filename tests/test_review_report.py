@@ -38,7 +38,7 @@ def _artifact(path: str = "src/app.py"):
         "Find concrete issues and cite their exact source ranges.",
         files=(context,),
     )
-    return create_request_artifact(build_messages(request), request.files)
+    return create_request_artifact(build_messages(request), request.files, include_line_counts=True)
 
 
 def _response_payload(path: str = "src/app.py") -> dict[str, object]:
@@ -192,6 +192,15 @@ def test_parser_rejects_duplicate_findings_and_resource_overflow() -> None:
         parse_review_response(b" " * (MAX_REVIEW_RESPONSE_BYTES + 1))
 
 
+def test_parser_rejects_excessive_json_nesting_without_a_traceback(monkeypatch) -> None:
+    def fail_on_nesting(*args, **kwargs):
+        raise RecursionError
+
+    monkeypatch.setattr(json, "loads", fail_on_nesting)
+    with pytest.raises(ArtifactError, match="nested too deeply"):
+        parse_review_response("{}")
+
+
 def test_verify_review_result_rejects_unselected_path_and_wrong_approvals() -> None:
     artifact = _artifact()
     result = _result(artifact, _response_payload("src/unselected.py"))
@@ -199,6 +208,13 @@ def test_verify_review_result_rejects_unselected_path_and_wrong_approvals() -> N
         verify_review_result(artifact, result)
 
     selected_result = _result(artifact, _response_payload())
+    out_of_range = _response_payload()
+    finding = out_of_range["findings"][0]
+    assert isinstance(finding, dict)
+    finding["start_line"] = finding["end_line"] = 3
+    with pytest.raises(ArtifactError, match="exceeds the selected source line count"):
+        verify_review_result(artifact, _result(artifact, out_of_range))
+
     with pytest.raises(ArtifactError, match="request fingerprint does not match"):
         verify_review_result(
             artifact,
@@ -230,6 +246,31 @@ def test_public_value_objects_reject_invalid_construction_and_sarif_version() ->
         ReviewResponse("One issue.", [finding])  # type: ignore[arg-type]
     with pytest.raises(ArtifactError, match="X.Y.Z"):
         render_review_sarif(report, tool_version="dev")
+
+
+@pytest.mark.parametrize(
+    ("request_fingerprint", "plan_fingerprint", "response_sha256", "match"),
+    [
+        (1, None, "sha256:" + "1" * 64, "request fingerprint"),
+        ("sha256:" + "0" * 64, 1, "sha256:" + "1" * 64, "plan fingerprint"),
+        ("sha256:" + "0" * 64, None, 1, "response fingerprint"),
+    ],
+)
+def test_review_report_rejects_non_string_fingerprints(
+    request_fingerprint: object,
+    plan_fingerprint: object,
+    response_sha256: object,
+    match: str,
+) -> None:
+    response = ReviewResponse("No issues.", ())
+
+    with pytest.raises(ArtifactError, match=match):
+        ReviewReport(
+            request_fingerprint,  # type: ignore[arg-type]
+            plan_fingerprint,  # type: ignore[arg-type]
+            response_sha256,  # type: ignore[arg-type]
+            response,
+        )
 
 
 def test_export_review_cli_emits_json_and_sarif(tmp_path, capsys) -> None:

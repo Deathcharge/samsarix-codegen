@@ -119,14 +119,20 @@ Each finding has exactly:
 - `start_line` and `end_line`: integers from 1 through 10,000,000, with the end not before the
   start.
 
+The standalone schemas enforce each field independently. Cross-field ordering
+(`end_line >= start_line`) is an authoritative-parser rule because Draft 2020-12 cannot compare two
+instance values without a non-portable extension.
+
 The parser also rejects duplicate JSON fields at any depth, non-finite numbers, binary or invalid
 UTF-8 input, unsupported fields, duplicate findings, control characters, absolute paths,
 backslashes, URI/drive prefixes, dot segments, and parent traversal. The full response is bounded
 to 1 MiB.
 
 `export-review` then requires every finding path to equal a context name in the validated request
-artifact. It does not re-read the worktree or infer paths. It validates line-number bounds and
-ordering but cannot prove that a cited line still exists after source drift; retain and compare the
+artifact and every range to fit its fingerprint-bound source `line_count`. Current builders record
+that metadata; a legacy version-2 request without it remains usable by existing workflows but fails
+closed for review export. The command does not re-read the worktree or infer paths, so it cannot
+prove that the working copy has not drifted since request construction; retain and compare the
 request fingerprint and run the export against the reviewed source revision.
 
 ## Provenance-linked report
@@ -162,17 +168,17 @@ permissions:
   security-events: write
 
 steps:
-  - uses: actions/checkout@v6
+  - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
   - name: Upload reviewed SARIF
-    uses: github/codeql-action/upload-sarif@v4
+    uses: github/codeql-action/upload-sarif@24c7eb380a2dc368f2d129e4c65e51d172983a1e # v4
     with:
       sarif_file: review.sarif
       category: samsarix-ai-review
 ```
 
 GitHub documents code scanning for public repositories and for eligible organization-owned private
-or internal repositories with GitHub Code Security enabled. Check current availability and pin
-third-party actions to reviewed commit SHAs in a production workflow:
+or internal repositories with GitHub Code Security enabled. Check current availability and review
+and refresh pinned action commits deliberately:
 
 - <https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/integrate-with-existing-tools/upload-sarif-file>
 - <https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support-for-code-scanning>

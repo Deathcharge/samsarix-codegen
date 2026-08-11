@@ -56,7 +56,8 @@ same confidentiality controls as the JSON artifact.
       {
         "name": "stdin:staged.diff",
         "bytes": 123,
-        "content_sha256": "sha256:<64 lowercase hex characters>"
+        "content_sha256": "sha256:<64 lowercase hex characters>",
+        "line_count": 7
       }
     ]
   },
@@ -70,6 +71,12 @@ same confidentiality controls as the JSON artifact.
 Unknown schema versions, missing or extra fields, invalid roles, inconsistent byte totals, stale
 estimates, malformed digests, oversized artifacts, and fingerprint mismatches fail closed with exit
 code `5`.
+
+The CLI includes `line_count` in every `review-report` request context item. Library callers opt in
+with `create_request_artifact(..., include_line_counts=True)`. The field is optional in schema
+version 2 so previously stored artifacts and other task workflows retain their fingerprints;
+strict source-located review export requires it. When present, parsing requires a non-negative
+integer no greater than the context UTF-8 byte count.
 
 ## Determinism and fingerprints
 

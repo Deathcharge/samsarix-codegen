@@ -44,6 +44,7 @@ class ContextRecord:
     name: str
     size_bytes: int
     content_sha256: str
+    line_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -489,8 +490,13 @@ class ExecutionResultComparison:
 def create_request_artifact(
     messages: Sequence[Mapping[str, str]],
     context_files: Sequence[ContextFile],
+    *,
+    include_line_counts: bool = False,
 ) -> RequestArtifact:
-    """Create a deterministic artifact from already validated messages and context."""
+    """Create an artifact, optionally fingerprinting source line counts for located output."""
+
+    if not isinstance(include_line_counts, bool):
+        raise ArtifactError("request artifact line-count selection must be a boolean")
 
     normalized_messages = _normalize_messages(messages)
     if len(context_files) > MAX_ARTIFACT_CONTEXT_ITEMS:
@@ -507,6 +513,7 @@ def create_request_artifact(
             name=item.path,
             size_bytes=item.size_bytes,
             content_sha256=_sha256_text(item.content),
+            line_count=len(item.content.splitlines()) if include_line_counts else None,
         )
         for item in context_files
     )
@@ -1380,14 +1387,7 @@ def _unsigned_payload(
         "messages": [dict(message) for message in messages],
         "context": {
             "total_bytes": context_bytes,
-            "items": [
-                {
-                    "name": item.name,
-                    "bytes": item.size_bytes,
-                    "content_sha256": item.content_sha256,
-                }
-                for item in context
-            ],
+            "items": [_fingerprinted_context_record_payload(item) for item in context],
         },
         "estimate": {
             "input_tokens": estimated_input_tokens,
@@ -1402,6 +1402,13 @@ def _context_record_payload(item: ContextRecord) -> dict[str, Any]:
         "bytes": item.size_bytes,
         "content_sha256": item.content_sha256,
     }
+
+
+def _fingerprinted_context_record_payload(item: ContextRecord) -> dict[str, Any]:
+    payload = _context_record_payload(item)
+    if item.line_count is not None:
+        payload["line_count"] = item.line_count
+    return payload
 
 
 def _ordered_context_difference(
@@ -1475,18 +1482,35 @@ def _parse_context(value: object) -> tuple[tuple[ContextRecord, ...], int]:
 
     records: list[ContextRecord] = []
     for item in items:
-        if not isinstance(item, dict) or set(item) != {"name", "bytes", "content_sha256"}:
+        if not isinstance(item, dict) or set(item) not in (
+            {"name", "bytes", "content_sha256"},
+            {"name", "bytes", "content_sha256", "line_count"},
+        ):
             raise ArtifactError("request artifact context item has an invalid shape")
         name = item.get("name")
         size_bytes = item.get("bytes")
         digest = item.get("content_sha256")
+        line_count = item.get("line_count")
         if not isinstance(name, str) or not _is_safe_name(name):
             raise ArtifactError("request artifact context item has an invalid name")
         if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
             raise ArtifactError("request artifact context item bytes must be non-negative")
         if not isinstance(digest, str) or not _is_sha256(digest):
             raise ArtifactError("request artifact context item has an invalid content_sha256")
-        records.append(ContextRecord(name=name, size_bytes=size_bytes, content_sha256=digest))
+        if line_count is not None and (
+            not isinstance(line_count, int)
+            or isinstance(line_count, bool)
+            or not 0 <= line_count <= size_bytes
+        ):
+            raise ArtifactError("request artifact context item has an invalid line_count")
+        records.append(
+            ContextRecord(
+                name=name,
+                size_bytes=size_bytes,
+                content_sha256=digest,
+                line_count=line_count,
+            )
+        )
 
     if sum(item.size_bytes for item in records) != total_bytes:
         raise ArtifactError("request artifact context byte totals do not match")

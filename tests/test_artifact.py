@@ -65,6 +65,7 @@ def test_artifact_is_deterministic_and_round_trips() -> None:
     assert first.fingerprint.startswith("sha256:")
     assert first.context[0].name == "src/app.py"
     assert first.context[0].content_sha256.startswith("sha256:")
+    assert first.context[0].line_count is None
     assert json.loads(rendered)["schema_version"] == 2
 
 
@@ -89,6 +90,28 @@ def test_artifact_creation_rejects_invalid_context_metadata() -> None:
         create_request_artifact(messages, (ContextFile("bad\nname", "text", 4),))
     with pytest.raises(ArtifactError, match="non-negative"):
         create_request_artifact(messages, (ContextFile("good.txt", "text", -1),))
+
+
+def test_artifact_can_fingerprint_source_line_counts_for_located_output() -> None:
+    context = ContextFile("src/app.py", "first\nsecond\n", 13)
+    without_lines = create_request_artifact([{"role": "user", "content": "Review"}], (context,))
+    with_lines = create_request_artifact(
+        [{"role": "user", "content": "Review"}],
+        (context,),
+        include_line_counts=True,
+    )
+
+    assert without_lines.context[0].line_count is None
+    assert with_lines.context[0].line_count == 2
+    assert with_lines.fingerprint != without_lines.fingerprint
+    assert parse_request_artifact(render_request_artifact(with_lines)) == with_lines
+
+    with pytest.raises(ArtifactError, match="must be a boolean"):
+        create_request_artifact(
+            [{"role": "user", "content": "Review"}],
+            (context,),
+            include_line_counts=1,  # type: ignore[arg-type]
+        )
 
 
 def test_artifact_supports_printable_unicode_context_names() -> None:
@@ -124,6 +147,9 @@ def test_artifact_fingerprint_detects_content_drift() -> None:
         lambda payload: payload.update(schema_version=1),
         lambda payload: payload["estimate"].update(input_tokens=1),
         lambda payload: payload["context"].update(total_bytes=999),
+        lambda payload: payload["context"]["items"][0].update(line_count=-1),
+        lambda payload: payload["context"]["items"][0].update(line_count=True),
+        lambda payload: payload["context"]["items"][0].update(line_count=16),
         lambda payload: payload.update(extra=True),
     ],
 )
