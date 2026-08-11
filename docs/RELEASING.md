@@ -85,7 +85,9 @@ try {
 
 The pilot kit verifier proves internal consistency and wheel/commit linkage. The outer GitHub
 attestation establishes build provenance, but neither mechanism guarantees that the package is
-safe or that the pilot passed. GitHub Actions artifacts have a workflow-configured 30-day retention
+safe or that the pilot passed. The kit's structured-review request, explicitly synthetic result,
+expected report, and SARIF walkthrough verify offline package mechanics only; they are not provider
+or participant evidence. GitHub Actions artifacts have a workflow-configured 30-day retention
 period; preserve the exact ZIP digest in the coordinator's release evidence rather than treating
 the artifact URL as permanent. See GitHub's documentation for
 [workflow artifact retention and digest validation](https://docs.github.com/en/actions/tutorials/store-and-share-data)

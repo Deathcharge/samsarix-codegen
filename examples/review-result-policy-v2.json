@@ -1,0 +1,12 @@
+{
+  "schema_version": 2,
+  "max_response_bytes": 8192,
+  "response_format": "json-object",
+  "required_json_keys": ["schema_version", "summary", "findings"],
+  "allowed_json_keys": ["schema_version", "summary", "findings"],
+  "json_key_types": {
+    "schema_version": "integer",
+    "summary": "string",
+    "findings": "array"
+  }
+}

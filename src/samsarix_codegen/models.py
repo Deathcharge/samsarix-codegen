@@ -30,6 +30,7 @@ class Task(str, Enum):
     REFACTOR = "refactor"
     TESTS = "tests"
     REVIEW = "review"
+    REVIEW_REPORT = "review-report"
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,6 +1,6 @@
 # Competitive strategy
 
-Last reviewed: 2026-08-02
+Last reviewed: 2026-08-08
 
 ## Positioning
 
@@ -39,6 +39,8 @@ Its product promise is narrower and testable:
     must consume the response, without exposing response-derived fields or values in evidence.
 17. Apply that plan-bound policy inside the one-request `execute` boundary, after response
     normalization but before normal stdout, so CI cannot substitute or omit the gate.
+18. Convert a strictly validated, source-located review response into provenance-linked JSON or
+    SARIF 2.1.0, while refusing annotations for paths that were not explicitly selected.
 
 ## Evidence from adjacent products
 
@@ -172,6 +174,26 @@ These products validate demand for automation and broad context. They also leave
 for teams that want a smaller approval object without granting repository discovery, shell access,
 or edit authority.
 
+Static-analysis interchange provides a concrete downstream destination for the structured review
+slice:
+
+- [GitHub's third-party SARIF upload guidance](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/integrate-with-existing-tools/upload-sarif-file)
+  documents an explicit `upload-sarif` CI step and separate categories for multiple analyses.
+- [GitHub's supported SARIF subset](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support-for-code-scanning)
+  uses SARIF 2.1.0 rules, `error`/`warning`/`note` result levels, relative source locations, and
+  optional partial fingerprints; GitHub can calculate the latter when its upload action has the
+  checked-out source.
+- The [OASIS SARIF 2.1.0 standard](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+  defines the portable result/rule/location format rather than a GitHub-only response envelope.
+
+These sources support a CI export format, not a claim that an LLM is a static analyzer. Samsarix
+marks every rule as AI-generated with low precision, requires a developer to verify it, omits an
+invented security score, and leaves upload as an explicit owner action. The converter also rejects
+duplicate fields, unsafe or unselected paths, over-limit content, invalid line ranges, and
+request/result approval drift before emitting SARIF. This is an inference that a portable,
+review-first handoff is useful alongside existing code-scanning UI, not evidence of finding quality
+or user adoption.
+
 ## Initial real-world use cases
 
 ### Pre-commit review
@@ -262,6 +284,21 @@ tests. Developers and CI can invoke the same allowlist, add an explicit task-spe
 the effective content hashes and budget, and compare rebuilt artifacts without relying on local
 shell history or repository discovery.
 
+### Source-located CI review export
+
+Build a `review-report` request from explicit component files, bind the checked-in top-level result
+policy into an execution plan, execute once, and retain the result. `export-review` validates the
+full nested response, exact request/result linkage, optional request/plan approvals, bounded
+category/severity/text/line fields, and exact membership of every finding path in the selected
+context. It emits either a versioned provenance-linked report or SARIF 2.1.0 with one source
+location per finding.
+
+This turns review output into a standard CI artifact without uploading it, reading new repository
+paths, or making another provider request. It is deliberately not content-omitting: findings and
+paths appear in both formats, so a CI owner must review retention and the explicit upload boundary.
+Structural success does not establish correctness, severity, exploitability, provider authorship,
+or source-line freshness.
+
 ### Zero-account evaluation
 
 Run the checked-in request, plan, synthetic result, result policy, and evidence fixture through
@@ -284,14 +321,16 @@ every installed-wheel CI job.
 - No implicit execution-plan lookup, remote resolution, stdin loading, or provider/budget override
   precedence.
 - No file writes, patch application, shell execution, or tool loop.
-- No implicit network request from `build`, `inspect`, `inspect-result`, `verify-result`, or
-  `verify-execution`.
+- No implicit network request from `build`, `inspect`, `inspect-result`, `verify-result`,
+  `verify-execution`, or `export-review`.
 - No automatic retry or provider fallback.
 - No credential in CLI arguments, artifacts, summaries, or result JSON.
 - No claim that an unkeyed fingerprint authenticates the artifact.
 - No claim that result hashes, length, or provider-reported usage evaluate response quality.
 - No claim that bounded top-level JSON shape validation proves semantic correctness, safety, or
   conformance to a recursive application schema.
+- No claim that a schema-valid review report or SARIF file makes model output a trusted static
+  analysis result; every finding remains AI-generated, low-precision, and developer-reviewed.
 - No claim that a consistent request/plan/result/policy chain is a signed approval, provider receipt,
   or attestation.
 - No claim that a token ceiling proves a monetary budget unless the operator separately maps the

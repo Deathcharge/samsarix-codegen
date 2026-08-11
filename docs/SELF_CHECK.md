@@ -11,7 +11,7 @@ samsarix-codegen schema self-check > self-check-v1.schema.json
 
 ## What it checks
 
-The command performs five fail-closed checks using only package code and bundled resources:
+The command performs six fail-closed checks using only package code and bundled resources:
 
 1. Load every public contract and require its Draft 2020-12 declaration and object root. This is an
    intentional standard-library resource/header check, not full JSON meta-schema validation; the
@@ -25,6 +25,8 @@ The command performs five fail-closed checks using only package code and bundled
 5. Verify the complete request/plan/result chain, require the policy bound by the plan, enforce its
    exact model, response-byte, and bounded JSON-object shape rules, and
    check input/output limits through the public evidence version 3 implementation.
+6. Build a separate structured-review request and synthetic result, require its finding path to
+   match the selected context, and render its source location through the public SARIF 2.1.0 export.
 
 A passing report includes the package version, Python implementation/version, contract count, and
 content-omitting request, plan, and response fingerprints. It explicitly records

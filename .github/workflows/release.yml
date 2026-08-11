@@ -111,8 +111,21 @@ jobs:
             > "${RUNNER_TEMP}/execution-plan-verification.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema execution-evidence \
             > "${RUNNER_TEMP}/execution-evidence.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema review-response \
+            > "${RUNNER_TEMP}/review-response.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema review-report \
+            > "${RUNNER_TEMP}/review-report.schema.json"
           "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" schema self-check \
             > "${RUNNER_TEMP}/self-check.schema.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" export-review \
+            examples/review-request-v2.json \
+            examples/review-execution-result-v2.json \
+            --format json > "${RUNNER_TEMP}/review-report.json"
+          "${RUNNER_TEMP}/release-venv/bin/samsarix-codegen" export-review \
+            examples/review-request-v2.json \
+            examples/review-execution-result-v2.json \
+            --format sarif > "${RUNNER_TEMP}/review-report.sarif"
+          python -c "import json; from jsonschema import Draft202012Validator; response_schema=json.load(open('${RUNNER_TEMP}/review-response.schema.json', encoding='utf-8')); report_schema=json.load(open('${RUNNER_TEMP}/review-report.schema.json', encoding='utf-8')); response=json.load(open('examples/review-response-v1.json', encoding='utf-8')); report=json.load(open('${RUNNER_TEMP}/review-report.json', encoding='utf-8')); sarif=json.load(open('${RUNNER_TEMP}/review-report.sarif', encoding='utf-8')); Draft202012Validator(response_schema).validate(response); Draft202012Validator(report_schema).validate(report); assert sarif['version'] == '2.1.0' and sarif['runs'][0]['results'][0]['locations']"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
             "from samsarix_codegen import ProviderCheckReport; assert ProviderCheckReport('fixture', 64, 1).status == 'passed'"
           "${RUNNER_TEMP}/release-venv/bin/python" -c \

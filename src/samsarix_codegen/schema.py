@@ -28,6 +28,8 @@ class ContractSchema(str, Enum):
     EXECUTION_PLAN = "execution-plan"
     EXECUTION_PLAN_VERIFICATION = "execution-plan-verification"
     EXECUTION_EVIDENCE = "execution-evidence"
+    REVIEW_RESPONSE = "review-response"
+    REVIEW_REPORT = "review-report"
     SELF_CHECK = "self-check"
 
 
@@ -44,6 +46,8 @@ _SCHEMA_FILES = {
     ContractSchema.EXECUTION_PLAN: "execution-plan-v2.schema.json",
     ContractSchema.EXECUTION_PLAN_VERIFICATION: "execution-plan-verification-v2.schema.json",
     ContractSchema.EXECUTION_EVIDENCE: "execution-evidence-verification-v3.schema.json",
+    ContractSchema.REVIEW_RESPONSE: "review-response-v1.schema.json",
+    ContractSchema.REVIEW_REPORT: "review-report-v1.schema.json",
     ContractSchema.SELF_CHECK: "self-check-v1.schema.json",
 }
 

@@ -12,7 +12,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Samsarix LLC", email = "contact@samsarix.com" }]
 maintainers = [{ name = "Samsarix LLC", email = "support@samsarix.com" }]
-keywords = ["ai", "code-generation", "developer-tools", "prompt", "samsarix"]
+keywords = ["ai", "code-generation", "code-review", "developer-tools", "prompt", "samsarix", "sarif"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

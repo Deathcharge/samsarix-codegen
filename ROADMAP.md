@@ -32,6 +32,9 @@ A gated release workflow can build and attest without publishing; PyPI owner set
 pilot validation, and flagship adoption remain separate decisions. The same workflow now emits a
 deterministic, self-verifying evaluator kit that pins the exact wheel and source commit and removes
 the repository-checkout requirement from pilot onboarding without claiming participant evidence.
+A dedicated structured-review task, two standalone Draft 2020-12 contracts, strict selected-path
+validation, and provenance-linked JSON/SARIF 2.1.0 export now provide a real CI review destination
+without repository discovery, upload authority, or another provider request.
 
 ## Stabilize the productized default
 
@@ -75,6 +78,10 @@ Current hardening backlog:
 - Result-policy version 2 can additionally reject invalid, duplicate-keyed, non-object, over-wide,
   or top-level shape-incompatible JSON offline. This is a bounded machine-consumability gate, not
   recursive JSON Schema validation or a semantic correctness score.
+- Structured review-response/report version 1 and `export-review` now recursively validate bounded
+  source-located findings, reject paths outside the explicit request context, and render SARIF 2.1.0.
+  Findings remain untrusted AI suggestions; CI upload, source freshness, and developer triage are
+  external responsibilities.
 - Exact plan-bound policy approval and enforcement now run directly inside `execute`: preflight
   failures make no request, while post-response failures make no retry and emit no normal output. The completed
   request may still be billable, so this is an output-admission gate rather than cost prevention.

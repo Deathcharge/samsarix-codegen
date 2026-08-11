@@ -63,7 +63,12 @@
       "properties": {
         "name": {"type": "string", "minLength": 1, "maxLength": 4096},
         "bytes": {"type": "integer", "minimum": 0},
-        "content_sha256": {"$ref": "#/$defs/fingerprint"}
+        "content_sha256": {"$ref": "#/$defs/fingerprint"},
+        "line_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional fingerprint-bound source line count used by strict located-output workflows; older version-2 artifacts remain readable."
+        }
       }
     }
   }
