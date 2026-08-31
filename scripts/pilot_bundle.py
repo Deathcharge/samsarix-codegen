@@ -513,13 +513,14 @@ the nested report contract and render one source-located SARIF file without netw
 samsarix-codegen export-review \\
   examples/review-request-v2.json \\
   examples/review-execution-result-v2.json \\
-  --format json > review-report.json
+  --source-root . --format json > review-report.json
 samsarix-codegen export-review \\
   examples/review-request-v2.json \\
   examples/review-execution-result-v2.json \\
-  --format sarif > review.sarif
+  --source-root . --format sarif > review.sarif
 ```
 
+The source-root check requires the bundled `examples/sample.py` to remain unchanged.
 `review-report.json` must equal `examples/review-report-v1.json`. Review reports and SARIF contain
 model-generated text and paths; do not upload them until their content and destination are approved.
 

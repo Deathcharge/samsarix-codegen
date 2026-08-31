@@ -80,8 +80,9 @@ Current hardening backlog:
   recursive JSON Schema validation or a semantic correctness score.
 - Structured review-response/report version 1 and `export-review` now recursively validate bounded
   source-located findings, reject paths outside the explicit request context, and render SARIF 2.1.0.
-  Findings remain untrusted AI suggestions; CI upload, source freshness, and developer triage are
-  external responsibilities.
+  Optional `--source-root` verifies all selected source content against the artifact before output.
+  Findings remain untrusted AI suggestions; CI upload, checkout stability, and developer triage
+  remain operator responsibilities.
 - Exact plan-bound policy approval and enforcement now run directly inside `execute`: preflight
   failures make no request, while post-response failures make no retry and emit no normal output. The completed
   request may still be billable, so this is an output-admission gate rather than cost prevention.

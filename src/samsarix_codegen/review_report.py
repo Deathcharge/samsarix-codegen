@@ -5,16 +5,26 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import re
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Final, cast
 from urllib.parse import quote
 
-from samsarix_codegen.artifact import ExecutionResult, RequestArtifact, verify_execution_result
-from samsarix_codegen.errors import ArtifactError
+from samsarix_codegen.artifact import (
+    MAX_ARTIFACT_BYTES,
+    MAX_ARTIFACT_CONTEXT_ITEMS,
+    ExecutionResult,
+    RequestArtifact,
+    parse_request_artifact,
+    render_request_artifact,
+    verify_execution_result,
+)
+from samsarix_codegen.context import ContextManifest, load_context_files
+from samsarix_codegen.errors import ArtifactError, ContextError
 
 REVIEW_RESPONSE_SCHEMA_VERSION = 1
 REVIEW_REPORT_SCHEMA_VERSION = 1
@@ -252,8 +262,21 @@ def verify_review_result(
     *,
     expected_request_fingerprint: str | None = None,
     expected_plan_fingerprint: str | None = None,
+    source_root: str | Path | None = None,
 ) -> ReviewReport:
-    """Link and validate one structured review result against explicitly selected context."""
+    """Validate a linked review, optionally checking all selected files under ``source_root``.
+
+    The optional check reads only the artifact's canonical, portable source paths. It rejects
+    missing, changed, aliased, non-file, or unbounded context before returning a report. This is
+    a point-in-time content check, not an atomic snapshot or an authenticated approval.
+    """
+
+    if source_root is not None:
+        # Public callers can construct the dataclass directly. Validate its fingerprint and
+        # resource bounds before treating any recorded name as filesystem read authority.
+        if not isinstance(artifact, RequestArtifact):
+            raise ArtifactError("source verification requires a validated request artifact")
+        artifact = parse_request_artifact(render_request_artifact(artifact))
 
     verification = verify_execution_result(artifact, result)
     if expected_request_fingerprint is not None:
@@ -291,12 +314,57 @@ def verify_review_result(
                 f"review finding range exceeds the selected source line count: {finding.path} "
                 f"has {context.line_count:,} line(s)"
             )
+    if source_root is not None:
+        _verify_review_sources(artifact, root=source_root)
     return ReviewReport(
         request_fingerprint=artifact.fingerprint,
         plan_fingerprint=result.plan_fingerprint,
         response_sha256=verification.result.response_sha256,
         review=review,
     )
+
+
+def _verify_review_sources(artifact: RequestArtifact, *, root: str | Path) -> None:
+    """Re-use bounded context loading; compare every file, including unannotated context."""
+
+    if not artifact.context:
+        raise ArtifactError("review source verification requires at least one source file")
+    if artifact.context_bytes > MAX_ARTIFACT_BYTES:
+        raise ArtifactError(
+            f"review source verification exceeds the {MAX_ARTIFACT_BYTES:,}-byte safety limit"
+        )
+    try:
+        # Validate the whole allowlist before any read. Manifest path rules additionally reject
+        # device names, alternate streams, and platform-dependent path spellings.
+        for record in artifact.context:
+            _normalize_review_path(record.name)
+            ContextManifest(files=(record.name,))
+            if record.line_count is None:
+                raise ArtifactError(
+                    "review source verification requires recorded line counts for every file; "
+                    "rebuild the request with the review-report task"
+                )
+        current = load_context_files(
+            [record.name for record in artifact.context],
+            root=root,
+            max_files=MAX_ARTIFACT_CONTEXT_ITEMS,
+            max_file_bytes=max(1, max(record.size_bytes for record in artifact.context)),
+            max_total_bytes=max(1, artifact.context_bytes),
+        )
+    except ContextError as exc:
+        raise ArtifactError(f"review source verification failed: {exc}") from exc
+    if len(current) != len(artifact.context):
+        raise ArtifactError("review source paths resolve to duplicate files; rebuild the request")
+    for record, file in zip(artifact.context, current, strict=True):
+        if file.path != record.name:
+            raise ArtifactError(f"review source path no longer resolves canonically: {record.name}")
+        digest = "sha256:" + hashlib.sha256(file.content.encode("utf-8")).hexdigest()
+        if (
+            file.size_bytes != record.size_bytes
+            or not hmac.compare_digest(digest, record.content_sha256)
+            or len(file.content.splitlines()) != record.line_count
+        ):
+            raise ArtifactError(f"review source changed since request construction: {record.name}")
 
 
 def render_review_report(report: ReviewReport) -> str:

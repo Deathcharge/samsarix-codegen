@@ -238,6 +238,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="fail unless the result records this reviewed execution-plan fingerprint",
     )
     export_review_command.add_argument(
+        "--source-root",
+        metavar="ROOT",
+        help="verify every selected source file still matches the request before export (opt-in)",
+    )
+    export_review_command.add_argument(
         "--format",
         choices=("json", "sarif"),
         default="json",
@@ -448,6 +453,7 @@ def main(argv: Sequence[str] | None = None, *, stdin: BinaryIO | None = None) ->
                 result,
                 expected_request_fingerprint=args.expect_fingerprint,
                 expected_plan_fingerprint=args.expect_plan_fingerprint,
+                source_root=args.source_root,
             )
             output = (
                 render_review_sarif(report, tool_version=__version__)

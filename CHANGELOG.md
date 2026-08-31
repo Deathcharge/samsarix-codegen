@@ -7,6 +7,9 @@ approves a first public release.
 
 ### Added
 
+- Opt-in `export-review --source-root` freshness checking of every selected source file before
+  JSON/SARIF output, with bounded reads, canonical paths, digest/byte/line comparisons, and a
+  credential-free installed-CLI smoke covering success and stale/deleted-source rejection.
 - Deterministic schema-versioned request artifacts with canonical SHA-256 fingerprints, per-context
   content hashes, and transparent input estimates.
 - Offline `inspect` and fingerprint-pinned `execute` commands for separating prompt review from

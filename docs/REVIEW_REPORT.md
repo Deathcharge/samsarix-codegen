@@ -12,7 +12,8 @@ The workflow has three separate contracts:
    it. [`examples/review-result-policy-v2.json`](../examples/review-result-policy-v2.json) is the
    checked-in example.
 3. `export-review` re-parses the full nested response, verifies request/result linkage and selected
-   paths, and emits either Samsarix review-report schema version 1 or SARIF 2.1.0.
+   paths, optionally checks the selected source files with `--source-root`, and emits either
+   Samsarix review-report schema version 1 or SARIF 2.1.0.
 
 The policy is an early admission gate; it does not replace the deeper `export-review` validation.
 
@@ -89,6 +90,7 @@ samsarix-codegen export-review \
   review-request.json review-result.json \
   --expect-fingerprint "$request_fingerprint" \
   --expect-plan-fingerprint "$plan_fingerprint" \
+  --source-root . \
   --format sarif > review.sarif
 ```
 
@@ -131,9 +133,46 @@ to 1 MiB.
 `export-review` then requires every finding path to equal a context name in the validated request
 artifact and every range to fit its fingerprint-bound source `line_count`. Current builders record
 that metadata; a legacy version-2 request without it remains usable by existing workflows but fails
-closed for review export. The command does not re-read the worktree or infer paths, so it cannot
-prove that the working copy has not drifted since request construction; retain and compare the
-request fingerprint and run the export against the reviewed source revision.
+closed for located findings. By default the command does not re-read the worktree or infer paths;
+use the explicit source check below before uploading results against a current checkout.
+
+## Reject stale source before export
+
+Add `--source-root ROOT` to either export format to check the reviewed context against a checkout:
+
+```bash
+samsarix-codegen export-review \
+  examples/review-request-v2.json \
+  examples/review-execution-result-v2.json \
+  --source-root . --format sarif > review.sarif
+```
+
+Run from the repository root (or the extracted pilot-kit root). The check validates the artifact
+fingerprint and approvals first, then loads **every selected context file**, including files with
+no findings and reviews with an empty findings list. It compares each canonical resolved path,
+original byte count, SHA-256 of the decoded UTF-8 content, and recorded line count. It preserves
+the original loader's BOM handling and line endings; changing LF to CRLF is source drift.
+
+Only the recorded paths may be read. There is no scan, manifest discovery, Git command, provider
+request, or upload. Before source loading, all names must satisfy the portable context-manifest
+path rules: stdin labels, absolute paths, traversal, devices, and non-portable spellings fail.
+Missing/non-regular files, escaped or newly aliased symlinks, duplicate resolved files, content
+changes, and missing line-count metadata also fail closed. Empty context cannot pass a source
+check. Reads are bounded by the recorded file/total sizes and a hard 12 MiB total ceiling; this
+explicit verification ceiling also applies to artifacts made by custom library callers.
+
+Failures return exit code `5` with diagnostics on stderr and no normal stdout in either format.
+Shell redirection may still create an empty output file: run upload only after exit code `0`.
+On drift, retain the old artifacts, rebuild the request from the intended revision, review and
+approve the new fingerprints, and execute again if a current model review is needed. Do not just
+rewrite the old fingerprints or line numbers. Artifact-only export remains available by omitting
+`--source-root`; its output is identical on success and does not claim source freshness.
+
+This is a point-in-time read check, not an atomic filesystem snapshot, signed provenance, or proof
+that the selected files are tracked by Git. Run in a stable, trusted checkout of the upload's commit
+and keep it unchanged through upload. Concurrent source/symlink replacement and changes after
+verification are outside this guarantee. A valid source match still does not establish finding
+correctness.
 
 ## Provenance-linked report
 
@@ -169,6 +208,11 @@ permissions:
 
 steps:
   - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+  # Install Samsarix and obtain the explicitly reviewed request/result first.
+  - name: Export only against the reviewed source
+    run: >-
+      samsarix-codegen export-review review-request.json review-result.json
+      --source-root . --format sarif > review.sarif
   - name: Upload reviewed SARIF
     uses: github/codeql-action/upload-sarif@24c7eb380a2dc368f2d129e4c65e51d172983a1e # v4
     with:
@@ -195,8 +239,10 @@ sizes, budgets, and linkage metadata.
 Structured conformance does not establish correctness, severity, exploitability, source authorship,
 provider authenticity, or adequate test coverage. A passing export means only that the response is
 bounded, structurally valid, linked to the supplied result/request, and cites explicitly selected
-paths. A developer remains responsible for reproducing and triaging every finding.
+paths; `--source-root` additionally checks the selected content at read time. A developer remains
+responsible for reproducing and triaging every finding.
 
 The typed public API exposes `ReviewFinding`, `ReviewResponse`, `ReviewReport`,
 `parse_review_response()`, `verify_review_result()`, `render_review_report()`, and
-`render_review_sarif()`.
+`render_review_sarif()`. Library callers opt into the same check with
+`verify_review_result(artifact, result, source_root=Path("checkout"))`.

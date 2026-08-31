@@ -883,6 +883,34 @@ looked for the contract count at the wrong self-check JSON path, and the second 
 after PowerShell newline normalization. The corrected checks use the documented nested field and
 semantic JSON equality; both completed successfully before this evidence was recorded.
 
+### Fresh-source review export follow-up (2026-08-31)
+
+The resumed baseline was clean `master` at `98ff5c6`, with 448 tests, Ruff, and strict typing
+passing and no open repository PRs or issues. One locally actionable P1 remained in the CI handoff:
+artifact-valid annotations could be exported against a changed checkout. The new
+`export-review --source-root ROOT` checks every selected source file before either output, including
+empty reviews and unannotated context. It reuses bounded context loading and the portable
+context-manifest path rules, verifies path identity/hash/bytes/line count, and fails with exit `5`
+and no normal stdout. Artifact-only export and the existing report schemas remain unchanged.
+
+Source verification passed 481 tests, Ruff lint/format, and strict typing across 17 source files.
+The dedicated installed-review smoke runs with optimized Python in both CI and release readiness:
+it compiles an explicit source file through the CLI, wraps a labeled synthetic finding, checks
+JSON/SARIF success, changes same-size source, and verifies stale/deleted-source rejection without a
+provider call. Final wheel/sdist digests, isolated-install outcomes, and exact-head CI evidence are
+recorded in the pull request so recording a digest cannot change the artifact being measured.
+
+The requested included CodeRabbit review produced two coverage suggestions. The pilot already
+contained its source fixture; an explicit packaging regression assertion now protects that
+requirement. The installed smoke also checks deleted-source failures and diagnostics in both
+JSON and SARIF, while proving artifact-only export still succeeds after deletion. The expanded
+smoke, all 481 tests, Ruff, and strict typing passed before the review follow-up commit.
+
+The check is opt-in and point-in-time. Stable checkout/commit selection, concurrent filesystem
+mutation, publication authorization, finding quality, and real-developer pilot evidence remain
+outside this guarantee. No new runtime dependency, schema, provider call, upload capability,
+repository discovery, or flagship coupling was added.
+
 ### Validation not run
 
 - A live Ollama or hosted provider was not called because no model, credentials, or spending was

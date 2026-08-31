@@ -76,9 +76,11 @@ def test_manifest_matches_schema_and_record_is_valid_but_not_ready(tmp_path: Pat
 
     start = (root / "PILOT-START.md").read_text(encoding="utf-8")
     assert "Exercise the offline review export" in start
+    assert "--source-root . --format sarif" in start
     assert (root / "docs/REVIEW_REPORT.md").is_file()
     assert (root / "examples/review-context-v1.json").is_file()
     assert (root / "examples/review-report-v1.json").is_file()
+    assert (root / "examples/sample.py").is_file()
 
     manifest = json.loads((root / "pilot-kit-v1.json").read_text(encoding="utf-8"))
     schema = json.loads((ROOT / "docs/pilot-kit-v1.schema.json").read_text(encoding="utf-8"))
