@@ -116,8 +116,22 @@ def main() -> int:
             require(b"source changed" in rejected.stderr, "stale source was not diagnosed")
             run_cli(root, *arguments, "--format", output_format)
         source.unlink()
-        missing = run_cli(root, *arguments, "--source-root", ".", expected_exit=5)
-        require(not missing.stdout, "missing source leaked normal output")
+        for output_format in ("json", "sarif"):
+            missing = run_cli(
+                root,
+                *arguments,
+                "--format",
+                output_format,
+                "--source-root",
+                ".",
+                expected_exit=5,
+            )
+            require(not missing.stdout, "missing source leaked normal output")
+            require(
+                b"review source verification failed" in missing.stderr,
+                "missing source was not diagnosed",
+            )
+            run_cli(root, *arguments, "--format", output_format)
     print("installed review-source smoke passed (0 provider requests)")
     return 0
 

@@ -900,6 +900,12 @@ JSON/SARIF success, changes same-size source, and verifies stale/deleted-source 
 provider call. Final wheel/sdist digests, isolated-install outcomes, and exact-head CI evidence are
 recorded in the pull request so recording a digest cannot change the artifact being measured.
 
+The requested included CodeRabbit review produced two coverage suggestions. The pilot already
+contained its source fixture; an explicit packaging regression assertion now protects that
+requirement. The installed smoke also checks deleted-source failures and diagnostics in both
+JSON and SARIF, while proving artifact-only export still succeeds after deletion. The expanded
+smoke, all 481 tests, Ruff, and strict typing passed before the review follow-up commit.
+
 The check is opt-in and point-in-time. Stable checkout/commit selection, concurrent filesystem
 mutation, publication authorization, finding quality, and real-developer pilot evidence remain
 outside this guarantee. No new runtime dependency, schema, provider call, upload capability,
