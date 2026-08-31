@@ -95,6 +95,7 @@ jobs:
           samsarix-codegen schema execution-plan-verification > execution-plan-verification.schema.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('execution-plan-verification.schema.json', encoding='utf-8')); payload=json.load(open('execution-plan-verification.json', encoding='utf-8')); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(payload)"
           python scripts/installed_plan_smoke.py
+          python -O scripts/installed_review_smoke.py
           samsarix-codegen schema execution-evidence > execution-evidence.schema.json
           python -c "import json; from jsonschema import Draft202012Validator; schema=json.load(open('execution-evidence.schema.json', encoding='utf-8')); Draft202012Validator.check_schema(schema)"
           example_plan_fingerprint="$(samsarix-codegen verify-plan examples/execution-request-v2.json examples/execution-plan-v2.json --policy examples/structured-result-policy-v2.json --format fingerprint)"

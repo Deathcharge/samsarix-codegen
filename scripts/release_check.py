@@ -104,6 +104,7 @@ REQUIRED_SDIST_PATHS = (
     "pyproject.toml",
     "scripts/release_check.py",
     "scripts/installed_plan_smoke.py",
+    "scripts/installed_review_smoke.py",
     "scripts/pilot_bundle.py",
     "scripts/pilot_check.py",
     "src/samsarix_codegen/__init__.py",

@@ -243,7 +243,10 @@ samsarix-codegen export-review \
 `export-review` rejects duplicate fields, malformed or over-limit nested data, unsafe paths, paths
 not present in the validated request, invalid line ranges, linkage drift, and optional request/plan
 approval mismatches. SARIF contains the model-generated summary and findings, so it is not a
-content-omitting log artifact. The [review-report contract and CI handoff](docs/REVIEW_REPORT.md)
+content-omitting log artifact. Before CI upload, add `--source-root .` to verify that every selected
+file still matches its recorded path, content hash, bytes, and line count; any mismatch returns `5`
+with empty stdout. Without this explicit option, export reads only the supplied artifacts.
+The [review-report contract and CI handoff](docs/REVIEW_REPORT.md)
 cover the full real-provider workflow, GitHub upload boundary, and trust limits.
 
 Inspect a selected log excerpt without scanning or retaining the surrounding system:

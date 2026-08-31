@@ -139,6 +139,7 @@ jobs:
           "${RUNNER_TEMP}/release-venv/bin/python" -c \
             "from samsarix_codegen import PromptRequest, ProviderConfig, Task, build_messages, create_execution_plan, create_request_artifact, parse_execution_plan, provider_config_from_execution_plan, render_execution_plan, verify_execution_plan; request=PromptRequest(Task.REVIEW, 'fixture'); artifact=create_request_artifact(build_messages(request), request.files); plan=create_execution_plan(artifact, ProviderConfig('http://127.0.0.1:11434/v1', 'fixture')); assert parse_execution_plan(render_execution_plan(plan)) == plan; verify_execution_plan(artifact, plan, expected_plan_fingerprint=plan.fingerprint); exact=provider_config_from_execution_plan(plan, api_key='external'); assert exact.model == 'fixture' and exact.api_key == 'external'"
           "${RUNNER_TEMP}/release-venv/bin/python" scripts/installed_plan_smoke.py
+          "${RUNNER_TEMP}/release-venv/bin/python" -O scripts/installed_review_smoke.py
       - name: Build and verify evaluator pilot kit
         env:
           RELEASE_VERSION: ${{ steps.release-version.outputs.version }}

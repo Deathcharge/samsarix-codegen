@@ -80,7 +80,8 @@ retention requires it.
 The kit's `PILOT-START.md` supplies the exact install command and has already placed the commit and
 wheel digest in `pilot-record.json`. It also includes `sample.py` plus the deterministic structured
 review request, synthetic result, policy, expected report, and review-report documentation so an
-evaluator can exercise JSON/SARIF export without a repository checkout or provider call. Those
+evaluator can exercise JSON/SARIF export without a repository checkout or provider call. The kit's
+`--source-root .` export also verifies that its bundled sample still matches the reviewed source. Those
 fixtures test package mechanics only and do not count as a participant session or model-quality
 evidence. For a source build on macOS or Linux, require
 `test -z "$(git status --porcelain)"` and print `git rev-parse HEAD`. Use

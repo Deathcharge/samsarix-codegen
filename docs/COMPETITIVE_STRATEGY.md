@@ -1,6 +1,6 @@
 # Competitive strategy
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-31
 
 ## Positioning
 
@@ -297,7 +297,12 @@ This turns review output into a standard CI artifact without uploading it, readi
 paths, or making another provider request. It is deliberately not content-omitting: findings and
 paths appear in both formats, so a CI owner must review retention and the explicit upload boundary.
 Structural success does not establish correctness, severity, exploitability, provider authorship,
-or source-line freshness.
+or source-line freshness by itself. Opt-in `--source-root` now verifies every selected file's
+canonical resolved path, content digest, byte count, and line count before export. This closes the
+ordinary stale-checkout failure path while leaving checkout stability and upload authority with
+the operator. GitHub's [current source-location guidance](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)
+requires relative locations to match the analyzed repository and symlinks to use resolved paths.
+That supports checking source identity at the handoff, not a claim of model quality or adoption.
 
 ### Zero-account evaluation
 
